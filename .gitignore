@@ -18,3 +18,8 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Real sample documents — confidential, NEVER commit. Develop against these
+# locally; tests skip cleanly when they're absent.
+/samples/*
+!samples/.gitkeep
