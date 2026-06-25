@@ -81,9 +81,16 @@ src/fusion_ocr/
   overlay/           PyMuPDF invisible-text overlay (line- → word-level)
 ```
 
+## Airgap note
+
+PaddleOCR downloads its models to `~/.paddlex` on first use. For the air-gapped
+sensitive tier, **pre-pull the models once on a connected machine** (run any OCR job),
+then run sealed — `enforce_airgap()` sets `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK` so
+Paddle won't attempt its connectivity check.
+
 ## Roadmap
 
-1. **PaddleOCR geometry** — real boxes + text + confidence (`stages/ocr_det.py`).
+1. **PaddleOCR geometry** — real boxes + text + confidence (`stages/ocr_det.py`). ✅ *done — handles PaddleOCR 2.x & 3.x; image-only pages OCR'd, boxes mapped to PDF points.*
 2. **PP-StructureV3 layout** — regions, tables, reading order (`stages/layout.py`).
 3. **VLM read** — wire `vlm_read` to the client; tables → markdown; translation.
 4. **Fusion** — sequence-align VLM text onto boxes; ink-gate; best-of.

@@ -9,7 +9,7 @@ dependencies = []
 
 [project.optional-dependencies]
 api = ["fastapi", "uvicorn"]
-ocr = ["pymupdf", "paddleocr", "paddlepaddle"]   # geometry + structure (PP-StructureV3)
+ocr = ["pymupdf", "numpy", "paddleocr", "paddlepaddle"]   # geometry + structure (PP-StructureV3)
 vlm = ["httpx", "pillow"]                          # OpenAI-compatible client + image handling
 dev = ["pytest"]
 

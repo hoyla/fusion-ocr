@@ -59,7 +59,17 @@ _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 
 def enforce_airgap() -> None:
-    """Refuse any non-loopback socket connection. Idempotent."""
+    """Refuse any non-loopback socket connection. Idempotent.
+
+    Also tells PaddleOCR not to phone home: its model-source connectivity check
+    would otherwise hit the network (and be refused below, aborting OCR). In airgap
+    mode the OCR models must already be present in ~/.paddlex — pre-pull them once
+    on a connected machine, then run sealed.
+    """
+    import os
+
+    os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
+
     if getattr(socket.socket, "_fusion_airgapped", False):
         return
     orig_connect = socket.socket.connect
