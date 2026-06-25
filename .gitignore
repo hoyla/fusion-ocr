@@ -1,0 +1,20 @@
+# Runtime data — never committed
+/in/*
+/out/*
+/models/*
+!**/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

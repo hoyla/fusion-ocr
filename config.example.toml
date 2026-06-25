@@ -1,0 +1,20 @@
+# Copy to config.toml and edit. config.toml is gitignored-by-convention (machine-local).
+
+[run]
+in_dir      = "in"
+out_dir     = "out"
+# Hard isolation for the most-sensitive tier: when true the process must make
+# zero outbound network connections. The VLM endpoint must therefore be local.
+airgap      = true
+# Overlay box granularity: "line" (MVP) or "word" (subdivision follow-on).
+granularity = "line"
+
+[vlm]
+# The one seam that moves the heavy work elsewhere later. Ollama / MLX / vLLM all
+# speak this same OpenAI-compatible API, so swapping local -> transcription GPU is
+# only an endpoint change.
+base_url = "http://localhost:11434/v1"   # Ollama today
+model    = "qwen2.5-vl:7b"
+api_key  = "not-needed-locally"
+# Later, in-VPC CUDA:
+# base_url = "http://transcription-gpu.internal:8000/v1"   # vLLM

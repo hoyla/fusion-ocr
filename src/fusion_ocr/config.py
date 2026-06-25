@@ -1,0 +1,77 @@
+"""Configuration loading + the airgap guard.
+
+`airgap = true` is the contract for the most-sensitive tier: the process must make
+no outbound connections. We enforce it defensively by monkeypatching socket
+creation to refuse any non-loopback connection, so a stray `requests.get` or model
+download can't silently leak. The local VLM endpoint (loopback) still works.
+"""
+
+from __future__ import annotations
+
+import socket
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass
+class VLMConfig:
+    base_url: str = "http://localhost:11434/v1"
+    model: str = "qwen2.5-vl:7b"
+    api_key: str = "not-needed-locally"
+
+
+@dataclass
+class Config:
+    in_dir: Path = Path("in")
+    out_dir: Path = Path("out")
+    airgap: bool = True
+    granularity: str = "line"
+    vlm: VLMConfig = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.vlm is None:
+            self.vlm = VLMConfig()
+
+
+def load(path: str | Path = "config.toml") -> Config:
+    p = Path(path)
+    if not p.exists():
+        # Fall back to defaults (handy for the walking skeleton / tests).
+        return Config()
+    raw = tomllib.loads(p.read_text())
+    run = raw.get("run", {})
+    vlm = raw.get("vlm", {})
+    return Config(
+        in_dir=Path(run.get("in_dir", "in")),
+        out_dir=Path(run.get("out_dir", "out")),
+        airgap=run.get("airgap", True),
+        granularity=run.get("granularity", "line"),
+        vlm=VLMConfig(
+            base_url=vlm.get("base_url", "http://localhost:11434/v1"),
+            model=vlm.get("model", "qwen2.5-vl:7b"),
+            api_key=vlm.get("api_key", "not-needed-locally"),
+        ),
+    )
+
+
+_LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+
+def enforce_airgap() -> None:
+    """Refuse any non-loopback socket connection. Idempotent."""
+    if getattr(socket.socket, "_fusion_airgapped", False):
+        return
+    orig_connect = socket.socket.connect
+
+    def guarded_connect(self, address):  # type: ignore[no-untyped-def]
+        host = address[0] if isinstance(address, tuple) else address
+        if str(host) not in _LOOPBACK:
+            raise OSError(
+                f"airgap: outbound connection to {host!r} refused. "
+                "Set run.airgap = false to allow remote endpoints."
+            )
+        return orig_connect(self, address)
+
+    socket.socket.connect = guarded_connect  # type: ignore[method-assign]
+    socket.socket._fusion_airgapped = True  # type: ignore[attr-defined]

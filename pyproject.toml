@@ -1,0 +1,28 @@
+[project]
+name = "fusion-ocr"
+version = "0.0.1"
+description = "Hybrid deterministic + VLM OCR pipeline producing searchable bbox overlays, per-language markdown, and a provenance-carrying segment index."
+requires-python = ">=3.11"
+# Walking skeleton has NO hard deps. Real stages add theirs behind extras so the
+# bare plumbing runs (and tests) on any machine.
+dependencies = []
+
+[project.optional-dependencies]
+api = ["fastapi", "uvicorn"]
+ocr = ["pymupdf", "paddleocr", "paddlepaddle"]   # geometry + structure (PP-StructureV3)
+vlm = ["httpx", "pillow"]                          # OpenAI-compatible client + image handling
+dev = ["pytest"]
+
+[project.scripts]
+fusion-ocr = "fusion_ocr.watcher:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
