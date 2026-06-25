@@ -17,7 +17,7 @@ from pathlib import Path
 @dataclass
 class VLMConfig:
     base_url: str = "http://localhost:11434/v1"
-    model: str = "qwen2.5-vl:7b"
+    model: str = "qwen2.5vl:7b"  # Ollama's name has no hyphen
     api_key: str = "not-needed-locally"
 
 

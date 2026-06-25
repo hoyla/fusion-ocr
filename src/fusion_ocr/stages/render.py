@@ -43,10 +43,18 @@ class Render:
         index_path.write_text(json.dumps(index, indent=2, ensure_ascii=False))
         doc.artifacts["segment_index"] = str(index_path)
 
-        # Per-language markdown (stub joins best_text in reading order).
-        lines = [s.best_text for p in doc.pages for s in p.segments if s.best_text]
+        # Markdown reading view: prefer the VLM's clean per-page reading; fall back
+        # to joining segment best_text (born-digital / text-layer pages).
+        parts: list[str] = []
+        for p in doc.pages:
+            if p.vlm_reading.strip():
+                parts.append(p.vlm_reading.strip())
+            else:
+                seg_text = [s.best_text for s in p.segments if s.best_text]
+                if seg_text:
+                    parts.append("\n".join(seg_text))
         md_path = work / "document.md"
-        md_path.write_text("\n\n".join(lines) if lines else "_(no text extracted yet)_\n")
+        md_path.write_text("\n\n".join(parts) if parts else "_(no text extracted yet)_\n")
         doc.artifacts["markdown"] = str(md_path)
 
         overlay_path = work / "overlay.pdf"

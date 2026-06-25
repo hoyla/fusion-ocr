@@ -43,23 +43,39 @@ def build_overlay(doc: Document, out_path: Path, granularity: str = "line") -> b
     return True
 
 
+_FONT = "helv"  # base-14 (Latin-1). Full Unicode (Thai/CJK/diacritics) overlay
+                # needs an embedded TTF — a known follow-up; markdown is already
+                # full-Unicode from the VLM.
+
+
+def _fit_fontsize(fitz, text: str, box_w: float, box_h: float) -> float:
+    """Size the font so the line fills the box width without overflowing — the trick
+    that makes insert_text actually place the whole string (insert_textbox silently
+    drops text that doesn't fit at a fixed size)."""
+    unit = fitz.get_text_length(text, fontname=_FONT, fontsize=1) or 1.0
+    return max(1.0, min(box_h, box_w / unit))
+
+
 def _write_invisible(fitz, pg, seg, granularity: str, rotation: int = 0) -> None:
     x0, y0, x1, y1 = seg.box.bbox
-    # The glyph height runs perpendicular to the reading direction, which swaps on a
-    # rotated page. `rotate=` makes the invisible text read along the line.
-    thickness = (y1 - y0) if rotation in (0, 180) else (x1 - x0)
-    fontsize = max(thickness, 1)
-    # render_mode=3 -> invisible glyphs; present for search/selection, not drawn.
+    box_w, box_h = (x1 - x0), (y1 - y0)
+    # Reading runs along the box's long axis; on a rotated page width/height swap.
+    span = box_w if rotation in (0, 180) else box_h
+
+    def place(text, ax0, ay1, width):
+        fs = _fit_fontsize(fitz, text, max(width, 1), box_h if rotation in (0, 180) else box_w)
+        # render_mode=3 -> invisible glyphs; present for search/selection, not drawn.
+        try:
+            pg.insert_text(fitz.Point(ax0, ay1), text, fontname=_FONT, fontsize=fs,
+                           render_mode=3, rotate=rotation)
+        except Exception:
+            pass  # non-Latin1 glyph in base font -> skip until TTF embedding lands
+
     if granularity == "word":
-        # TODO: subdivide across words for word-level boxes (selection fidelity).
         words = seg.best_text.split()
         if words:
-            step = (x1 - x0) / len(words)
+            step = span / len(words)
             for i, w in enumerate(words):
-                rect = fitz.Rect(x0 + i * step, y0, x0 + (i + 1) * step, y1)
-                pg.insert_textbox(rect, w, render_mode=3, rotate=rotation,
-                                  fontsize=fontsize)
+                place(w, x0 + i * step, y1, step)
             return
-    rect = fitz.Rect(x0, y0, x1, y1)
-    pg.insert_textbox(rect, seg.best_text, render_mode=3, rotate=rotation,
-                      fontsize=fontsize)
+    place(seg.best_text, x0, y1, span)

@@ -14,7 +14,7 @@ granularity = "line"
 # speak this same OpenAI-compatible API, so swapping local -> transcription GPU is
 # only an endpoint change.
 base_url = "http://localhost:11434/v1"   # Ollama today
-model    = "qwen2.5-vl:7b"
+model    = "qwen2.5vl:7b"                 # Ollama's name has no hyphen
 api_key  = "not-needed-locally"
 # Later, in-VPC CUDA:
 # base_url = "http://transcription-gpu.internal:8000/v1"   # vLLM

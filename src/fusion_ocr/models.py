@@ -70,6 +70,7 @@ class Page:
     needs_ocr: bool = True
     rotation: int = 0
     image_ref: str | None = None
+    vlm_reading: str = ""  # raw VLM transcription of the page (clean reading view)
     regions: list[Region] = field(default_factory=list)
     segments: list[Segment] = field(default_factory=list)
 
@@ -115,6 +116,7 @@ class Document:
                               needs_ocr=p.get("needs_ocr", True),
                               rotation=p.get("rotation", 0),
                               image_ref=p.get("image_ref"),
+                              vlm_reading=p.get("vlm_reading", ""),
                               regions=regions, segments=segments))
         return cls(source_path=raw["source_path"], sha256=raw["sha256"],
                    languages=raw.get("languages", []), pages=pages,
