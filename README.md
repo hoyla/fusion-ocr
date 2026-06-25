@@ -88,11 +88,22 @@ sensitive tier, **pre-pull the models once on a connected machine** (run any OCR
 then run sealed — `enforce_airgap()` sets `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK` so
 Paddle won't attempt its connectivity check.
 
+## Tool routing
+
+The pipeline triages each region and routes it on two independent axes — geometry
+(PaddleOCR, always on, recogniser language varies) and reading (VLM, specialist
+varies). See **[Docs/routing.md](Docs/routing.md)**. Thai is the first specialist
+route: `paddle_lang=th` reads Thai forms that the generalist VLMs can't, and a
+config `[routing.thai]` section points the *reader* at a served Typhoon endpoint when
+one's available.
+
 ## Roadmap
 
-1. **PaddleOCR geometry** — real boxes + text + confidence (`stages/ocr_det.py`). ✅ *done — handles PaddleOCR 2.x & 3.x; image-only pages OCR'd, boxes mapped to PDF points.*
-2. **PP-StructureV3 layout** — regions, tables, reading order (`stages/layout.py`).
-3. **VLM read** — wire `vlm_read` to the client; tables → markdown; translation.
-4. **Fusion** — sequence-align VLM text onto boxes; ink-gate; best-of.
-5. **Overlay** — line-level first, then word-level subdivision for selection fidelity.
-6. **Eval** — run the "Giant rejects" pile; side-by-side old vs new text.
+1. **PaddleOCR geometry** — boxes + text + confidence (`stages/ocr_det.py`). ✅ *done — 2.x & 3.x; per-language recogniser via the router.*
+2. **VLM read + fusion** — read via the swappable client; cluster boxes + sequence-align VLM lines onto them; ink-gate. ✅ *done — proven on the handwritten note (6 → 3,185 searchable chars).*
+3. **Tool router** — script detection → per-region `{PaddleOCR recogniser + VLM reader}`; provenance; generalist-refusal fallback. ✅ *done — Thai form solved via PaddleOCR-th.*
+4. **Typhoon (Thai reader)** — GGUF+mmproj exist; blocked on local serving (Ollama vision-GGUF import 400s). Route wired; needs `llama-server`/vLLM or an Ollama fix.
+5. **PP-StructureV3 layout** — regions, tables, reading order (the columns/tables nightmare).
+6. **Overlay** — word-level subdivision (precise highlights); Unicode font (Thai/CJK/diacritics *overlay* searchable — markdown already is).
+7. **Image-only script detection** — pages with no text layer currently default to Latin.
+8. **Eval** — the "Giant rejects" pile; side-by-side old vs new.
