@@ -48,6 +48,7 @@ class Segment:
     det_text: str | None = None
     det_conf: float | None = None
     vlm_text: str | None = None
+    read_by: str = ""  # provenance: which VLM read this region (model name)
     translations: dict[str, str] = field(default_factory=dict)
 
 
@@ -69,6 +70,8 @@ class Page:
     has_text_layer: bool = False
     needs_ocr: bool = True
     rotation: int = 0
+    script: str = ""        # detected script -> routing (e.g. "thai", "latin")
+    read_model: str = ""    # VLM model used to read this page (provenance)
     image_ref: str | None = None
     vlm_reading: str = ""  # raw VLM transcription of the page (clean reading view)
     regions: list[Region] = field(default_factory=list)
@@ -106,7 +109,8 @@ class Document:
                     box=Box(points=[tuple(pt) for pt in s["box"]["points"]]),
                     best_text=s.get("best_text", ""), source=s.get("source", "paddle"),
                     det_text=s.get("det_text"), det_conf=s.get("det_conf"),
-                    vlm_text=s.get("vlm_text"), translations=s.get("translations", {}),
+                    vlm_text=s.get("vlm_text"), read_by=s.get("read_by", ""),
+                    translations=s.get("translations", {}),
                 )
                 for s in p.get("segments", [])
             ]
@@ -115,6 +119,8 @@ class Document:
                               has_text_layer=p.get("has_text_layer", False),
                               needs_ocr=p.get("needs_ocr", True),
                               rotation=p.get("rotation", 0),
+                              script=p.get("script", ""),
+                              read_model=p.get("read_model", ""),
                               image_ref=p.get("image_ref"),
                               vlm_reading=p.get("vlm_reading", ""),
                               regions=regions, segments=segments))

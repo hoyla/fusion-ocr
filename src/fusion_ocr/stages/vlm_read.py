@@ -17,7 +17,8 @@ from __future__ import annotations
 
 from ..config import Config
 from ..models import Document
-from ..vlm.client import get_client
+from ..routing import resolve
+from ..vlm.openai_compat import OpenAICompatVLM
 from ..vlm.prompts import TRANSCRIBE
 
 _DPI = 150
@@ -28,7 +29,16 @@ class VlmRead:
 
     def __init__(self, dpi: int = _DPI, client=None) -> None:
         self.dpi = dpi
-        self._client = client
+        self._client = client  # injected -> used for every page (tests)
+        self._clients: dict[tuple, OpenAICompatVLM] = {}
+
+    def _client_for(self, base_url: str, model: str, cfg: Config):
+        key = (base_url, model)
+        if key not in self._clients:
+            self._clients[key] = OpenAICompatVLM(
+                base_url=base_url, model=model, api_key=cfg.vlm.api_key
+            )
+        return self._clients[key]
 
     def run(self, doc: Document, cfg: Config) -> Document:
         targets = [p for p in doc.pages if p.needs_ocr]
@@ -39,11 +49,15 @@ class VlmRead:
         except ImportError:
             return doc
 
-        client = self._client or get_client(cfg)
         with fitz.open(doc.source_path) as pdf:
             for page in targets:
                 if page.index >= pdf.page_count:
                     continue
+                route = resolve(page.script or "latin", cfg)
+                model = route.vlm_model or cfg.vlm.model
+                base_url = route.vlm_base_url or cfg.vlm.base_url
+                client = self._client or self._client_for(base_url, model, cfg)
+                page.read_model = model
                 png = pdf[page.index].get_pixmap(dpi=self.dpi).tobytes("png")
                 try:
                     page.vlm_reading = client.read(png, TRANSCRIBE) or ""

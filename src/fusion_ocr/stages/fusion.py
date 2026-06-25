@@ -162,5 +162,6 @@ class Fusion:
                 vlm_text=line or None,
                 best_text=line,
                 source="fused" if line else "paddle",
+                read_by=page.read_model if line else "",
             ))
         page.segments = others + fused

@@ -28,10 +28,14 @@ class Config:
     airgap: bool = True
     granularity: str = "line"
     vlm: VLMConfig = None  # type: ignore[assignment]
+    # per-script routing overrides: {script: {paddle_lang, vlm_model, vlm_base_url}}
+    routes: dict = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.vlm is None:
             self.vlm = VLMConfig()
+        if self.routes is None:
+            self.routes = {}
 
 
 def load(path: str | Path = "config.toml") -> Config:
@@ -49,9 +53,10 @@ def load(path: str | Path = "config.toml") -> Config:
         granularity=run.get("granularity", "line"),
         vlm=VLMConfig(
             base_url=vlm.get("base_url", "http://localhost:11434/v1"),
-            model=vlm.get("model", "qwen2.5-vl:7b"),
+            model=vlm.get("model", "qwen2.5vl:7b"),
             api_key=vlm.get("api_key", "not-needed-locally"),
         ),
+        routes=raw.get("routing", {}),
     )
 
 

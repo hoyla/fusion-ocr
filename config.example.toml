@@ -18,3 +18,14 @@ model    = "qwen2.5vl:7b"                 # Ollama's name has no hyphen
 api_key  = "not-needed-locally"
 # Later, in-VPC CUDA:
 # base_url = "http://transcription-gpu.internal:8000/v1"   # vLLM
+
+# Per-script tool routing (see Docs/routing.md). PaddleOCR is always the geometry
+# engine; paddle_lang picks its recogniser. vlm_model/base_url override the reader for
+# that script (a specialist). Omit a section to take the default (generalist VLM).
+# [routing.thai]
+# paddle_lang  = "th"                       # Thai recogniser -> Thai det_text -> better alignment
+# vlm_model    = "hf.co/.../typhoon-ocr"    # Thai specialist reader, once served
+# vlm_base_url = "http://localhost:11434/v1"
+#
+# [routing.cyrillic]
+# paddle_lang = "cyrillic"

@@ -33,6 +33,11 @@ class Render:
             "source_path": doc.source_path,
             "sha256": doc.sha256,
             "languages": doc.languages,
+            "pages": [
+                {"index": p.index, "script": p.script, "needs_ocr": p.needs_ocr,
+                 "read_model": p.read_model, "rotation": p.rotation}
+                for p in doc.pages
+            ],
             "segments": [
                 {"page": s.page, **asdict(s)}
                 for p in doc.pages

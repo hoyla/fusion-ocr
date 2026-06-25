@@ -31,38 +31,49 @@ class OcrDet:
 
     def __init__(self, dpi: int = _DEFAULT_DPI, lang: str = "en") -> None:
         self.dpi = dpi
-        self.lang = lang
-        self._engine = None
-        self._mode: str | None = None  # "predict" (3.x) | "ocr" (2.x)
+        self.lang = lang  # fallback when a page has no detected script
+        # cache one engine per recogniser language: lang -> (engine, mode)
+        self._engines: dict[str, tuple] = {}
 
     # -- engine lifecycle ---------------------------------------------------
 
-    def _ensure_engine(self):
-        if self._engine is not None:
-            return self._engine
+    def _engine_for(self, lang: str):
+        """Return (engine, mode) for a recogniser language, building + caching on
+        first use. Falls back to English if PaddleOCR doesn't support the language."""
+        if lang in self._engines:
+            return self._engines[lang]
         from paddleocr import PaddleOCR  # raises ImportError if extra absent
 
-        # CRITICAL for overlay accuracy: disable the 3.x document-preprocessing
-        # (orientation classify + UVDoc unwarping + textline orientation). Those
-        # warp the image, so the returned polygons would be in the *unwarped* space
-        # and no longer line up with the original page — which silently shifts the
-        # overlay. We feed clean rasterised pages and own layout ourselves, so we
-        # want detection boxes in the original page coordinate space.
-        try:  # 3.x kwargs
-            self._engine = PaddleOCR(
-                lang=self.lang,
-                use_doc_orientation_classify=False,
-                use_doc_unwarping=False,
-                use_textline_orientation=False,
-            )
-        except TypeError:  # 2.x — no unwarping by default
-            self._engine = PaddleOCR(use_angle_cls=True, lang=self.lang)
-        self._mode = "predict" if hasattr(self._engine, "predict") else "ocr"
-        return self._engine
+        # CRITICAL for overlay accuracy: disable 3.x document-preprocessing
+        # (orientation + UVDoc unwarping + textline orientation) — it warps the image
+        # so polygons come back in unwarped space and no longer line up with the page.
+        try:
+            try:  # 3.x kwargs
+                engine = PaddleOCR(
+                    lang=lang,
+                    use_doc_orientation_classify=False,
+                    use_doc_unwarping=False,
+                    use_textline_orientation=False,
+                )
+            except TypeError:  # 2.x — no unwarping by default
+                engine = PaddleOCR(use_angle_cls=True, lang=lang)
+        except Exception:
+            # Unsupported recogniser language -> fall back to English (detection,
+            # i.e. the boxes, is script-agnostic; the VLM supplies the reading).
+            if lang == self.lang:
+                raise
+            self._engines[lang] = self._engine_for(self.lang)
+            return self._engines[lang]
+
+        mode = "predict" if hasattr(engine, "predict") else "ocr"
+        self._engines[lang] = (engine, mode)
+        return self._engines[lang]
 
     # -- stage entrypoint ---------------------------------------------------
 
     def run(self, doc: Document, cfg: Config) -> Document:
+        from ..routing import resolve
+
         try:
             import fitz  # PyMuPDF
         except ImportError:
@@ -72,41 +83,41 @@ class OcrDet:
         if not targets:
             return doc
 
-        try:
-            engine = self._ensure_engine()
-        except ImportError:
-            # No PaddleOCR — leave segments empty; downstream degrades cleanly.
-            return doc
-
         scale = self.dpi / 72.0
-        with fitz.open(doc.source_path) as pdf:
-            for page in targets:
-                if page.index >= pdf.page_count:
-                    continue
-                pg = pdf[page.index]
-                # get_pixmap renders the page upright (applying /Rotate); the
-                # derotation matrix maps those displayed coords back into the PDF's
-                # native (unrotated) space, so boxes land correctly on rotated pages.
-                deroter = pg.derotation_matrix
-                img = self._rasterise(fitz, pg)
-                lines = self._run_engine(engine, img)
-                for i, (pts_px, text, conf) in enumerate(lines):
-                    if not text:
+        try:
+            with fitz.open(doc.source_path) as pdf:
+                for page in targets:
+                    if page.index >= pdf.page_count:
                         continue
-                    pts = []
-                    for x, y in pts_px:
-                        p = fitz.Point(x / scale, y / scale) * deroter
-                        pts.append((p.x, p.y))
-                    page.segments.append(
-                        Segment(
-                            id=f"p{page.index}-l{i}",
-                            page=page.index,
-                            box=Box(points=pts),
-                            det_text=text,
-                            det_conf=conf,
-                            source="paddle",
+                    lang = resolve(page.script or "latin", cfg).paddle_lang
+                    try:
+                        engine, mode = self._engine_for(lang)
+                    except ImportError:
+                        return doc  # no PaddleOCR -> degrade cleanly
+                    pg = pdf[page.index]
+                    # derotation matrix maps the upright-render coords back into the
+                    # PDF's native space, so boxes land on rotated pages.
+                    deroter = pg.derotation_matrix
+                    img = self._rasterise(fitz, pg)
+                    for i, (pts_px, text, conf) in enumerate(self._run(engine, mode, img)):
+                        if not text:
+                            continue
+                        pts = []
+                        for x, y in pts_px:
+                            p = fitz.Point(x / scale, y / scale) * deroter
+                            pts.append((p.x, p.y))
+                        page.segments.append(
+                            Segment(
+                                id=f"p{page.index}-l{i}",
+                                page=page.index,
+                                box=Box(points=pts),
+                                det_text=text,
+                                det_conf=conf,
+                                source="paddle",
+                            )
                         )
-                    )
+        except ImportError:
+            return doc
         return doc
 
     # -- helpers ------------------------------------------------------------
@@ -124,9 +135,9 @@ class OcrDet:
             arr = np.repeat(arr, 3, axis=2)
         return np.ascontiguousarray(arr)
 
-    def _run_engine(self, engine, img) -> list[tuple[list, str, float]]:
+    def _run(self, engine, mode, img) -> list[tuple[list, str, float]]:
         """Return [(quad_points_px, text, confidence), ...] across both APIs."""
-        if self._mode == "predict":
+        if mode == "predict":
             return self._parse_v3(engine.predict(img))
         return self._parse_v2(engine.ocr(img, cls=True))
 
