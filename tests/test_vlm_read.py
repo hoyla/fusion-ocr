@@ -42,6 +42,19 @@ def test_vlm_read_sets_reading(tmp_path):
     assert doc.pages[0].vlm_reading == "First real line\nSecond real line"
 
 
+def test_refusal_detection():
+    from fusion_ocr.stages.vlm_read import _looks_like_refusal
+    # empty / placeholder / refusal -> treated as no read
+    assert _looks_like_refusal("", 500)
+    assert _looks_like_refusal("[Image content here]", 500)
+    assert _looks_like_refusal("I'm unable to read this image.", 500)
+    # far shorter than what OCR found -> discard
+    assert _looks_like_refusal("ก", 500)
+    # a genuine full reading -> kept
+    assert not _looks_like_refusal("A" * 400, 500)
+    assert not _looks_like_refusal("short but no OCR to beat", 0)
+
+
 def test_born_digital_skips_vlm(tmp_path):
     pdf = tmp_path / "born.pdf"
     d = fitz.open(); d.new_page().insert_text((72, 72), "hi"); d.save(str(pdf)); d.close()

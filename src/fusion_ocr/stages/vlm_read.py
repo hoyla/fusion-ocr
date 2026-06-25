@@ -60,7 +60,35 @@ class VlmRead:
                 page.read_model = model
                 png = pdf[page.index].get_pixmap(dpi=self.dpi).tobytes("png")
                 try:
-                    page.vlm_reading = client.read(png, TRANSCRIBE) or ""
+                    reading = client.read(png, TRANSCRIBE) or ""
                 except Exception:
-                    page.vlm_reading = ""  # degrade: fusion falls back to det_text
+                    reading = ""  # degrade: fusion falls back to det_text
+                det_chars = sum(len(s.det_text or "") for s in page.segments
+                                if s.source == "paddle")
+                if _looks_like_refusal(reading, det_chars):
+                    # e.g. a generalist refusing Thai ("[Image content here]"): drop it
+                    # so fusion uses the (good) routed-recogniser det_text instead.
+                    page.vlm_reading = ""
+                    page.read_model = ""
+                else:
+                    page.vlm_reading = reading
         return doc
+
+
+_REFUSAL_MARKERS = (
+    "[image content", "[image]", "i cannot", "i can't", "i'm unable", "i am unable",
+    "unable to read", "unable to process", "as an ai", "i'm sorry", "i am sorry",
+)
+
+
+def _looks_like_refusal(reading: str, det_chars: int) -> bool:
+    """True if the VLM didn't really read the page — empty, a refusal/placeholder, or
+    far shorter than what the deterministic engine found (so det_text is better)."""
+    r = reading.strip().lower()
+    if not r:
+        return True
+    if len(r) < 200 and any(m in r for m in _REFUSAL_MARKERS):
+        return True
+    if det_chars >= 80 and len(r) < 0.25 * det_chars:
+        return True
+    return False

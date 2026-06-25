@@ -105,14 +105,34 @@ specialist endpoints). On the Mac MVP, lean on PaddleOCR's per-language recognis
 router lives behind the job API, so callers don't change as the backend grows from one
 model to a fleet.
 
+## Typhoon serving — status (2026-06-25)
+
+Typhoon OCR exists as GGUF with the vision `mmproj` projector
+(`kunato/typhoon-ocr1.5-3b-gguf`, `mradermacher/typhoon-ocr-7b-GGUF`). **Blocker:**
+`ollama pull hf.co/kunato/typhoon-ocr1.5-3b-gguf` downloaded both blobs but Ollama
+0.30.10 returned **`Error: 400`** creating the manifest — its direct HF *vision*-GGUF
+import is the fiddly bit. llama.cpp (`llama-server`, the clean Mac path) is not
+installed. Options to finish (need a decision / heavier setup): bump/patch Ollama and
+retry, hand-author a Modelfile with the GGUF + mmproj, run `llama-server`, or serve via
+vLLM on the CUDA path. The router is **ready**: set `[routing.thai] vlm_model/base_url`
+to the served endpoint and it's wired — no code change.
+
+**Meanwhile the Thai route already works via PaddleOCR-th.** On the Thai form both
+Qwen VLMs failed (2.5 refused, 3 timed out); routing to `paddle_lang=th` reads it at
+0.95–1.00 confidence, and the refusal guard discards the generalist's "[Image content
+here]" so the Thai `det_text` carries the output (searchable overlay + clean Thai
+markdown). Typhoon is now an *enhancement* (better reading/structure), not a
+prerequisite.
+
 ## Status / roadmap
 
 - [x] Binary triage (text-layer vs OCR) — `triage` stage
-- [ ] `route` stage: Unicode-range script detection → Route
-- [ ] Per-language PaddleOCR recogniser selection in `ocr_det`
-- [ ] Per-route VLM model selection in `vlm_read`
-- [ ] Provenance: record geometry engine + reader per region
-- [ ] Thai route: PaddleOCR-Thai + Typhoon, benchmarked on the Thai form
+- [x] `route`/`language` stage: Unicode-range script detection → Route
+- [x] Per-language PaddleOCR recogniser selection in `ocr_det` (Thai verified)
+- [x] Per-route VLM model selection in `vlm_read`
+- [x] Provenance: `read_by` per segment + per-page script/read_model in the index
+- [x] Generalist-refusal guard → fall back to routed det_text (Thai works today)
+- [~] Thai route: PaddleOCR-Thai **done**; Typhoon reader blocked on local serving
 - [ ] Confidence-gated escalation
-- [ ] Image-only script detection
+- [ ] Image-only script detection (no text layer → currently defaults to Latin)
 - [ ] Layout-class routing (with PP-StructureV3)
