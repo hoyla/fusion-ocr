@@ -38,23 +38,28 @@ def build_overlay(doc: Document, out_path: Path, granularity: str = "line") -> b
             for seg in page.segments:
                 if not seg.best_text:
                     continue
-                _write_invisible(fitz, pg, seg, granularity)
+                _write_invisible(fitz, pg, seg, granularity, page.rotation)
         pdf.save(str(out_path), garbage=4, deflate=True)
     return True
 
 
-def _write_invisible(fitz, pg, seg, granularity: str) -> None:
+def _write_invisible(fitz, pg, seg, granularity: str, rotation: int = 0) -> None:
     x0, y0, x1, y1 = seg.box.bbox
-    # render_mode=3 -> invisible glyphs; the text is present for search/selection
-    # but not drawn over the original image.
+    # The glyph height runs perpendicular to the reading direction, which swaps on a
+    # rotated page. `rotate=` makes the invisible text read along the line.
+    thickness = (y1 - y0) if rotation in (0, 180) else (x1 - x0)
+    fontsize = max(thickness, 1)
+    # render_mode=3 -> invisible glyphs; present for search/selection, not drawn.
     if granularity == "word":
-        # TODO: subdivide [x0,x1] across seg.best_text.split() for word-level boxes.
+        # TODO: subdivide across words for word-level boxes (selection fidelity).
         words = seg.best_text.split()
         if words:
             step = (x1 - x0) / len(words)
             for i, w in enumerate(words):
                 rect = fitz.Rect(x0 + i * step, y0, x0 + (i + 1) * step, y1)
-                pg.insert_textbox(rect, w, render_mode=3, fontsize=max(y1 - y0, 1))
+                pg.insert_textbox(rect, w, render_mode=3, rotate=rotation,
+                                  fontsize=fontsize)
             return
     rect = fitz.Rect(x0, y0, x1, y1)
-    pg.insert_textbox(rect, seg.best_text, render_mode=3, fontsize=max(y1 - y0, 1))
+    pg.insert_textbox(rect, seg.best_text, render_mode=3, rotate=rotation,
+                      fontsize=fontsize)

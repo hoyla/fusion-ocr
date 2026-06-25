@@ -67,6 +67,8 @@ class Page:
     width: float = 0.0
     height: float = 0.0
     has_text_layer: bool = False
+    needs_ocr: bool = True
+    rotation: int = 0
     image_ref: str | None = None
     regions: list[Region] = field(default_factory=list)
     segments: list[Segment] = field(default_factory=list)
@@ -110,6 +112,8 @@ class Document:
             pages.append(Page(index=p["index"], width=p.get("width", 0.0),
                               height=p.get("height", 0.0),
                               has_text_layer=p.get("has_text_layer", False),
+                              needs_ocr=p.get("needs_ocr", True),
+                              rotation=p.get("rotation", 0),
                               image_ref=p.get("image_ref"),
                               regions=regions, segments=segments))
         return cls(source_path=raw["source_path"], sha256=raw["sha256"],

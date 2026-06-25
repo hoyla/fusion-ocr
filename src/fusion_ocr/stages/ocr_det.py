@@ -68,7 +68,7 @@ class OcrDet:
         except ImportError:
             return doc
 
-        targets = [p for p in doc.pages if not p.has_text_layer]
+        targets = [p for p in doc.pages if p.needs_ocr]
         if not targets:
             return doc
 
@@ -83,12 +83,20 @@ class OcrDet:
             for page in targets:
                 if page.index >= pdf.page_count:
                     continue
-                img = self._rasterise(fitz, pdf[page.index])
+                pg = pdf[page.index]
+                # get_pixmap renders the page upright (applying /Rotate); the
+                # derotation matrix maps those displayed coords back into the PDF's
+                # native (unrotated) space, so boxes land correctly on rotated pages.
+                deroter = pg.derotation_matrix
+                img = self._rasterise(fitz, pg)
                 lines = self._run_engine(engine, img)
                 for i, (pts_px, text, conf) in enumerate(lines):
                     if not text:
                         continue
-                    pts = [(x / scale, y / scale) for x, y in pts_px]
+                    pts = []
+                    for x, y in pts_px:
+                        p = fitz.Point(x / scale, y / scale) * deroter
+                        pts.append((p.x, p.y))
                     page.segments.append(
                         Segment(
                             id=f"p{page.index}-l{i}",
