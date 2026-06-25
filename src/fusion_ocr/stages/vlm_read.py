@@ -1,10 +1,9 @@
 """Stage 5 — VLM read (the semantics track).
 
 For each OCR-bound page we render the image and ask the VLM (via the swappable
-OpenAI-compatible client) for a verbatim transcription. The raw reading is kept on
-the page (`page.vlm_reading`) as the clean reading view, and its lines are aligned
-onto the deterministic PaddleOCR boxes so the overlay carries VLM-quality text on
-real geometry.
+OpenAI-compatible client) for a verbatim transcription, stored on the page as
+`page.vlm_reading` — the clean reading view. Aligning that reading onto the
+deterministic boxes is the fusion stage's job (it has the geometry to do it well).
 
 This is where the value over tesseract appears — handwriting, degraded scans, and
 non-Latin script the deterministic recogniser can't read. Geometry still comes from
@@ -17,7 +16,7 @@ born-digital docs never hit the VLM.
 from __future__ import annotations
 
 from ..config import Config
-from ..models import Document, Page
+from ..models import Document
 from ..vlm.client import get_client
 from ..vlm.prompts import TRANSCRIBE
 
@@ -50,25 +49,4 @@ class VlmRead:
                     page.vlm_reading = client.read(png, TRANSCRIBE) or ""
                 except Exception:
                     page.vlm_reading = ""  # degrade: fusion falls back to det_text
-                _align_to_boxes(page)
         return doc
-
-
-def _align_to_boxes(page: Page) -> None:
-    """Distribute the VLM reading's lines onto the page's PaddleOCR boxes in reading
-    order. First cut: 1:1 when counts match, else proportional. Full sequence
-    alignment (fuzzy-matched against det_text) is the planned refinement."""
-    lines = [ln.strip() for ln in page.vlm_reading.splitlines() if ln.strip()]
-    boxes = sorted(
-        (s for s in page.segments if s.source == "paddle"),
-        key=lambda s: (round(s.box.bbox[1] / 5), s.box.bbox[0]),  # top-to-bottom, l-to-r
-    )
-    if not lines or not boxes:
-        return
-    if len(lines) == len(boxes):
-        for seg, line in zip(boxes, lines):
-            seg.vlm_text = line
-        return
-    ratio = len(lines) / len(boxes)
-    for i, seg in enumerate(boxes):
-        seg.vlm_text = lines[min(int(i * ratio), len(lines) - 1)]
