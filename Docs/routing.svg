@@ -1,0 +1,82 @@
+<svg viewBox="0 0 880 560" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif" role="img">
+  <title>Two-axis tool routing</title>
+  <desc>A region is triaged and routed. The router picks two things independently: a deterministic PaddleOCR recogniser (geometry, always on, language varies) and a VLM reader (semantics, specialist varies). Both converge at ink-gated fusion, with the routing decision recorded as provenance.</desc>
+  <rect x="0" y="0" width="880" height="560" fill="#ffffff"/>
+  <style>
+    .b { stroke-width: 1.5; }
+    .stage { fill: #f4f4f2; stroke: #d9d9d4; }
+    .geom  { fill: #e8f0fe; stroke: #4a72c4; }
+    .sem   { fill: #fdeede; stroke: #d08a2e; }
+    .fuse  { fill: #e7e3f5; stroke: #7b5ec9; stroke-width: 2; }
+    .route { fill: #eef6ee; stroke: #4f9a5e; }
+    .t  { fill: #1b1b1b; font-size: 13.5px; font-weight: 600; }
+    .s  { fill: #6b6b6b; font-size: 10.5px; }
+    .lg { fill: #6b6b6b; font-size: 11px; }
+    .ln { stroke: #b5b5ad; stroke-width: 1.5; fill: none; }
+    .lng{ stroke: #4a72c4; stroke-width: 1.5; fill: none; }
+    .lns{ stroke: #d08a2e; stroke-width: 1.5; fill: none; }
+  </style>
+  <defs>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#b5b5ad"/></marker>
+    <marker id="ag" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#4a72c4"/></marker>
+    <marker id="as" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#d08a2e"/></marker>
+  </defs>
+
+  <!-- region in -->
+  <rect class="stage b" x="40" y="250" width="120" height="46" rx="8"/>
+  <text class="t" x="100" y="271" text-anchor="middle">Region</text>
+  <text class="s" x="100" y="286" text-anchor="middle">needs OCR</text>
+
+  <!-- router -->
+  <rect class="route b" x="210" y="232" width="180" height="82" rx="10"/>
+  <text class="t" x="300" y="258" text-anchor="middle">Router</text>
+  <text class="s" x="300" y="276" text-anchor="middle">detect script · layout</text>
+  <text class="s" x="300" y="290" text-anchor="middle">· rotation · confidence</text>
+  <text class="s" x="300" y="305" text-anchor="middle" font-style="italic">deterministic + auditable</text>
+  <path class="ln" d="M160,273 L208,273" marker-end="url(#a)"/>
+
+  <text class="lg" x="300" y="210" text-anchor="middle" font-style="italic">picks BOTH, independently ↓</text>
+
+  <!-- GEOMETRY axis -->
+  <rect class="geom b" x="450" y="120" width="330" height="120" rx="10"/>
+  <text class="t" x="615" y="144" text-anchor="middle">Geometry axis — PaddleOCR (ALWAYS)</text>
+  <text class="s" x="615" y="162" text-anchor="middle">detection = boxes (script-agnostic); recogniser varies</text>
+  <rect class="stage b" x="468" y="178" width="92" height="44" rx="6"/>
+  <text class="s" x="514" y="198" text-anchor="middle" font-weight="600">en / latin</text>
+  <text class="s" x="514" y="212" text-anchor="middle">default</text>
+  <rect class="stage b" x="570" y="178" width="92" height="44" rx="6"/>
+  <text class="s" x="616" y="198" text-anchor="middle" font-weight="600">th (Thai)</text>
+  <text class="s" x="616" y="212" text-anchor="middle">→ Thai det_text</text>
+  <rect class="stage b" x="672" y="178" width="92" height="44" rx="6"/>
+  <text class="s" x="718" y="198" text-anchor="middle" font-weight="600">cyrillic …</text>
+  <text class="s" x="718" y="212" text-anchor="middle">per script</text>
+  <path class="lng" d="M390,258 C420,200 430,180 448,176" marker-end="url(#ag)"/>
+
+  <!-- READING axis -->
+  <rect class="sem b" x="450" y="300" width="330" height="120" rx="10"/>
+  <text class="t" x="615" y="324" text-anchor="middle">Reading axis — VLM (specialist varies)</text>
+  <text class="s" x="615" y="342" text-anchor="middle">semantics only; geometry never comes from here</text>
+  <rect class="stage b" x="468" y="358" width="120" height="44" rx="6"/>
+  <text class="s" x="528" y="378" text-anchor="middle" font-weight="600">Qwen2.5-VL</text>
+  <text class="s" x="528" y="392" text-anchor="middle">generalist default</text>
+  <rect class="stage b" x="598" y="358" width="120" height="44" rx="6"/>
+  <text class="s" x="658" y="378" text-anchor="middle" font-weight="600">Typhoon</text>
+  <text class="s" x="658" y="392" text-anchor="middle">Thai specialist</text>
+  <rect class="stage b" x="728" y="358" width="36" height="44" rx="6"/>
+  <text class="s" x="746" y="383" text-anchor="middle">…</text>
+  <path class="lns" d="M390,288 C420,360 430,380 448,384" marker-end="url(#as)"/>
+
+  <!-- fusion -->
+  <rect class="fuse b" x="450" y="458" width="330" height="64" rx="10"/>
+  <text class="t" x="615" y="482" text-anchor="middle">Fusion — align reading → boxes</text>
+  <text class="s" x="615" y="500" text-anchor="middle">ink-gated · records geom + reader per region</text>
+  <text class="s" x="615" y="514" text-anchor="middle" font-style="italic">Thai↔Thai match = better placement</text>
+  <path class="lng" d="M615,240 C615,300 615,420 615,456" marker-end="url(#ag)"/>
+  <path class="lns" d="M540,420 C560,440 580,448 600,456" marker-end="url(#as)"/>
+
+  <!-- legend -->
+  <rect x="40" y="500" width="13" height="13" rx="3" class="geom b"/><text class="lg" x="60" y="511">geometry (PaddleOCR, always)</text>
+  <rect x="40" y="522" width="13" height="13" rx="3" class="sem b"/><text class="lg" x="60" y="533">reading (VLM, routed)</text>
+  <rect x="250" y="522" width="13" height="13" rx="3" class="route b"/><text class="lg" x="270" y="533">router</text>
+  <rect x="330" y="522" width="13" height="13" rx="3" class="fuse b"/><text class="lg" x="350" y="533">fusion</text>
+</svg>
