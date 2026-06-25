@@ -42,9 +42,20 @@ class OcrDet:
             return self._engine
         from paddleocr import PaddleOCR  # raises ImportError if extra absent
 
-        try:  # 3.x rejects some 2.x kwargs; keep the constructor minimal.
-            self._engine = PaddleOCR(lang=self.lang)
-        except TypeError:
+        # CRITICAL for overlay accuracy: disable the 3.x document-preprocessing
+        # (orientation classify + UVDoc unwarping + textline orientation). Those
+        # warp the image, so the returned polygons would be in the *unwarped* space
+        # and no longer line up with the original page — which silently shifts the
+        # overlay. We feed clean rasterised pages and own layout ourselves, so we
+        # want detection boxes in the original page coordinate space.
+        try:  # 3.x kwargs
+            self._engine = PaddleOCR(
+                lang=self.lang,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=False,
+            )
+        except TypeError:  # 2.x — no unwarping by default
             self._engine = PaddleOCR(use_angle_cls=True, lang=self.lang)
         self._mode = "predict" if hasattr(self._engine, "predict") else "ocr"
         return self._engine

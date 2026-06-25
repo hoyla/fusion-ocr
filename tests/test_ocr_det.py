@@ -21,12 +21,19 @@ from fusion_ocr import config as config_mod  # noqa: E402
 from fusion_ocr.pipeline import DEFAULT_PIPELINE, process  # noqa: E402
 
 
+# Known insertion geometry — the box must bracket this, which is what catches the
+# 3.x unwarp/orientation offset bug (boxes returned in the wrong coordinate space).
+_BASELINE_X = 72.0
+_BASELINE_Y = 200.0
+_FONTSIZE = 32
+
+
 def _image_only_pdf(path, text="HELLO WORLD invoice 2026"):
     """Render text onto a page, flatten to a pixmap, and rebuild the page from the
     image — leaving no extractable text layer."""
     src = fitz.open()
     pg = src.new_page(width=612, height=792)
-    pg.insert_text((72, 200), text, fontsize=32)
+    pg.insert_text((_BASELINE_X, _BASELINE_Y), text, fontsize=_FONTSIZE)
     pix = pg.get_pixmap(dpi=200)
     src.close()
 
@@ -61,6 +68,16 @@ def test_paddleocr_produces_boxed_text(tmp_path):
         x0, y0, x1, y1 = s.box.bbox
         assert 0 <= x0 < x1 <= page.width + 1
         assert 0 <= y0 < y1 <= page.height + 1
+
+    # Coordinate ACCURACY, not just bounds: the box must bracket the known text
+    # position. This is what fails if Paddle returns boxes in an unwarped/reoriented
+    # space instead of the original page space (the ~18pt offset bug).
+    box = segs[0].box.bbox  # single line -> one segment
+    x0, y0, x1, y1 = box
+    assert abs(x0 - _BASELINE_X) <= 12, f"left edge {x0} off from {_BASELINE_X}"
+    # baseline sits near the box bottom; ascenders rise above it. Bracket it.
+    assert y0 <= _BASELINE_Y <= y1 + 4, f"baseline {_BASELINE_Y} not bracketed by {box}"
+    assert (y1 - y0) <= _FONTSIZE * 1.6, f"box too tall: {y1 - y0}"
 
     # End-to-end: the overlay PDF should now actually be produced.
     assert "overlay_pdf" in doc.artifacts
