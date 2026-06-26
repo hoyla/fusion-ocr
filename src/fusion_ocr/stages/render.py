@@ -38,7 +38,7 @@ class Render:
                  "read_model": p.read_model, "rotation": p.rotation,
                  "regions": [
                      {"kind": r.kind, "reading_order": r.reading_order,
-                      "bbox": list(r.box.bbox),
+                      "source": r.source, "bbox": list(r.box.bbox),
                       **({"table_html": r.table_html,
                           "cells": [list(c.bbox) for c in r.cells]}
                          if r.kind == "table" else {})}
@@ -56,16 +56,22 @@ class Render:
         index_path.write_text(json.dumps(index, indent=2, ensure_ascii=False))
         doc.artifacts["segment_index"] = str(index_path)
 
-        # Markdown reading view: prefer the VLM's clean per-page reading; fall back
-        # to joining segment best_text (born-digital / text-layer pages).
+        # Markdown reading view. Segments are already in reading order (fusion sorts
+        # them). For MIXED pages (machine-readable text + OCR), join the combined
+        # segments so the verbatim text layer is retained alongside the OCR; for a
+        # pure-VLM page (no text layer) prefer the VLM's clean continuous reading.
         parts: list[str] = []
         for p in doc.pages:
-            if p.vlm_reading.strip():
+            seg_text = [s.best_text for s in p.segments
+                        if s.best_text and not s.superseded]
+            has_textlayer = any(s.source == "textlayer" and not s.superseded
+                                for s in p.segments)
+            if has_textlayer and seg_text:
+                parts.append("\n".join(seg_text))
+            elif p.vlm_reading.strip():
                 parts.append(p.vlm_reading.strip())
-            else:
-                seg_text = [s.best_text for s in p.segments if s.best_text]
-                if seg_text:
-                    parts.append("\n".join(seg_text))
+            elif seg_text:
+                parts.append("\n".join(seg_text))
         md_path = work / "document.md"
         md_path.write_text("\n\n".join(parts) if parts else "_(no text extracted yet)_\n")
         doc.artifacts["markdown"] = str(md_path)

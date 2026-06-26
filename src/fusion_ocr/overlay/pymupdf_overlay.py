@@ -49,7 +49,8 @@ def _resolve_font(font_path: str | None) -> str | None:
 
 def build_overlay(doc: Document, out_path: Path, granularity: str = "line",
                   font_path: str | None = None) -> bool:
-    segments = [s for p in doc.pages for s in p.segments if s.best_text]
+    segments = [s for p in doc.pages for s in p.segments
+                if s.best_text and not s.superseded]
     if not segments:
         return False
     try:
@@ -67,7 +68,7 @@ def build_overlay(doc: Document, out_path: Path, granularity: str = "line",
                 continue
             pg = pdf[page.index]
             for seg in page.segments:
-                if not seg.best_text:
+                if not seg.best_text or seg.superseded:
                     continue
                 _write_invisible(fitz, pg, seg, granularity, page.rotation,
                                  font, fontname, fontfile)

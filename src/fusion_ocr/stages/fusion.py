@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from difflib import SequenceMatcher
 
+from ..compose import classify_regions, in_machine_readable_region, reading_key
 from ..config import Config
 from ..models import Box, Document, Page, Segment
 
@@ -149,37 +150,54 @@ class Fusion:
 
     def run(self, doc: Document, cfg: Config) -> Document:
         for page in doc.pages:
-            self._dedup_overlap(page)
+            self._compose(page)
             if page.vlm_reading.strip():
                 self._fuse_lines(page)
             for seg in page.segments:
-                if not seg.best_text:
+                if not seg.superseded and not seg.best_text:
                     seg.best_text = seg.vlm_text or seg.det_text or ""
                     if seg.source in _OCR_SOURCES and seg.vlm_text:
                         seg.source = "fused"
+            # combine both sets in reading order (machine-readable + OCR)
+            page.segments.sort(key=lambda s: reading_key(s, page.regions))
         return doc
 
-    def _dedup_overlap(self, page: Page) -> None:
+    def _compose(self, page: Page) -> None:
+        """Combine the machine-readable text layer with OCR of the image areas. The
+        decision is per-REGION where layout gave us regions (a region covered by clean
+        text is machine-readable -> its OCR is redundant), else per-box overlap.
+        Nothing is dropped — the weaker source is marked `superseded` for provenance."""
         clean_tl = [s for s in page.segments if s.source == "textlayer" and s.best_text]
+        contaminated_tl = [s for s in page.segments
+                           if s.source == "textlayer" and not s.best_text]
         ocr = [s for s in page.segments if s.source in _OCR_SOURCES]
-        kept = []
-        for s in page.segments:
-            if s.source in _OCR_SOURCES and _overlaps(s, clean_tl):
-                continue  # exact text layer already covers this box
-            if s.source == "textlayer" and not s.best_text and _overlaps(s, ocr):
-                continue  # contaminated layer -> OCR is the repair
-            kept.append(s)
-        page.segments = kept
+
+        if page.regions:
+            classify_regions(page.regions, clean_tl)
+            for s in ocr:
+                if in_machine_readable_region(s, page.regions):
+                    s.superseded = True   # exact text layer covers this region
+        else:
+            for s in ocr:
+                if _overlaps(s, clean_tl):
+                    s.superseded = True   # exact text layer covers this box
+
+        kept_ocr = [s for s in ocr if not s.superseded]
+        for s in contaminated_tl:
+            if _overlaps(s, kept_ocr):
+                s.superseded = True       # contaminated layer -> OCR repairs it
 
     def _fuse_lines(self, page: Page) -> None:
-        paddle = [s for s in page.segments if s.source in _OCR_SOURCES]
-        others = [s for s in page.segments if s.source not in _OCR_SOURCES]
-        if not paddle:
+        ocr = [s for s in page.segments
+               if s.source in _OCR_SOURCES and not s.superseded]
+        ocr_ids = {id(s) for s in ocr}
+        others = [s for s in page.segments if id(s) not in ocr_ids]
+        if not ocr:
             return
         vlm_lines = [ln.strip() for ln in page.vlm_reading.splitlines() if ln.strip()]
         # region-aware where layout gave us regions; else global y-band clustering
-        clusters = (_cluster_within_regions(paddle, page.regions)
-                    if page.regions else _cluster_lines(paddle))
+        clusters = (_cluster_within_regions(ocr, page.regions)
+                    if page.regions else _cluster_lines(ocr))
         cluster_text = [" ".join(s.det_text or "" for s in cl) for cl in clusters]
         mapping = _nw_align(cluster_text, vlm_lines) if vlm_lines else {}
 

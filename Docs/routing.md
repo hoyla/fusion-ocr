@@ -96,6 +96,27 @@ different `model` name and/or `base_url`. A specialist can be served by **any** 
 documents) is the first specialist; GGUF quants exist (`*/typhoon-ocr-7b-GGUF`, a 3b,
 and a newer `typhoon-ocr1.5`).
 
+## Mixed-content pages — retain & combine both sets (2026-06-26)
+
+A page is often part machine-readable text layer and part image — e.g. a scanned
+document with a digital header/footer/stamp imposed over it (the Thai "scan" docs). A
+naive "has a text layer? → born-digital" check reads the header and misses the scanned
+body. Instead the pipeline combines BOTH, deciding per layout region:
+
+- `compose.classify_regions` tags each region **machine-readable** (clean text covers
+  ≥ 50% of it → use the text layer verbatim) or **ocr** (image → read it);
+- fusion keeps the clean text layer for machine-readable regions and the OCR/VLM for
+  image regions, **superseding** (not dropping) the weaker source where they overlap —
+  redundant OCR over a machine-readable region, or contaminated text layer over an
+  OCR'd region. Superseded segments are retained with `superseded: true` for provenance
+  (principle: never discard source);
+- the combined output is emitted in **reading order** (region order, then position).
+
+Verified on the Thai scan: 4 regions machine-readable (header/footer), 17 OCR (body);
+output combines `textlayer` + `vision`; 7 superseded segments retained. Every segment
+carries its `source`, so any span backs to "was selectable in the PDF" vs "OCR'd from
+the image".
+
 ## Apple Vision — the fast on-device tier (macOS, 2026-06-26)
 
 A deterministic engine (boxes + text + confidence, like PaddleOCR) but **fast**

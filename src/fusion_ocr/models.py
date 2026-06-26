@@ -49,6 +49,10 @@ class Segment:
     det_conf: float | None = None
     vlm_text: str | None = None
     read_by: str = ""  # provenance: which VLM read this region (model name)
+    # True when a better source covers this area (e.g. OCR superseding a contaminated
+    # text layer, or the text layer superseding redundant OCR). Retained for provenance
+    # (principle: never mutate/discard source), excluded from the primary output.
+    superseded: bool = False
     translations: dict[str, str] = field(default_factory=dict)
 
 
@@ -61,6 +65,7 @@ class Region:
     box: Box
     kind: RegionKind = "paragraph"
     reading_order: int = 0
+    source: str = ""  # "textlayer" (covered by clean machine-readable text) | "ocr"
     table_html: str = ""
     cells: list[Box] = field(default_factory=list)
 
@@ -104,6 +109,7 @@ class Document:
                 Region(box=Box(points=[tuple(pt) for pt in r["box"]["points"]]),
                        kind=r.get("kind", "paragraph"),
                        reading_order=r.get("reading_order", 0),
+                       source=r.get("source", ""),
                        table_html=r.get("table_html", ""),
                        cells=[Box(points=[tuple(pt) for pt in cb["points"]])
                               for cb in r.get("cells", [])])
@@ -116,6 +122,7 @@ class Document:
                     best_text=s.get("best_text", ""), source=s.get("source", "paddle"),
                     det_text=s.get("det_text"), det_conf=s.get("det_conf"),
                     vlm_text=s.get("vlm_text"), read_by=s.get("read_by", ""),
+                    superseded=s.get("superseded", False),
                     translations=s.get("translations", {}),
                 )
                 for s in p.get("segments", [])

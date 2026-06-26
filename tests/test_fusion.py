@@ -90,8 +90,11 @@ def test_overlap_dedup_prefers_clean_textlayer():
     doc = Document(source_path="x", sha256="x", pages=[page])
 
     Fusion().run(doc, config_mod.Config())
-    kept = doc.pages[0].segments
-    assert len(kept) == 1 and kept[0].source == "textlayer"
+    segs = doc.pages[0].segments
+    assert len(segs) == 2  # nothing dropped — superseded is retained for provenance
+    primary = [s for s in segs if not s.superseded]
+    assert len(primary) == 1 and primary[0].source == "textlayer"
+    assert next(s for s in segs if s.source == "paddle").superseded is True
 
 
 def test_fallback_best_text_without_vlm_reading():
