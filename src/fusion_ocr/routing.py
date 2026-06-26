@@ -24,9 +24,13 @@ class Route:
 
 # script -> default route. vlm_model stays None (generalist) until a specialist is
 # served and wired via config; paddle_lang is set per script (safe, improves det_text).
+# Thai reader defaults to the Typhoon OCR specialist (Ollama:
+# `ollama pull scb10x/typhoon-ocr1.5-3b`). If it isn't installed the call fails and
+# the refusal guard falls back to PaddleOCR-th det_text — so this degrades gracefully.
+# Override any of these via [routing.<script>] in config.toml.
 DEFAULT_ROUTES: dict[str, Route] = {
     "latin":      Route("latin", "en"),
-    "thai":       Route("thai", "th"),
+    "thai":       Route("thai", "th", vlm_model="scb10x/typhoon-ocr1.5-3b:latest"),
     "cyrillic":   Route("cyrillic", "cyrillic"),
     "arabic":     Route("arabic", "arabic"),
     "cjk":        Route("cjk", "ch"),

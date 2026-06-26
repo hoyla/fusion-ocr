@@ -19,7 +19,7 @@ from ..config import Config
 from ..models import Document
 from ..routing import resolve
 from ..vlm.openai_compat import OpenAICompatVLM
-from ..vlm.prompts import TRANSCRIBE
+from ..vlm.prompts import select_prompt
 
 _DPI = 150
 
@@ -60,7 +60,7 @@ class VlmRead:
                 page.read_model = model
                 png = pdf[page.index].get_pixmap(dpi=self.dpi).tobytes("png")
                 try:
-                    reading = client.read(png, TRANSCRIBE) or ""
+                    reading = client.read(png, select_prompt(model)) or ""
                 except Exception:
                     reading = ""  # degrade: fusion falls back to det_text
                 det_chars = sum(len(s.det_text or "") for s in page.segments

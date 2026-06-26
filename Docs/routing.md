@@ -105,24 +105,31 @@ specialist endpoints). On the Mac MVP, lean on PaddleOCR's per-language recognis
 router lives behind the job API, so callers don't change as the backend grows from one
 model to a fleet.
 
-## Typhoon serving — status (2026-06-25)
+## Thai route — WORKING (2026-06-26)
 
-Typhoon OCR exists as GGUF with the vision `mmproj` projector
-(`kunato/typhoon-ocr1.5-3b-gguf`, `mradermacher/typhoon-ocr-7b-GGUF`). **Blocker:**
-`ollama pull hf.co/kunato/typhoon-ocr1.5-3b-gguf` downloaded both blobs but Ollama
-0.30.10 returned **`Error: 400`** creating the manifest — its direct HF *vision*-GGUF
-import is the fiddly bit. llama.cpp (`llama-server`, the clean Mac path) is not
-installed. Options to finish (need a decision / heavier setup): bump/patch Ollama and
-retry, hand-author a Modelfile with the GGUF + mmproj, run `llama-server`, or serve via
-vLLM on the CUDA path. The router is **ready**: set `[routing.thai] vlm_model/base_url`
-to the served endpoint and it's wired — no code change.
+Thai is the first fully-wired specialist route:
 
-**Meanwhile the Thai route already works via PaddleOCR-th.** On the Thai form both
-Qwen VLMs failed (2.5 refused, 3 timed out); routing to `paddle_lang=th` reads it at
-0.95–1.00 confidence, and the refusal guard discards the generalist's "[Image content
-here]" so the Thai `det_text` carries the output (searchable overlay + clean Thai
-markdown). Typhoon is now an *enhancement* (better reading/structure), not a
-prerequisite.
+- **geometry**: PaddleOCR `lang=th` reads the Thai form at 0.95–1.00 confidence
+  (both Qwen VLMs had failed it — 2.5 refused, 3 timed out);
+- **reading**: **Typhoon OCR** (`ollama pull scb10x/typhoon-ocr1.5-3b` — SCB 10X's
+  own community-published Ollama model; this is the correct install, *not* a raw HF
+  GGUF pull, which Ollama 0.30.10 won't import). Default reader for `script=thai`.
+
+Typhoon is fine-tuned on its own instruction, so a generic transcribe prompt makes it
+echo its template — `vlm/prompts.py::select_prompt(model)` sends the Typhoon-format
+prompt (literal-text variant: tables/page-numbers preserved, figure-DESCRIPTION/chart-
+ANALYSIS dropped — that's inference, not OCR). Verified end-to-end: clean structured
+Thai markdown, Typhoon lines aligned onto PaddleOCR-th boxes (Thai↔Thai fuzzy match),
+`read_by` provenance recorded.
+
+If Typhoon isn't installed the call fails → the **refusal guard** falls back to
+PaddleOCR-th `det_text`, so the route degrades gracefully (no hard dependency).
+
+**Known limit — Thai overlay search:** the Thai text *is* in the invisible layer, but
+`search_for` is hit-or-miss (some terms match, some don't) because of Thai character
+composition (combining vowels/tone marks, NFC/NFD normalisation). The **reading**
+(markdown) is the solid Thai deliverable; reliable Thai *search/highlight* needs the
+Unicode-overlay-font + text-normalisation follow-up.
 
 ## Status / roadmap
 
@@ -131,8 +138,10 @@ prerequisite.
 - [x] Per-language PaddleOCR recogniser selection in `ocr_det` (Thai verified)
 - [x] Per-route VLM model selection in `vlm_read`
 - [x] Provenance: `read_by` per segment + per-page script/read_model in the index
-- [x] Generalist-refusal guard → fall back to routed det_text (Thai works today)
-- [~] Thai route: PaddleOCR-Thai **done**; Typhoon reader blocked on local serving
+- [x] Generalist-refusal guard → fall back to routed det_text
+- [x] Per-model prompt selection (`select_prompt`) — Typhoon's own instruction
+- [x] Thai route: PaddleOCR-Thai geometry + **Typhoon reader** — done & verified
+- [ ] Thai overlay search reliability (Unicode font + NFC/NFD normalisation)
 - [ ] Confidence-gated escalation
 - [ ] Image-only script detection (no text layer → currently defaults to Latin)
 - [ ] Layout-class routing (with PP-StructureV3)

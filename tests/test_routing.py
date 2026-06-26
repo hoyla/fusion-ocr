@@ -28,7 +28,8 @@ def test_detect_empty_and_punctuation_default_latin():
 def test_resolve_defaults():
     r = resolve("thai", cfg=None)
     assert r.paddle_lang == "th"
-    assert r.vlm_model is None  # generalist until a specialist is wired
+    assert "typhoon" in r.vlm_model.lower()  # Thai specialist reader by default
+    assert resolve("latin", cfg=None).vlm_model is None  # generalist
     assert resolve("latin", cfg=None).paddle_lang == "en"
     assert resolve("klingon", cfg=None).paddle_lang == "en"  # unknown -> latin default
 
