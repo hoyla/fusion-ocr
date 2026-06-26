@@ -126,6 +126,54 @@ def populate_table_html(table_html: str, cells: list[Box],
     return _EMPTY_CELL.sub(_fill, table_html)
 
 
+def xy_cut_order(boxes: list[Box]) -> list[int]:
+    """Reading order via recursive XY-cut — the same approach PP-StructureV3 uses,
+    applied to our layout regions. Returns indices into ``boxes`` in reading order.
+
+    At each step it peels off a full-width horizontal band (top-to-bottom: header, then
+    the column block, then footer); where no horizontal gap exists it cuts on a
+    full-height vertical band (columns, left-to-right) and recurses. This gives the
+    right answer for single-column, multi-column, header+columns, and table-like
+    (row-major) layouts — and it's deterministic and explainable, not a black box.
+    """
+    order: list[int] = []
+    _xy_cut(boxes, list(range(len(boxes))), order)
+    return order
+
+
+def _xy_cut(boxes: list[Box], idx: list[int], order: list[int]) -> None:
+    if len(idx) <= 1:
+        order.extend(idx)
+        return
+    groups = _split_on_gap(boxes, idx, axis=1)        # horizontal band (rows) first
+    if groups is None:
+        groups = _split_on_gap(boxes, idx, axis=0)    # else vertical band (columns)
+    if groups is None:                                 # no clean cut -> y then x
+        order.extend(sorted(idx, key=lambda i: (boxes[i].bbox[1], boxes[i].bbox[0])))
+        return
+    for g in groups:
+        _xy_cut(boxes, g, order)
+
+
+def _split_on_gap(boxes: list[Box], idx: list[int], axis: int):
+    """Split idx into [before, after] across the widest empty band along `axis`
+    (axis=1 -> a horizontal gap in y; axis=0 -> a vertical gap in x), or None if no box-
+    free band spans the group."""
+    lo, hi = axis, axis + 2  # bbox is (x0,y0,x1,y1)
+    spans = sorted(((boxes[i].bbox[lo], boxes[i].bbox[hi], i) for i in idx),
+                   key=lambda t: t[0])
+    max_hi = spans[0][1]
+    best_gap, best_k = 0.0, None
+    for k in range(1, len(spans)):
+        gap = spans[k][0] - max_hi
+        if gap > best_gap:
+            best_gap, best_k = gap, k
+        max_hi = max(max_hi, spans[k][1])
+    if best_k is None or best_gap <= 0:
+        return None
+    return [[t[2] for t in spans[:best_k]], [t[2] for t in spans[best_k:]]]
+
+
 def reading_key(seg: Segment, regions: list[Region]):
     """Sort key for reading order: the containing region's order, then top-to-bottom,
     then left-to-right. Segments outside every region sort after, by position."""

@@ -79,9 +79,15 @@ class Layout:
                     arr = np.repeat(arr, 3, axis=2)
                 img = np.ascontiguousarray(arr)
 
-                regions = []
+                regions, disp_boxes = [], []
                 for b in self._detect(model, img):
                     x0, y0, x1, y1 = b["coordinate"]
+                    # displayed (upright) box — what the eye reads, used for the XY-cut
+                    # reading order so it's correct on rotated pages.
+                    disp_boxes.append(Box(points=[
+                        (x0 / scale, y0 / scale), (x1 / scale, y0 / scale),
+                        (x1 / scale, y1 / scale), (x0 / scale, y1 / scale)]))
+                    # base (derotated) box — stored, so overlay/search land on the page
                     p0 = fitz.Point(x0 / scale, y0 / scale) * deroter
                     p1 = fitz.Point(x1 / scale, y1 / scale) * deroter
                     bx0, bx1 = sorted((p0.x, p1.x))
@@ -90,7 +96,7 @@ class Layout:
                         box=Box(points=[(bx0, by0), (bx1, by0), (bx1, by1), (bx0, by1)]),
                         kind=_KIND_MAP.get(str(b.get("label", "")).lower(), "other"),
                     ))
-                page.regions = _order_regions(regions)
+                page.regions = _order_regions(regions, disp_boxes)
         return doc
 
     @staticmethod
@@ -102,11 +108,17 @@ class Layout:
         return r.get("boxes", []) if hasattr(r, "get") else []
 
 
-def _order_regions(regions: list[Region]) -> list[Region]:
-    """Row-major reading order: top-to-bottom, then left-to-right within a band.
-    Approximate for true multi-column body text (PP-StructureV3 reading-order model is
-    the proper fix); good enough to order regions for the markdown view."""
-    ordered = sorted(regions, key=lambda r: (round(r.box.bbox[1] / 20), r.box.bbox[0]))
+def _order_regions(regions: list[Region], order_boxes: list[Box] | None = None) -> list[Region]:
+    """Reading order via XY-cut (handles multi-column / header+columns / tables), the
+    same approach PP-StructureV3 uses — deterministic and explainable. `order_boxes`
+    (displayed/upright space) is used for ordering when given, so the order is visually
+    correct on rotated pages even though the stored region boxes are in base space."""
+    from ..compose import xy_cut_order
+
+    if not regions:
+        return regions
+    boxes = order_boxes if order_boxes is not None else [r.box for r in regions]
+    ordered = [regions[i] for i in xy_cut_order(boxes)]
     for i, r in enumerate(ordered):
         r.reading_order = i
     return ordered
