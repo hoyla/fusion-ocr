@@ -96,6 +96,32 @@ different `model` name and/or `base_url`. A specialist can be served by **any** 
 documents) is the first specialist; GGUF quants exist (`*/typhoon-ocr-7b-GGUF`, a 3b,
 and a newer `typhoon-ocr1.5`).
 
+## Runtime — MLX vs Ollama on Apple Silicon (2026-06-26)
+
+The reader is endpoint-agnostic, so the *serving runtime* is a free variable — and on
+Apple Silicon it matters a lot. An earlier bake-off found Qwen3-VL "6–10× slower,
+timed out" — but that was **Ollama (llama.cpp)**. Re-run via **MLX** (`mlx-vlm`, whose
+`mlx_vlm.server` is OpenAI-compatible — point `vlm.base_url` at it, no code change):
+
+| Page | Ollama qwen3-vl:8b | MLX Qwen3-VL-8B-Instruct-4bit |
+| --- | --- | --- |
+| handwriting | 127s | **10.5s** (cleanest read of all) |
+| Thai form | failed | **28.9s** (reads Thai ≈ Typhoon) |
+| table | timed out | **15.0s** (correct values) |
+
+~10–40× faster and accurate across the board, Thai included. **The earlier verdict was
+a runtime artifact, not the model.** Takeaways:
+
+- **MLX is the preferred local runtime on Apple Silicon**; serve readers via
+  `python -m mlx_vlm.server` and set `vlm.base_url = http://localhost:8080/v1`.
+- **Qwen3-VL-8B-Instruct (MLX)** is a strong, fast, multilingual generalist — a
+  candidate to replace the Qwen2.5-VL/Ollama default, and a viable Thai reader
+  alongside Typhoon. (Use **Instruct**, not Thinking, for OCR; recommended sampling
+  temp 0.7 / top-p 0.8 / top-k 20, though greedy is fine for transcription.)
+- Qwen3.5-VL exists (text MLX builds published; VL MLX build not yet) — re-test when
+  available.
+- Lesson (again): benchmark the *runtime*, not just the model.
+
 ## Single-Mac vs VPC
 
 You can't keep many 6 GB VLMs hot on one Mac — Ollama swaps them in/out (slow). So
