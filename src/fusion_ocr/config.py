@@ -25,6 +25,12 @@ class VLMConfig:
     base_url: str = "http://localhost:8080/v1"
     model: str = "mlx-community/Qwen3-VL-8B-Instruct-4bit"
     api_key: str = "not-needed-locally"
+    # Confidence-gated escalation: when set, a page whose mean PaddleOCR confidence is
+    # below `escalate_below` (or whose primary read looks like a refusal) is re-read by
+    # `escalation_model`. 0.0 / "" disables it.
+    escalate_below: float = 0.0
+    escalation_model: str = ""
+    escalation_base_url: str = ""
 
 
 @dataclass
@@ -63,6 +69,9 @@ def load(path: str | Path = "config.toml") -> Config:
             base_url=vlm.get("base_url", "http://localhost:8080/v1"),
             model=vlm.get("model", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),
             api_key=vlm.get("api_key", "not-needed-locally"),
+            escalate_below=vlm.get("escalate_below", 0.0),
+            escalation_model=vlm.get("escalation_model", ""),
+            escalation_base_url=vlm.get("escalation_base_url", ""),
         ),
         routes=raw.get("routing", {}),
     )

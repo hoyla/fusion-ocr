@@ -56,29 +56,54 @@ class VlmRead:
                 route = resolve(page.script or "latin", cfg)
                 model = route.vlm_model or cfg.vlm.model
                 base_url = route.vlm_base_url or cfg.vlm.base_url
-                client = self._client or self._client_for(base_url, model, cfg)
-                page.read_model = model
                 png = pdf[page.index].get_pixmap(dpi=self.dpi).tobytes("png")
-                try:
-                    reading = client.read(png, select_prompt(model)) or ""
-                except Exception:
-                    reading = ""  # degrade: fusion falls back to det_text
                 det_chars = sum(len(s.det_text or "") for s in page.segments
                                 if s.source == "paddle")
+
+                reading = self._read(png, model, base_url, cfg)
+
+                # Confidence-gated escalation: if the primary read looks like a refusal
+                # or the page's deterministic confidence is low, re-read with a stronger
+                # model. Keep it only if it's actually better (not a refusal too).
+                esc = cfg.vlm.escalation_model
+                if esc and esc != model and (
+                        _looks_like_refusal(reading, det_chars)
+                        or _low_confidence(page, cfg.vlm.escalate_below)):
+                    esc_reading = self._read(
+                        png, esc, cfg.vlm.escalation_base_url or base_url, cfg)
+                    if not _looks_like_refusal(esc_reading, det_chars):
+                        reading, model = esc_reading, esc
+
                 if _looks_like_refusal(reading, det_chars):
-                    # e.g. a generalist refusing Thai ("[Image content here]"): drop it
-                    # so fusion uses the (good) routed-recogniser det_text instead.
-                    page.vlm_reading = ""
+                    page.vlm_reading = ""   # fusion falls back to routed det_text
                     page.read_model = ""
                 else:
                     page.vlm_reading = reading
+                    page.read_model = model
         return doc
+
+    def _read(self, png, model, base_url, cfg) -> str:
+        client = self._client or self._client_for(base_url, model, cfg)
+        try:
+            return client.read(png, select_prompt(model)) or ""
+        except Exception:
+            return ""  # degrade: fusion falls back to det_text
 
 
 _REFUSAL_MARKERS = (
     "[image content", "[image]", "i cannot", "i can't", "i'm unable", "i am unable",
     "unable to read", "unable to process", "as an ai", "i'm sorry", "i am sorry",
 )
+
+
+def _low_confidence(page, threshold: float) -> bool:
+    """True if the page's mean PaddleOCR confidence is below the escalation threshold
+    (a degraded/hard page worth a stronger reader). 0 disables."""
+    if threshold <= 0:
+        return False
+    confs = [s.det_conf for s in page.segments
+             if s.source == "paddle" and s.det_conf is not None]
+    return bool(confs) and (sum(confs) / len(confs) < threshold)
 
 
 def _looks_like_refusal(reading: str, det_chars: int) -> bool:

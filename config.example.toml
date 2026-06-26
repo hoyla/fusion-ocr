@@ -23,6 +23,12 @@ api_key  = "not-needed-locally"
 # Alternatives:
 # base_url = "http://localhost:11434/v1"; model = "qwen2.5vl:7b"        # Ollama
 # base_url = "http://transcription-gpu.internal:8000/v1"               # in-VPC vLLM (CUDA)
+#
+# Confidence-gated escalation (optional): re-read a hard page with a stronger model
+# when mean PaddleOCR confidence is low, or the primary read looks like a refusal.
+# escalate_below     = 0.6
+# escalation_model   = "mlx-community/Qwen3-VL-30B-A3B-Instruct-4bit"   # bigger MoE
+# escalation_base_url = "http://localhost:8080/v1"
 
 # Per-script tool routing — THE TOOLKIT (see Docs/routing.md). PaddleOCR is always the
 # geometry engine; paddle_lang picks its recogniser. vlm_model/vlm_base_url override

@@ -38,7 +38,10 @@ class Render:
                  "read_model": p.read_model, "rotation": p.rotation,
                  "regions": [
                      {"kind": r.kind, "reading_order": r.reading_order,
-                      "bbox": list(r.box.bbox)}
+                      "bbox": list(r.box.bbox),
+                      **({"table_html": r.table_html,
+                          "cells": [list(c.bbox) for c in r.cells]}
+                         if r.kind == "table" else {})}
                      for r in p.regions
                  ]}
                 for p in doc.pages

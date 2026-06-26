@@ -54,12 +54,15 @@ class Segment:
 
 @dataclass
 class Region:
-    """A layout region from PP-StructureV3. Reading order is what lets the VLM's
-    linear transcription be aligned back onto boxes later."""
+    """A layout region from PP-DocLayout. Reading order is what lets the VLM's linear
+    transcription be aligned back onto boxes. For `table` regions, `table_html` holds
+    the deterministic cell structure and `cells` the per-cell boxes (page coords)."""
 
     box: Box
     kind: RegionKind = "paragraph"
     reading_order: int = 0
+    table_html: str = ""
+    cells: list[Box] = field(default_factory=list)
 
 
 @dataclass
@@ -100,7 +103,10 @@ class Document:
             regions = [
                 Region(box=Box(points=[tuple(pt) for pt in r["box"]["points"]]),
                        kind=r.get("kind", "paragraph"),
-                       reading_order=r.get("reading_order", 0))
+                       reading_order=r.get("reading_order", 0),
+                       table_html=r.get("table_html", ""),
+                       cells=[Box(points=[tuple(pt) for pt in cb["points"]])
+                              for cb in r.get("cells", [])])
                 for r in p.get("regions", [])
             ]
             segments = [

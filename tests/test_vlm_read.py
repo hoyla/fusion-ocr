@@ -42,6 +42,45 @@ def test_vlm_read_sets_reading(tmp_path):
     assert doc.pages[0].vlm_reading == "First real line\nSecond real line"
 
 
+class _SeqVLM:
+    """Returns canned responses in order — first the primary read, then escalation."""
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.i = 0
+
+    def read(self, png, prompt, **kw):
+        r = self.responses[min(self.i, len(self.responses) - 1)]
+        self.i += 1
+        return r
+
+
+def test_confidence_gated_escalation(tmp_path):
+    from fusion_ocr.models import Box, Segment
+    pdf = tmp_path / "scan.pdf"
+    d = fitz.open(); pg = d.new_page()
+    pg.insert_image(pg.rect, pixmap=fitz.open().new_page().get_pixmap(dpi=72))
+    d.save(str(pdf)); d.close()
+
+    doc = Document(source_path=str(pdf), sha256="x")
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    page.segments = [Segment(id="a", page=0,
+                             box=Box(points=[(50, 100), (300, 100), (300, 120), (50, 120)]),
+                             det_text="x" * 100, det_conf=0.3, source="paddle")]
+    doc.pages = [page]
+
+    cfg = config_mod.Config()
+    cfg.vlm.escalation_model = "big-model"
+    cfg.vlm.escalate_below = 0.6                      # mean conf 0.3 < 0.6 -> escalate
+
+    # primary refuses; escalation gives a real read
+    fake = _SeqVLM("[Image content here]", "A proper full transcription. " * 8)
+    VlmRead(client=fake).run(doc, cfg)
+
+    assert fake.i == 2                                 # primary + escalation
+    assert page.read_model == "big-model"             # provenance = the escalated model
+    assert "proper full transcription" in page.vlm_reading.lower()
+
+
 def test_refusal_detection():
     from fusion_ocr.stages.vlm_read import _looks_like_refusal
     # empty / placeholder / refusal -> treated as no read

@@ -18,6 +18,7 @@ from .stages.language import Language
 from .stages.layout import Layout
 from .stages.ocr_det import OcrDet
 from .stages.render import Render
+from .stages.table import Table
 from .stages.triage import Triage
 from .stages.vlm_read import VlmRead
 
@@ -32,6 +33,7 @@ class Stage(Protocol):
 DEFAULT_PIPELINE: list[Stage] = [
     Triage(),
     Layout(),
+    Table(),
     Language(),
     OcrDet(),
     VlmRead(),
