@@ -20,6 +20,7 @@ class Route:
     paddle_lang: str = "en"
     vlm_model: str | None = None       # None -> use cfg.vlm.model (generalist)
     vlm_base_url: str | None = None     # None -> use cfg.vlm.base_url
+    engine: str = "paddle"              # deterministic engine: "paddle" | "apple_vision"
 
 
 # script -> default route. vlm_model stays None (generalist) until a specialist is
@@ -87,9 +88,22 @@ def resolve(script: str, cfg=None) -> Route:
     base = DEFAULT_ROUTES.get(script, DEFAULT_ROUTES["latin"])
     overrides = getattr(cfg, "routes", {}) or {}
     o = overrides.get(script, {})
+    engine = o.get("engine") or _auto_engine(base.script, cfg) or base.engine
     return Route(
         script=base.script,
         paddle_lang=o.get("paddle_lang", base.paddle_lang),
         vlm_model=o.get("vlm_model", base.vlm_model),
         vlm_base_url=o.get("vlm_base_url", base.vlm_base_url),
+        engine=engine,
     )
+
+
+def _auto_engine(script: str, cfg) -> str | None:
+    """Prefer Apple Vision (fast, on-device) when enabled and the script is supported
+    on this machine; else None (keep the route's default engine)."""
+    if cfg is None or not getattr(cfg, "prefer_apple_vision", False):
+        return None
+    from .engines import apple_vision
+    if script in apple_vision.VISION_LANGS and apple_vision.available():
+        return "apple_vision"
+    return None

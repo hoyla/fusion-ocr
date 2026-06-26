@@ -29,6 +29,7 @@ from ..models import Box, Document, Page, Segment
 
 _IOU_OVERLAP = 0.5
 _GAP = -0.2  # alignment gap penalty
+_OCR_SOURCES = {"paddle", "vision"}  # deterministic OCR engines (geometry + det_text)
 
 
 def _iou(a: Box, b: Box) -> float:
@@ -154,25 +155,25 @@ class Fusion:
             for seg in page.segments:
                 if not seg.best_text:
                     seg.best_text = seg.vlm_text or seg.det_text or ""
-                    if seg.source == "paddle" and seg.vlm_text:
+                    if seg.source in _OCR_SOURCES and seg.vlm_text:
                         seg.source = "fused"
         return doc
 
     def _dedup_overlap(self, page: Page) -> None:
         clean_tl = [s for s in page.segments if s.source == "textlayer" and s.best_text]
-        paddle = [s for s in page.segments if s.source == "paddle"]
+        ocr = [s for s in page.segments if s.source in _OCR_SOURCES]
         kept = []
         for s in page.segments:
-            if s.source == "paddle" and _overlaps(s, clean_tl):
+            if s.source in _OCR_SOURCES and _overlaps(s, clean_tl):
                 continue  # exact text layer already covers this box
-            if s.source == "textlayer" and not s.best_text and _overlaps(s, paddle):
+            if s.source == "textlayer" and not s.best_text and _overlaps(s, ocr):
                 continue  # contaminated layer -> OCR is the repair
             kept.append(s)
         page.segments = kept
 
     def _fuse_lines(self, page: Page) -> None:
-        paddle = [s for s in page.segments if s.source == "paddle"]
-        others = [s for s in page.segments if s.source != "paddle"]
+        paddle = [s for s in page.segments if s.source in _OCR_SOURCES]
+        others = [s for s in page.segments if s.source not in _OCR_SOURCES]
         if not paddle:
             return
         vlm_lines = [ln.strip() for ln in page.vlm_reading.splitlines() if ln.strip()]

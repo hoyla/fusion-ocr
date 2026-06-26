@@ -11,6 +11,7 @@ dependencies = []
 api = ["fastapi", "uvicorn"]
 ocr = ["pymupdf", "numpy", "paddleocr", "paddlepaddle"]   # geometry + structure (PP-StructureV3)
 vlm = ["httpx", "pillow"]                          # OpenAI-compatible client + image handling
+vision = ["ocrmac"]                                # Apple Vision OCR (macOS only, on-device)
 dev = ["pytest"]
 
 [project.scripts]

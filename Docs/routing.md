@@ -96,6 +96,27 @@ different `model` name and/or `base_url`. A specialist can be served by **any** 
 documents) is the first specialist; GGUF quants exist (`*/typhoon-ocr-7b-GGUF`, a 3b,
 and a newer `typhoon-ocr1.5`).
 
+## Apple Vision — the fast on-device tier (macOS, 2026-06-26)
+
+A deterministic engine (boxes + text + confidence, like PaddleOCR) but **fast**
+(Neural Engine, sub-2s/page), **free** (no model download), **fully on-device** (no
+server, ideal for the airgap tier), across **~30 languages** (en, Thai, Cyrillic,
+Arabic, CJK, …). It needs the script as a language hint — which the router already
+detects. It loses to the VLM on handwriting and table *structure*, so it's the cheap
+printed-text tier, not a VLM replacement.
+
+Benchmarked: clean print 0.75s @ 0.97; Montenegrin (diacritics) 0.68s @ 0.92; Thai
+1.84s @ 0.95 (≈ Typhoon, ~20× faster); handwriting — garbled (VLM wins).
+
+Wiring (`engines/apple_vision.py`, `vision` extra = `ocrmac`):
+- `run.prefer_apple_vision = true` → the router uses Vision as the deterministic
+  engine for Vision-supported scripts on macOS (Devanagari / non-Mac → PaddleOCR);
+- **cheap tier**: when a page's mean Vision confidence ≥ `run.apple_vision_skip_vlm`,
+  the VLM read is **skipped** (Vision's text IS the reading); harder pages fall through
+  to the VLM (and confidence-gated escalation). Verified: the Thai scan runs **7.8s with
+  no VLM call** (vs ~84s via Typhoon), fully on-device.
+- Per-route override: `[routing.<script>] engine = "apple_vision"`.
+
 ## Runtime — MLX vs Ollama on Apple Silicon (2026-06-26)
 
 The reader is endpoint-agnostic, so the *serving runtime* is a free variable — and on

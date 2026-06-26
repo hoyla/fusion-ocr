@@ -53,6 +53,11 @@ class VlmRead:
             for page in targets:
                 if page.index >= pdf.page_count:
                     continue
+                # Cheap tier: if Apple Vision already read the page confidently, its
+                # det_text IS the reading — skip the VLM entirely (fusion uses det_text).
+                if _vision_confident(page, cfg.apple_vision_skip_vlm):
+                    page.read_model = "apple_vision"
+                    continue
                 route = resolve(page.script or "latin", cfg)
                 model = route.vlm_model or cfg.vlm.model
                 base_url = route.vlm_base_url or cfg.vlm.base_url
@@ -94,6 +99,14 @@ _REFUSAL_MARKERS = (
     "[image content", "[image]", "i cannot", "i can't", "i'm unable", "i am unable",
     "unable to read", "unable to process", "as an ai", "i'm sorry", "i am sorry",
 )
+
+
+def _vision_confident(page, threshold: float) -> bool:
+    """True if Apple Vision read this page at high mean confidence — its text is good
+    enough to skip the VLM (the cheap printed-text tier)."""
+    vis = [s.det_conf for s in page.segments
+           if s.source == "vision" and s.det_conf is not None]
+    return bool(vis) and (sum(vis) / len(vis) >= threshold)
 
 
 def _low_confidence(page, threshold: float) -> bool:

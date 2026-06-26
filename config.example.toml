@@ -12,6 +12,13 @@ granularity = "line"
 # scripts (Thai/CJK/Arabic) to be searchable — base-14 fonts break search there.
 # "" = auto-detect (macOS Arial Unicode / common Noto paths); else give a TTF path.
 overlay_font = ""
+# Apple Vision (macOS, on-device) as the fast deterministic engine for supported
+# scripts (en/Thai/Cyrillic/Arabic/CJK). Sub-2s, no model, no server, fully sealed —
+# ideal for the airgap tier and clean printed text. When a page's mean Vision
+# confidence >= apple_vision_skip_vlm, the VLM read is skipped (cheap tier); harder
+# pages (handwriting/degraded) still fall through / escalate to the VLM.
+prefer_apple_vision = false
+apple_vision_skip_vlm = 0.92
 
 [vlm]
 # DEFAULT generalist reader. Ollama / MLX / vLLM all speak this OpenAI-compatible API,

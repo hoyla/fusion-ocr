@@ -89,17 +89,23 @@ class OcrDet:
                 for page in targets:
                     if page.index >= pdf.page_count:
                         continue
-                    lang = resolve(page.script or "latin", cfg).paddle_lang
-                    try:
-                        engine, mode = self._engine_for(lang)
-                    except ImportError:
-                        return doc  # no PaddleOCR -> degrade cleanly
+                    route = resolve(page.script or "latin", cfg)
                     pg = pdf[page.index]
                     # derotation matrix maps the upright-render coords back into the
                     # PDF's native space, so boxes land on rotated pages.
                     deroter = pg.derotation_matrix
                     img = self._rasterise(fitz, pg)
-                    for i, (pts_px, text, conf) in enumerate(self._run(engine, mode, img)):
+
+                    if route.engine == "apple_vision":
+                        lines, source = self._run_vision(img, page.script), "vision"
+                    else:
+                        try:
+                            engine, mode = self._engine_for(route.paddle_lang)
+                        except ImportError:
+                            return doc  # no PaddleOCR -> degrade cleanly
+                        lines, source = self._run(engine, mode, img), "paddle"
+
+                    for i, (pts_px, text, conf) in enumerate(lines):
                         if not text:
                             continue
                         pts = []
@@ -113,7 +119,7 @@ class OcrDet:
                                 box=Box(points=pts),
                                 det_text=text,
                                 det_conf=conf,
-                                source="paddle",
+                                source=source,
                             )
                         )
         except ImportError:
@@ -140,6 +146,18 @@ class OcrDet:
         if mode == "predict":
             return self._parse_v3(engine.predict(img))
         return self._parse_v2(engine.ocr(img, cls=True))
+
+    def _run_vision(self, img, script) -> list[tuple[list, str, float]]:
+        """Apple Vision engine — same (quad_px, text, conf) shape. Degrades to empty
+        (so fusion falls back) if Vision/ocrmac/PIL are unavailable."""
+        try:
+            from PIL import Image
+
+            from ..engines import apple_vision
+            langs = apple_vision.VISION_LANGS.get(script or "latin", ["en-US"])
+            return apple_vision.recognize(Image.fromarray(img), langs)
+        except Exception:
+            return []
 
     @staticmethod
     def _parse_v2(result) -> list[tuple[list, str, float]]:

@@ -14,7 +14,7 @@ from typing import Literal
 
 Point = tuple[float, float]
 
-SegmentSource = Literal["textlayer", "paddle", "vlm", "fused"]
+SegmentSource = Literal["textlayer", "paddle", "vision", "vlm", "fused"]
 RegionKind = Literal["paragraph", "table", "figure", "header", "footer", "other"]
 
 

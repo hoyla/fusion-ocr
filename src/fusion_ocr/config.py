@@ -40,6 +40,12 @@ class Config:
     airgap: bool = True
     granularity: str = "line"
     overlay_font: str = ""  # path to a Unicode TTF for the overlay; "" -> auto-detect
+    # Apple Vision (macOS, on-device) as the fast deterministic engine for supported
+    # scripts. When its mean confidence on a page is >= apple_vision_skip_vlm, the VLM
+    # read is skipped (Vision's text IS the reading — the cheap tier); harder pages
+    # still escalate to the VLM.
+    prefer_apple_vision: bool = False
+    apple_vision_skip_vlm: float = 0.92
     vlm: VLMConfig = None  # type: ignore[assignment]
     # per-script routing overrides: {script: {paddle_lang, vlm_model, vlm_base_url}}
     routes: dict = None  # type: ignore[assignment]
@@ -65,6 +71,8 @@ def load(path: str | Path = "config.toml") -> Config:
         airgap=run.get("airgap", True),
         granularity=run.get("granularity", "line"),
         overlay_font=run.get("overlay_font", ""),
+        prefer_apple_vision=run.get("prefer_apple_vision", False),
+        apple_vision_skip_vlm=run.get("apple_vision_skip_vlm", 0.92),
         vlm=VLMConfig(
             base_url=vlm.get("base_url", "http://localhost:8080/v1"),
             model=vlm.get("model", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),
