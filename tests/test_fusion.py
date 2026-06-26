@@ -81,6 +81,20 @@ def test_region_aware_clustering_keeps_columns_apart():
     assert ids == [["L1"], ["L2"], ["R1"], ["R2"]]
 
 
+def test_unmatched_cluster_keeps_real_engine_source():
+    # two Vision lines, but the VLM reading only covers one -> the unmatched cluster
+    # must keep source 'vision', not be mislabelled 'paddle' (the provenance bug).
+    page = Page(index=0, needs_ocr=True)
+    page.segments = [_seg("v1", 50, 100, 200, 116, "alpha", source="vision"),
+                     _seg("v2", 50, 140, 200, 156, "beta", source="vision")]
+    page.vlm_reading = "alpha"
+    doc = Document(source_path="x", sha256="x", pages=[page])
+    Fusion().run(doc, config_mod.Config())
+    sources = {s.source for s in doc.pages[0].segments}
+    assert "fused" in sources and "vision" in sources
+    assert "paddle" not in sources
+
+
 def test_overlap_dedup_prefers_clean_textlayer():
     page = Page(index=0)
     tl = _seg("tl", 50, 100, 300, 120, "exact text", source="textlayer")

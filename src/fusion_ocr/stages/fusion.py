@@ -204,6 +204,9 @@ class Fusion:
         fused: list[Segment] = []
         for ci, cl in enumerate(clusters):
             line = vlm_lines[mapping[ci]] if ci in mapping else ""
+            # a cluster with no aligned VLM line keeps its real engine's source
+            # (vision/paddle) — NOT a hard-coded "paddle" (that mis-credited the engine)
+            base_source = cl[0].source if cl else "paddle"
             fused.append(Segment(
                 id=f"p{page.index}-f{ci}",
                 page=page.index,
@@ -212,7 +215,7 @@ class Fusion:
                 det_conf=max((s.det_conf or 0.0) for s in cl),
                 vlm_text=line or None,
                 best_text=line,
-                source="fused" if line else "paddle",
+                source="fused" if line else base_source,
                 read_by=page.read_model if line else "",
             ))
         page.segments = others + fused

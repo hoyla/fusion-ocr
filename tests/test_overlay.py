@@ -38,6 +38,22 @@ def test_overlay_latin_searchable(tmp_path):
     assert fitz.open(out)[0].search_for("Invoice")
 
 
+def test_overlay_skips_textlayer_to_avoid_duplication(tmp_path):
+    pytest.importorskip("fitz", reason="needs PyMuPDF")
+    import fitz
+    doc = _doc_with_segment(tmp_path, "OCR body text")        # the one seg is "fused"
+    # add a text-layer segment (already in the source PDF) — must NOT be re-overlaid
+    tl = Segment(id="tl", page=0,
+                 box=Box(points=[(50, 50), (400, 50), (400, 70), (50, 70)]),
+                 best_text="HEADER FROM TEXT LAYER", source="textlayer")
+    doc.pages[0].segments.insert(0, tl)
+    out = tmp_path / "ov.pdf"
+    assert build_overlay(doc, out)
+    text = fitz.open(out)[0].get_text("text")
+    assert "OCR body text" in text                # OCR-derived text is overlaid
+    assert "HEADER FROM TEXT LAYER" not in text    # text-layer text is NOT duplicated
+
+
 def test_overlay_thai_searchable(tmp_path):
     pytest.importorskip("fitz", reason="needs PyMuPDF")
     import fitz
