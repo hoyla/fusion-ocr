@@ -8,6 +8,10 @@ out_dir     = "out"
 airgap      = true
 # Overlay box granularity: "line" (MVP) or "word" (subdivision follow-on).
 granularity = "line"
+# Font for the invisible overlay text. A Unicode TTF is required for non-Latin
+# scripts (Thai/CJK/Arabic) to be searchable — base-14 fonts break search there.
+# "" = auto-detect (macOS Arial Unicode / common Noto paths); else give a TTF path.
+overlay_font = ""
 
 [vlm]
 # The one seam that moves the heavy work elsewhere later. Ollama / MLX / vLLM all

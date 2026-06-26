@@ -27,6 +27,7 @@ class Config:
     out_dir: Path = Path("out")
     airgap: bool = True
     granularity: str = "line"
+    overlay_font: str = ""  # path to a Unicode TTF for the overlay; "" -> auto-detect
     vlm: VLMConfig = None  # type: ignore[assignment]
     # per-script routing overrides: {script: {paddle_lang, vlm_model, vlm_base_url}}
     routes: dict = None  # type: ignore[assignment]
@@ -51,6 +52,7 @@ def load(path: str | Path = "config.toml") -> Config:
         out_dir=Path(run.get("out_dir", "out")),
         airgap=run.get("airgap", True),
         granularity=run.get("granularity", "line"),
+        overlay_font=run.get("overlay_font", ""),
         vlm=VLMConfig(
             base_url=vlm.get("base_url", "http://localhost:11434/v1"),
             model=vlm.get("model", "qwen2.5vl:7b"),

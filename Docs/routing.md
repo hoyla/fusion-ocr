@@ -125,11 +125,13 @@ Thai markdown, Typhoon lines aligned onto PaddleOCR-th boxes (Thai↔Thai fuzzy 
 If Typhoon isn't installed the call fails → the **refusal guard** falls back to
 PaddleOCR-th `det_text`, so the route degrades gracefully (no hard dependency).
 
-**Known limit — Thai overlay search:** the Thai text *is* in the invisible layer, but
-`search_for` is hit-or-miss (some terms match, some don't) because of Thai character
-composition (combining vowels/tone marks, NFC/NFD normalisation). The **reading**
-(markdown) is the solid Thai deliverable; reliable Thai *search/highlight* needs the
-Unicode-overlay-font + text-normalisation follow-up.
+**Thai overlay search — FIXED (2026-06-26).** Root cause was the overlay *font*, not
+normalisation: the base-14 "helv" font can't encode Thai, so `search_for` missed (0/4
+terms) even though `get_text` returned the Thai. Using a broad Unicode font (Arial
+Unicode on macOS, or a configured TTF via `run.overlay_font`) makes all terms
+searchable (verified end-to-end: หนังสือบริคณห์สนธิ / บริษัท / กระทรวงพาณิชย์ all
+hit). Text is NFC-normalised too. Falls back to helv (Latin only) if no Unicode font
+is present.
 
 ## Status / roadmap
 
@@ -141,7 +143,7 @@ Unicode-overlay-font + text-normalisation follow-up.
 - [x] Generalist-refusal guard → fall back to routed det_text
 - [x] Per-model prompt selection (`select_prompt`) — Typhoon's own instruction
 - [x] Thai route: PaddleOCR-Thai geometry + **Typhoon reader** — done & verified
-- [ ] Thai overlay search reliability (Unicode font + NFC/NFD normalisation)
+- [x] Thai overlay search reliability — Unicode overlay font + NFC (verified)
 - [ ] Confidence-gated escalation
 - [ ] Image-only script detection (no text layer → currently defaults to Latin)
 - [ ] Layout-class routing (with PP-StructureV3)

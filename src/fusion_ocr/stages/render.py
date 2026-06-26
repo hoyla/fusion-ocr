@@ -63,7 +63,8 @@ class Render:
         doc.artifacts["markdown"] = str(md_path)
 
         overlay_path = work / "overlay.pdf"
-        if build_overlay(doc, overlay_path, granularity=cfg.granularity):
+        if build_overlay(doc, overlay_path, granularity=cfg.granularity,
+                         font_path=cfg.overlay_font or None):
             doc.artifacts["overlay_pdf"] = str(overlay_path)
 
         return doc
