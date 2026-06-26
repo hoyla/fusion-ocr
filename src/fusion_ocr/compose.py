@@ -9,6 +9,8 @@ each rule is testable in isolation.
 
 from __future__ import annotations
 
+import re
+
 from .models import Box, Region, Segment
 
 _MR_COVERAGE = 0.5  # a region is machine-readable if clean text covers >= this fraction
@@ -73,20 +75,55 @@ def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+_CONTAINED = 0.7   # a segment >= this fraction inside the cell is "in" it
+_TOUCHES = 0.1     # a segment overlapping the cell by >= this fraction touches it
+
+
+def cell_confidence(cell: Box, segments: list[Segment]) -> str:
+    """How trustworthy is this cell's content?
+
+    - ``clean``: every segment touching the cell is (mostly) inside it — its text is
+      reliably this cell's.
+    - ``spanning``: some segment straddles the cell boundary (a label+value line across
+      two cells) — the text may belong partly to a neighbour; do NOT trust it as the
+      exact cell value.
+    - ``empty``: nothing touches it.
+
+    This is the calibration: we fill what we can and FLAG where we can't justify
+    precision, rather than manufacturing a confident-but-wrong cell value.
+    """
+    touching = [s for s in segments if s.best_text
+                and _intersection_area(cell, s.box) >= _TOUCHES * max(_area(s.box), 1.0)]
+    if not touching:
+        return "empty"
+    for s in touching:
+        if _intersection_area(cell, s.box) / max(_area(s.box), 1.0) < _CONTAINED:
+            return "spanning"
+    return "clean"
+
+
+_EMPTY_CELL = re.compile(r"<td([^>]*)></td>")
+
+
 def populate_table_html(table_html: str, cells: list[Box],
                         segments: list[Segment]) -> str:
-    """Insert each cell's text before its `</td>` in the structure HTML. The Nth cell
-    box corresponds to the Nth `<td>` (TableStructureRecognition's contract), so we
-    walk the `</td>` boundaries in order."""
+    """Fill each empty `<td>` with its cell's text AND a `data-confidence` attribute
+    (clean / spanning / empty). The Nth empty cell corresponds to the Nth cell box
+    (TableStructureRecognition's contract). Surfacing confidence lets a human or a
+    machine gate on it instead of trusting every cell equally."""
     texts = [cell_text(c, segments) for c in cells]
-    parts = table_html.split("</td>")
-    out: list[str] = []
-    for i, part in enumerate(parts[:-1]):
-        out.append(part)
-        out.append(_escape(texts[i]) if i < len(texts) else "")
-        out.append("</td>")
-    out.append(parts[-1])
-    return "".join(out)
+    confs = [cell_confidence(c, segments) for c in cells]
+    counter = {"i": 0}
+
+    def _fill(m):
+        i = counter["i"]
+        counter["i"] += 1
+        if i >= len(cells):
+            return m.group(0)  # more <td>s than cell boxes -> leave extra empty
+        return (f'<td{m.group(1)} data-confidence="{confs[i]}">'
+                f'{_escape(texts[i])}</td>')
+
+    return _EMPTY_CELL.sub(_fill, table_html)
 
 
 def reading_key(seg: Segment, regions: list[Region]):

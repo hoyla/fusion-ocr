@@ -15,6 +15,7 @@ source segments are absent.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict
 from pathlib import Path
 
@@ -41,7 +42,8 @@ class Render:
                      {"kind": r.kind, "reading_order": r.reading_order,
                       "source": r.source, "bbox": list(r.box.bbox),
                       **({"table_html": r.table_html,
-                          "cells": [list(c.bbox) for c in r.cells]}
+                          "cells": [list(c.bbox) for c in r.cells],
+                          "cell_confidence": _conf_counts(r.table_html)}
                          if r.kind == "table" else {})}
                      for r in p.regions
                  ]}
@@ -75,6 +77,14 @@ class Render:
 def _extract_table(table_html: str) -> str:
     i, j = table_html.find("<table"), table_html.rfind("</table>")
     return table_html[i:j + 8] if i >= 0 and j >= 0 else table_html
+
+
+def _conf_counts(table_html: str) -> dict:
+    """Tally cell confidence so a consumer can gate on it (e.g. trust only `clean`)."""
+    counts: dict[str, int] = {}
+    for level in re.findall(r'data-confidence="(\w+)"', table_html):
+        counts[level] = counts.get(level, 0) + 1
+    return counts
 
 
 def _page_markdown(page: Page) -> str:

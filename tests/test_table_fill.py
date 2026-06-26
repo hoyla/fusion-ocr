@@ -6,7 +6,7 @@ No deps: pure helpers + the TableFill stage + the render markdown helper.
 from __future__ import annotations
 
 from fusion_ocr import config as config_mod
-from fusion_ocr.compose import cell_text, populate_table_html
+from fusion_ocr.compose import cell_confidence, cell_text, populate_table_html
 from fusion_ocr.models import Box, Document, Page, Region, Segment
 from fusion_ocr.stages.render import _page_markdown
 from fusion_ocr.stages.table_fill import TableFill
@@ -46,8 +46,9 @@ def test_populate_table_html_fills_cells_in_order_and_escapes():
     cells = [_box(0, 0, 50, 20), _box(50, 0, 100, 20)]
     segs = [_seg("a", 5, 5, 45, 15, best="A & B"), _seg("b", 55, 5, 95, 15, best="C")]
     out = populate_table_html(html, cells, segs)
-    assert "<td>A &amp; B</td>" in out      # escaped
-    assert "<td>C</td>" in out
+    assert ">A &amp; B</td>" in out         # escaped
+    assert ">C</td>" in out
+    assert 'data-confidence="clean"' in out  # confidence surfaced
     assert out.index("A &amp; B") < out.index("C")   # order preserved
 
 
@@ -55,7 +56,30 @@ def test_populate_tolerates_cell_count_mismatch():
     html = "<table><tr><td></td><td></td><td></td></tr></table>"
     cells = [_box(0, 0, 10, 10)]            # fewer cells than <td>s
     out = populate_table_html(html, cells, [_seg("a", 1, 1, 9, 9, best="X")])
-    assert out.count("</td>") == 3 and "<td>X</td>" in out   # didn't crash, filled what it could
+    assert out.count("</td>") == 3 and ">X</td>" in out   # filled what it could
+
+
+# ---- calibration: cell confidence ----------------------------------------
+
+def test_cell_confidence_clean_spanning_empty():
+    cell = _box(0, 0, 100, 40)
+    inside = _seg("in", 5, 5, 95, 35, best="contained")        # ~mostly inside
+    straddle = _seg("sp", 50, 5, 250, 35, best="label value")  # extends well beyond
+    assert cell_confidence(cell, [inside]) == "clean"
+    assert cell_confidence(cell, [straddle]) == "spanning"
+    assert cell_confidence(cell, []) == "empty"
+    # a neighbouring cell the straddling segment crosses is ALSO flagged spanning
+    neighbour = _box(100, 0, 200, 40)
+    assert cell_confidence(neighbour, [straddle]) == "spanning"
+
+
+def test_populate_flags_spanning_cells():
+    # two cells, one segment spanning both -> both cells flagged spanning
+    html = "<table><tr><td></td><td></td></tr></table>"
+    cells = [_box(0, 0, 50, 20), _box(50, 0, 100, 20)]
+    spanning = _seg("s", 10, 5, 90, 15, best="label value")    # crosses the divide
+    out = populate_table_html(html, cells, [spanning])
+    assert out.count('data-confidence="spanning"') == 2
 
 
 # ---- the stage ------------------------------------------------------------
@@ -81,7 +105,8 @@ def test_table_fill_stage_populates_grid():
     TableFill().run(doc, config_mod.Config())
     html = doc.pages[0].regions[0].table_html
     for cell in ("r1c1", "r1c2", "r2c1", "r2c2"):
-        assert f"<td>{cell}</td>" in html
+        assert f">{cell}</td>" in html
+    assert 'data-confidence="clean"' in html   # cleanly-contained cells flagged clean
 
 
 def test_render_emits_table_and_suppresses_its_loose_lines():

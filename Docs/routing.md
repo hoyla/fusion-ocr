@@ -215,10 +215,13 @@ is present.
 - [x] Layout detection (PP-DocLayout) → regions + region-aware line clustering
 - [x] Table-cell extraction (TableStructureRecognition) → HTML grid + cell boxes
 - [x] Per-cell table content — fill the grid from segment text (`table_fill`); render as
-      a real table; runs on scanned AND born-digital tables. NOTE: assignment is coarse
-      (line segments span cells → cells over-collect) — the cleaner content path is the
-      VLM's table markdown; word-level cell assignment is the precision follow-up.
+      a real table; runs on scanned AND born-digital tables.
+- [x] CALIBRATED cells — each `<td data-confidence="clean|spanning|empty">`: clean =
+      cleanly box-contained (trustworthy), spanning = a segment straddles the cell
+      boundary (flagged, not asserted), per-table tallies in the index. We FLAG coarse
+      attribution rather than manufacture false precision; the VLM table markdown stays
+      the cleaner content path. (Rejected: naive word-splitting — see Docs note.)
 - [x] Confidence-gated escalation (low PaddleOCR conf / refusal → stronger model)
 - [x] Image-only script detection (one-word VLM probe for no-text-layer pages)
-- [ ] Word-level cell assignment (one value per cell) + table-class routing
+- [ ] Table-class routing (route table regions to a table-aware reader)
 - [ ] True multi-column reading order (PP-StructureV3 reading-order model)
