@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from fusion_ocr import config as config_mod
-from fusion_ocr.models import Box, Document, Page, Segment
-from fusion_ocr.stages.fusion import Fusion, _cluster_lines, _nw_align
+from fusion_ocr.models import Box, Document, Page, Region, Segment
+from fusion_ocr.stages.fusion import (
+    Fusion, _cluster_lines, _cluster_within_regions, _nw_align,
+)
 
 
 def _seg(id, x0, y0, x1, y1, det="", source="paddle"):
@@ -54,6 +56,29 @@ def test_line_fusion_no_duplication():
     x0, _, x1, _ = fused[0].box.bbox
     assert x0 == 50 and x1 == 300
     assert all(s.source == "fused" for s in fused)
+
+
+def _region(kind, x0, y0, x1, y1, order):
+    r = Region(box=Box(points=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]), kind=kind)
+    r.reading_order = order
+    return r
+
+
+def test_region_aware_clustering_keeps_columns_apart():
+    # Two columns of text at the SAME y-bands: global clustering would merge them;
+    # region-aware clustering must keep them separate and ordered left col then right.
+    left = [_seg("L1", 50, 100, 150, 116, "left one"),
+            _seg("L2", 50, 130, 150, 146, "left two")]
+    right = [_seg("R1", 300, 100, 400, 116, "right one"),
+             _seg("R2", 300, 130, 400, 146, "right two")]
+    regions = [_region("paragraph", 40, 90, 160, 160, order=0),     # left column
+               _region("paragraph", 290, 90, 410, 160, order=1)]    # right column
+
+    clusters = _cluster_within_regions(left + right, regions)
+    # 4 distinct line-clusters (no cross-column merge), left column first
+    assert len(clusters) == 4
+    ids = [[s.id for s in c] for c in clusters]
+    assert ids == [["L1"], ["L2"], ["R1"], ["R2"]]
 
 
 def test_overlap_dedup_prefers_clean_textlayer():

@@ -35,7 +35,12 @@ class Render:
             "languages": doc.languages,
             "pages": [
                 {"index": p.index, "script": p.script, "needs_ocr": p.needs_ocr,
-                 "read_model": p.read_model, "rotation": p.rotation}
+                 "read_model": p.read_model, "rotation": p.rotation,
+                 "regions": [
+                     {"kind": r.kind, "reading_order": r.reading_order,
+                      "bbox": list(r.box.bbox)}
+                     for r in p.regions
+                 ]}
                 for p in doc.pages
             ],
             "segments": [

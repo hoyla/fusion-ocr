@@ -54,6 +54,36 @@ def _sim(a: str, b: str) -> float:
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
 
+def _assign_region(seg: Segment, regions) -> int:
+    """Index of the region whose box contains the segment's centre, else -1."""
+    x0, y0, x1, y1 = seg.box.bbox
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    for i, r in enumerate(regions):
+        rx0, ry0, rx1, ry1 = r.box.bbox
+        if rx0 <= cx <= rx1 and ry0 <= cy <= ry1:
+            return i
+    return -1
+
+
+def _cluster_within_regions(segs: list[Segment], regions) -> list[list[Segment]]:
+    """Cluster OCR boxes into lines WITHIN each region (so side-by-side columns don't
+    merge), emitting clusters in region reading order. Boxes outside every region are
+    clustered together at the end."""
+    order = sorted(range(len(regions)), key=lambda i: regions[i].reading_order)
+    buckets: dict[int, list[Segment]] = {i: [] for i in range(len(regions))}
+    outside: list[Segment] = []
+    for s in segs:
+        ri = _assign_region(s, regions)
+        (buckets[ri] if ri >= 0 else outside).append(s)
+    clusters: list[list[Segment]] = []
+    for i in order:
+        if buckets[i]:
+            clusters.extend(_cluster_lines(buckets[i]))
+    if outside:
+        clusters.extend(_cluster_lines(outside))
+    return clusters
+
+
 def _cluster_lines(segs: list[Segment]) -> list[list[Segment]]:
     """Group boxes into visual lines by vertical-centre proximity; sort lines
     top-to-bottom and boxes left-to-right within each."""
@@ -146,7 +176,9 @@ class Fusion:
         if not paddle:
             return
         vlm_lines = [ln.strip() for ln in page.vlm_reading.splitlines() if ln.strip()]
-        clusters = _cluster_lines(paddle)
+        # region-aware where layout gave us regions; else global y-band clustering
+        clusters = (_cluster_within_regions(paddle, page.regions)
+                    if page.regions else _cluster_lines(paddle))
         cluster_text = [" ".join(s.det_text or "" for s in cl) for cl in clusters]
         mapping = _nw_align(cluster_text, vlm_lines) if vlm_lines else {}
 

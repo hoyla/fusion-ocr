@@ -144,6 +144,8 @@ is present.
 - [x] Per-model prompt selection (`select_prompt`) — Typhoon's own instruction
 - [x] Thai route: PaddleOCR-Thai geometry + **Typhoon reader** — done & verified
 - [x] Thai overlay search reliability — Unicode overlay font + NFC (verified)
+- [x] Layout detection (PP-DocLayout) → regions + region-aware line clustering
+- [ ] Table-cell extraction (TableStructureRecognition) + true multi-column reading order
 - [ ] Confidence-gated escalation
 - [ ] Image-only script detection (no text layer → currently defaults to Latin)
-- [ ] Layout-class routing (with PP-StructureV3)
+- [ ] Layout-class routing (route table regions to a table-aware reader)

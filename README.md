@@ -103,7 +103,7 @@ one's available.
 2. **VLM read + fusion** — read via the swappable client; cluster boxes + sequence-align VLM lines onto them; ink-gate. ✅ *done — proven on the handwritten note (6 → 3,185 searchable chars).*
 3. **Tool router** — script detection → per-region `{PaddleOCR recogniser + VLM reader}`; provenance; generalist-refusal fallback. ✅ *done — Thai form solved via PaddleOCR-th.*
 4. **Typhoon (Thai reader)** — GGUF+mmproj exist; blocked on local serving (Ollama vision-GGUF import 400s). Route wired; needs `llama-server`/vLLM or an Ollama fix.
-5. **PP-StructureV3 layout** — regions, tables, reading order (the columns/tables nightmare).
+5. **Layout (PP-DocLayout)** — region detection (paragraph/table/figure/header/footer) + region-aware clustering so columns don't merge. ✅ *done — table-cell extraction + true multi-column reading order are follow-ups.*
 6. **Overlay** — word-level subdivision (precise highlights); Unicode font (Thai/CJK/diacritics *overlay* searchable — markdown already is).
 7. **Image-only script detection** — pages with no text layer currently default to Latin.
 8. **Eval** — the "Giant rejects" pile; side-by-side old vs new.
