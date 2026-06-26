@@ -1,0 +1,99 @@
+"""Table-cell content fill — assign segment text to cells, populate the grid, render.
+
+No deps: pure helpers + the TableFill stage + the render markdown helper.
+"""
+
+from __future__ import annotations
+
+from fusion_ocr import config as config_mod
+from fusion_ocr.compose import cell_text, populate_table_html
+from fusion_ocr.models import Box, Document, Page, Region, Segment
+from fusion_ocr.stages.render import _page_markdown
+from fusion_ocr.stages.table_fill import TableFill
+
+
+def _box(x0, y0, x1, y1):
+    return Box(points=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+
+
+def _seg(id, x0, y0, x1, y1, best="", source="fused"):
+    s = Segment(id=id, page=0, box=_box(x0, y0, x1, y1), source=source)
+    s.best_text = best
+    return s
+
+
+# ---- cell content assignment ---------------------------------------------
+
+def test_cell_text_picks_only_inside_segments():
+    cell = _box(0, 0, 50, 20)
+    inside = _seg("a", 5, 5, 45, 15, best="hello")
+    outside = _seg("b", 60, 5, 95, 15, best="world")
+    assert cell_text(cell, [inside, outside]) == "hello"
+
+
+def test_cell_text_joins_in_reading_order():
+    cell = _box(0, 0, 100, 60)
+    # two lines in the same cell, given out of order
+    lower = _seg("lo", 5, 40, 95, 55, best="second")
+    upper = _seg("up", 5, 5, 95, 20, best="first")
+    assert cell_text(cell, [lower, upper]) == "first second"
+
+
+# ---- grid population ------------------------------------------------------
+
+def test_populate_table_html_fills_cells_in_order_and_escapes():
+    html = "<table><tbody><tr><td></td><td></td></tr></tbody></table>"
+    cells = [_box(0, 0, 50, 20), _box(50, 0, 100, 20)]
+    segs = [_seg("a", 5, 5, 45, 15, best="A & B"), _seg("b", 55, 5, 95, 15, best="C")]
+    out = populate_table_html(html, cells, segs)
+    assert "<td>A &amp; B</td>" in out      # escaped
+    assert "<td>C</td>" in out
+    assert out.index("A &amp; B") < out.index("C")   # order preserved
+
+
+def test_populate_tolerates_cell_count_mismatch():
+    html = "<table><tr><td></td><td></td><td></td></tr></table>"
+    cells = [_box(0, 0, 10, 10)]            # fewer cells than <td>s
+    out = populate_table_html(html, cells, [_seg("a", 1, 1, 9, 9, best="X")])
+    assert out.count("</td>") == 3 and "<td>X</td>" in out   # didn't crash, filled what it could
+
+
+# ---- the stage ------------------------------------------------------------
+
+def _table_doc():
+    page = Page(index=0, width=200, height=100)
+    region = Region(box=_box(0, 0, 100, 40), kind="table")
+    region.reading_order = 0
+    region.table_html = "<html><body><table><tbody><tr><td></td><td></td></tr>" \
+                        "<tr><td></td><td></td></tr></tbody></table></body></html>"
+    region.cells = [_box(0, 0, 50, 20), _box(50, 0, 100, 20),
+                    _box(0, 20, 50, 40), _box(50, 20, 100, 40)]
+    page.regions = [region]
+    page.segments = [
+        _seg("c0", 5, 5, 45, 15, best="r1c1"), _seg("c1", 55, 5, 95, 15, best="r1c2"),
+        _seg("c2", 5, 25, 45, 35, best="r2c1"), _seg("c3", 55, 25, 95, 35, best="r2c2"),
+    ]
+    return Document(source_path="x", sha256="x", pages=[page])
+
+
+def test_table_fill_stage_populates_grid():
+    doc = _table_doc()
+    TableFill().run(doc, config_mod.Config())
+    html = doc.pages[0].regions[0].table_html
+    for cell in ("r1c1", "r1c2", "r2c1", "r2c2"):
+        assert f"<td>{cell}</td>" in html
+
+
+def test_render_emits_table_and_suppresses_its_loose_lines():
+    doc = _table_doc()
+    TableFill().run(doc, config_mod.Config())
+    # add a non-table caption line outside the table region
+    doc.pages[0].regions.append(_reg_caption := Region(box=_box(0, 60, 100, 80)))
+    doc.pages[0].regions[-1].reading_order = 1
+    doc.pages[0].segments.append(_seg("cap", 5, 65, 95, 75, best="Table caption"))
+
+    md = _page_markdown(doc.pages[0])
+    assert "<table>" in md and "r1c1" in md          # table rendered with content
+    assert "Table caption" in md                      # non-table text kept
+    # the table's cell segments are NOT also dumped as loose lines
+    assert md.count("r1c1") == 1

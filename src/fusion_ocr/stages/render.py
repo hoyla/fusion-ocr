@@ -18,8 +18,9 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+from ..compose import _contains_centre, reading_key
 from ..config import Config
-from ..models import Document
+from ..models import Document, Page
 from ..overlay.pymupdf_overlay import build_overlay
 
 
@@ -56,22 +57,9 @@ class Render:
         index_path.write_text(json.dumps(index, indent=2, ensure_ascii=False))
         doc.artifacts["segment_index"] = str(index_path)
 
-        # Markdown reading view. Segments are already in reading order (fusion sorts
-        # them). For MIXED pages (machine-readable text + OCR), join the combined
-        # segments so the verbatim text layer is retained alongside the OCR; for a
-        # pure-VLM page (no text layer) prefer the VLM's clean continuous reading.
-        parts: list[str] = []
-        for p in doc.pages:
-            seg_text = [s.best_text for s in p.segments
-                        if s.best_text and not s.superseded]
-            has_textlayer = any(s.source == "textlayer" and not s.superseded
-                                for s in p.segments)
-            if has_textlayer and seg_text:
-                parts.append("\n".join(seg_text))
-            elif p.vlm_reading.strip():
-                parts.append(p.vlm_reading.strip())
-            elif seg_text:
-                parts.append("\n".join(seg_text))
+        # Markdown reading view (segments already in reading order). Table regions are
+        # emitted as their filled HTML table at their position; everything else as text.
+        parts = [t for t in (_page_markdown(p) for p in doc.pages) if t]
         md_path = work / "document.md"
         md_path.write_text("\n\n".join(parts) if parts else "_(no text extracted yet)_\n")
         doc.artifacts["markdown"] = str(md_path)
@@ -82,3 +70,45 @@ class Render:
             doc.artifacts["overlay_pdf"] = str(overlay_path)
 
         return doc
+
+
+def _extract_table(table_html: str) -> str:
+    i, j = table_html.find("<table"), table_html.rfind("</table>")
+    return table_html[i:j + 8] if i >= 0 and j >= 0 else table_html
+
+
+def _page_markdown(page: Page) -> str:
+    """Reading view for one page. If it has filled tables, emit each as its HTML table
+    at its region position, suppress that table's loose line segments, and interleave
+    the rest in reading order; otherwise fall back to the flat text view."""
+    tables = [r for r in page.regions if r.kind == "table" and "<table" in r.table_html]
+    # Only embed the deterministic grid when there's no VLM reading (OCR-only /
+    # born-digital). When the VLM read the page its markdown already carries the table
+    # (cleaner than cell-stuffing coarse segments), so prefer that.
+    if not tables or page.vlm_reading.strip():
+        return _page_markdown_flat(page)
+
+    blocks: list[tuple] = []
+    table_seg_ids: set[int] = set()
+    for r in tables:
+        for s in page.segments:
+            if not s.superseded and _contains_centre(r.box, s.box):
+                table_seg_ids.add(id(s))
+        blocks.append(((r.reading_order, 0, 0.0), _extract_table(r.table_html)))
+    for s in page.segments:
+        if s.superseded or not s.best_text or id(s) in table_seg_ids:
+            continue
+        blocks.append((reading_key(s, page.regions), s.best_text))
+    blocks.sort(key=lambda b: b[0])
+    return "\n\n".join(text for _, text in blocks)
+
+
+def _page_markdown_flat(page: Page) -> str:
+    seg_text = [s.best_text for s in page.segments if s.best_text and not s.superseded]
+    has_textlayer = any(s.source == "textlayer" and not s.superseded
+                        for s in page.segments)
+    if has_textlayer and seg_text:          # mixed: verbatim text layer + OCR
+        return "\n".join(seg_text)
+    if page.vlm_reading.strip():             # pure-VLM page: clean continuous reading
+        return page.vlm_reading.strip()
+    return "\n".join(seg_text)

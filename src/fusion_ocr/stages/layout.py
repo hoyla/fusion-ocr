@@ -54,7 +54,8 @@ class Layout:
             import numpy as np
         except ImportError:
             return doc
-        targets = [p for p in doc.pages if p.needs_ocr]
+        # all content pages, incl. born-digital — so born-digital tables get a grid too
+        targets = [p for p in doc.pages if p.needs_ocr or p.has_text_layer]
         if not targets:
             return doc
         try:

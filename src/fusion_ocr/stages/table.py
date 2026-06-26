@@ -33,9 +33,10 @@ class Table:
         return self._model
 
     def run(self, doc: Document, cfg: Config) -> Document:
+        # any content page with a detected table (incl. born-digital); rotated pages
+        # skipped for now (crop-on-rotated is a refinement).
         targets = [p for p in doc.pages
-                   if p.needs_ocr and not p.rotation
-                   and any(r.kind == "table" for r in p.regions)]
+                   if not p.rotation and any(r.kind == "table" for r in p.regions)]
         if not targets:
             return doc
         try:

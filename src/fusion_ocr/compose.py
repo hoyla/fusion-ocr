@@ -60,6 +60,35 @@ def in_machine_readable_region(seg: Segment, regions: list[Region]) -> bool:
                for r in regions)
 
 
+def cell_text(cell: Box, segments: list[Segment]) -> str:
+    """Join the best_text of segments whose centre falls in the cell, in reading order
+    (top-to-bottom, then left-to-right). This is how the table's cell *content* is
+    recovered from the page's OCR/text-layer segments."""
+    inside = [s for s in segments if s.best_text and _contains_centre(cell, s.box)]
+    inside.sort(key=lambda s: (round(s.box.bbox[1] / 5), s.box.bbox[0]))
+    return " ".join(s.best_text for s in inside).strip()
+
+
+def _escape(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def populate_table_html(table_html: str, cells: list[Box],
+                        segments: list[Segment]) -> str:
+    """Insert each cell's text before its `</td>` in the structure HTML. The Nth cell
+    box corresponds to the Nth `<td>` (TableStructureRecognition's contract), so we
+    walk the `</td>` boundaries in order."""
+    texts = [cell_text(c, segments) for c in cells]
+    parts = table_html.split("</td>")
+    out: list[str] = []
+    for i, part in enumerate(parts[:-1]):
+        out.append(part)
+        out.append(_escape(texts[i]) if i < len(texts) else "")
+        out.append("</td>")
+    out.append(parts[-1])
+    return "".join(out)
+
+
 def reading_key(seg: Segment, regions: list[Region]):
     """Sort key for reading order: the containing region's order, then top-to-bottom,
     then left-to-right. Segments outside every region sort after, by position."""
