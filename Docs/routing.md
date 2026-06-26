@@ -171,7 +171,9 @@ is present.
 - [x] Thai route: PaddleOCR-Thai geometry + **Typhoon reader** — done & verified
 - [x] Thai overlay search reliability — Unicode overlay font + NFC (verified)
 - [x] Layout detection (PP-DocLayout) → regions + region-aware line clustering
-- [ ] Table-cell extraction (TableStructureRecognition) + true multi-column reading order
-- [ ] Confidence-gated escalation
-- [ ] Image-only script detection (no text layer → currently defaults to Latin)
+- [x] Table-cell extraction (TableStructureRecognition) → HTML grid + cell boxes
+- [x] Confidence-gated escalation (low PaddleOCR conf / refusal → stronger model)
+- [x] Image-only script detection (one-word VLM probe for no-text-layer pages)
+- [ ] True multi-column reading order (PP-StructureV3 reading-order model)
 - [ ] Layout-class routing (route table regions to a table-aware reader)
+- [ ] Per-cell table content (intersect cell boxes with OCR/VLM text)
