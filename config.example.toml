@@ -14,21 +14,24 @@ granularity = "line"
 overlay_font = ""
 
 [vlm]
-# The one seam that moves the heavy work elsewhere later. Ollama / MLX / vLLM all
-# speak this same OpenAI-compatible API, so swapping local -> transcription GPU is
-# only an endpoint change.
-base_url = "http://localhost:11434/v1"   # Ollama today
-model    = "qwen2.5vl:7b"                 # Ollama's name has no hyphen
+# DEFAULT generalist reader. Ollama / MLX / vLLM all speak this OpenAI-compatible API,
+# so the runtime is a free variable. On Apple Silicon, MLX is ~10-40x faster than
+# Ollama for Qwen3-VL — serve it with:  python -m mlx_vlm.server --port 8080
+base_url = "http://localhost:8080/v1"                      # mlx-vlm server
+model    = "mlx-community/Qwen3-VL-8B-Instruct-4bit"
 api_key  = "not-needed-locally"
-# Later, in-VPC CUDA:
-# base_url = "http://transcription-gpu.internal:8000/v1"   # vLLM
+# Alternatives:
+# base_url = "http://localhost:11434/v1"; model = "qwen2.5vl:7b"        # Ollama
+# base_url = "http://transcription-gpu.internal:8000/v1"               # in-VPC vLLM (CUDA)
 
-# Per-script tool routing (see Docs/routing.md). PaddleOCR is always the geometry
-# engine; paddle_lang picks its recogniser. vlm_model/base_url override the reader for
-# that script (a specialist). Omit a section to take the default (generalist VLM).
-# [routing.thai]
-# paddle_lang  = "th"                       # Thai recogniser -> Thai det_text -> better alignment
-# vlm_model    = "hf.co/.../typhoon-ocr"    # Thai specialist reader, once served
+# Per-script tool routing — THE TOOLKIT (see Docs/routing.md). PaddleOCR is always the
+# geometry engine; paddle_lang picks its recogniser. vlm_model/vlm_base_url override
+# the READER for that script (a specialist on its own endpoint). Omit a section to take
+# the default generalist above. These mirror the built-in DEFAULT_ROUTES; set them here
+# to point at YOUR machine's endpoints.
+# [routing.thai]                                  # Thai -> Typhoon specialist on Ollama
+# paddle_lang  = "th"                              # Thai recogniser -> Thai det_text -> better alignment
+# vlm_model    = "scb10x/typhoon-ocr1.5-3b:latest"
 # vlm_base_url = "http://localhost:11434/v1"
 #
 # [routing.cyrillic]

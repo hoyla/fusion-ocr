@@ -16,8 +16,14 @@ from pathlib import Path
 
 @dataclass
 class VLMConfig:
-    base_url: str = "http://localhost:11434/v1"
-    model: str = "qwen2.5vl:7b"  # Ollama's name has no hyphen
+    # Default generalist reader = Qwen3-VL-8B-Instruct served by mlx-vlm (MLX is far
+    # faster than Ollama/llama.cpp on Apple Silicon). Start the server with:
+    #   python -m mlx_vlm.server --port 8080
+    # Specialists (e.g. Typhoon for Thai) are routed to their own endpoints — see
+    # routing.py / [routing.<script>]. If the server is down the call fails and fusion
+    # falls back to PaddleOCR det_text.
+    base_url: str = "http://localhost:8080/v1"
+    model: str = "mlx-community/Qwen3-VL-8B-Instruct-4bit"
     api_key: str = "not-needed-locally"
 
 
@@ -54,8 +60,8 @@ def load(path: str | Path = "config.toml") -> Config:
         granularity=run.get("granularity", "line"),
         overlay_font=run.get("overlay_font", ""),
         vlm=VLMConfig(
-            base_url=vlm.get("base_url", "http://localhost:11434/v1"),
-            model=vlm.get("model", "qwen2.5vl:7b"),
+            base_url=vlm.get("base_url", "http://localhost:8080/v1"),
+            model=vlm.get("model", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),
             api_key=vlm.get("api_key", "not-needed-locally"),
         ),
         routes=raw.get("routing", {}),

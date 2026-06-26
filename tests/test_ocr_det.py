@@ -18,7 +18,16 @@ pytest.importorskip("paddleocr", reason="needs the `ocr` extra")
 import fitz  # noqa: E402
 
 from fusion_ocr import config as config_mod  # noqa: E402
-from fusion_ocr.pipeline import DEFAULT_PIPELINE, process  # noqa: E402
+from fusion_ocr.pipeline import process  # noqa: E402
+from fusion_ocr.stages.fusion import Fusion  # noqa: E402
+from fusion_ocr.stages.language import Language  # noqa: E402
+from fusion_ocr.stages.ocr_det import OcrDet  # noqa: E402
+from fusion_ocr.stages.render import Render  # noqa: E402
+from fusion_ocr.stages.triage import Triage  # noqa: E402
+
+# OCR-only pipeline: no Layout (heavy model download) and no VlmRead (live VLM call),
+# so this test is hermetic and fast regardless of what servers are running.
+_OCR_PIPELINE = [Triage(), Language(), OcrDet(), Fusion(), Render()]
 
 
 # Known insertion geometry — the box must bracket this, which is what catches the
@@ -53,7 +62,7 @@ def test_paddleocr_produces_boxed_text(tmp_path):
         assert d[0].get_text("text").strip() == ""
 
     cfg = config_mod.Config(out_dir=tmp_path / "out", airgap=False)
-    doc = process(pdf_path, cfg, pipeline=DEFAULT_PIPELINE)
+    doc = process(pdf_path, cfg, pipeline=_OCR_PIPELINE)
 
     segs = [s for p in doc.pages for s in p.segments]
     assert segs, "expected PaddleOCR to detect at least one line"
