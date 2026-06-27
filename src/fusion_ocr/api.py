@@ -17,6 +17,17 @@ from .jobs import JobStore
 from .pipeline import process, sha256_of
 
 
+def _safe_name(filename: str | None) -> str:
+    """Strip any directory components from a client-supplied upload name. Prevents a
+    `filename="../../x"` from escaping in_dir (path traversal)."""
+    name = Path(filename or "").name
+    return name if name and name not in (".", "..") else "upload.pdf"
+
+
+def _is_sha256(s: str) -> bool:
+    return len(s) == 64 and all(c in "0123456789abcdef" for c in s.lower())
+
+
 def create_app():  # lazy so the api extra isn't needed unless you serve HTTP
     from fastapi import FastAPI, UploadFile
 
@@ -31,7 +42,7 @@ def create_app():  # lazy so the api extra isn't needed unless you serve HTTP
 
     @app.post("/jobs")
     async def submit(pdf: UploadFile):
-        dest = in_dir / (pdf.filename or "upload.pdf")
+        dest = in_dir / _safe_name(pdf.filename)
         dest.write_bytes(await pdf.read())
         digest = sha256_of(dest)
         newly = jobs.upsert_queued(digest, str(dest))
@@ -47,6 +58,8 @@ def create_app():  # lazy so the api extra isn't needed unless you serve HTTP
 
     @app.get("/jobs/{sha256}")
     def status(sha256: str):
+        if not _is_sha256(sha256):           # the path component feeds a filesystem path
+            return {"sha256": sha256, "status": "unknown"}
         row = jobs.get(sha256)
         if not row:
             return {"sha256": sha256, "status": "unknown"}
@@ -58,4 +71,10 @@ def create_app():  # lazy so the api extra isn't needed unless you serve HTTP
     return app
 
 
-app = create_app()
+def __getattr__(name: str):
+    # Lazy: importing this module stays side-effect-free (no config load, airgap socket
+    # patch, or sqlite creation) until a server actually asks for `app`. `uvicorn
+    # fusion_ocr.api:app` triggers this via getattr; the helpers stay importable for tests.
+    if name == "app":
+        return create_app()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
