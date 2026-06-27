@@ -43,3 +43,12 @@ def select_prompt(model: str) -> str:
     if "typhoon" in (model or "").lower():
         return TYPHOON_OCR
     return TRANSCRIBE
+
+
+def select_table_prompt(model: str) -> str:
+    """Prompt for a focused read of a cropped table region. Typhoon already renders
+    tables as clean HTML under its own instruction, so keep using it; generalists take
+    the dedicated TABLE prompt (markdown grid)."""
+    if "typhoon" in (model or "").lower():
+        return TYPHOON_OCR
+    return TABLE

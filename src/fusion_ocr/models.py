@@ -60,7 +60,10 @@ class Segment:
 class Region:
     """A layout region from PP-DocLayout. Reading order is what lets the VLM's linear
     transcription be aligned back onto boxes. For `table` regions, `table_html` holds
-    the deterministic cell structure and `cells` the per-cell boxes (page coords)."""
+    the deterministic cell structure and `cells` the per-cell boxes (page coords);
+    `table_vlm` holds the focused VLM reading of the table (clean content), with
+    `table_read_by` naming the model. Both representations are kept — geometry from the
+    deterministic grid, content from the VLM — never one overwriting the other."""
 
     box: Box
     kind: RegionKind = "paragraph"
@@ -68,6 +71,8 @@ class Region:
     source: str = ""  # "textlayer" (covered by clean machine-readable text) | "ocr"
     table_html: str = ""
     cells: list[Box] = field(default_factory=list)
+    table_vlm: str = ""      # focused VLM read of a table region (markdown/HTML)
+    table_read_by: str = ""  # provenance: model that produced table_vlm
 
 
 @dataclass
@@ -112,7 +117,9 @@ class Document:
                        source=r.get("source", ""),
                        table_html=r.get("table_html", ""),
                        cells=[Box(points=[tuple(pt) for pt in cb["points"]])
-                              for cb in r.get("cells", [])])
+                              for cb in r.get("cells", [])],
+                       table_vlm=r.get("table_vlm", ""),
+                       table_read_by=r.get("table_read_by", ""))
                 for r in p.get("regions", [])
             ]
             segments = [

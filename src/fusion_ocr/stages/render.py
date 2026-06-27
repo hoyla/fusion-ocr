@@ -91,11 +91,15 @@ def _page_markdown(page: Page) -> str:
     """Reading view for one page. If it has filled tables, emit each as its HTML table
     at its region position, suppress that table's loose line segments, and interleave
     the rest in reading order; otherwise fall back to the flat text view."""
-    tables = [r for r in page.regions if r.kind == "table" and "<table" in r.table_html]
-    # Only embed the deterministic grid when there's no VLM reading (OCR-only /
-    # born-digital). When the VLM read the page its markdown already carries the table
-    # (cleaner than cell-stuffing coarse segments), so prefer that.
-    if not tables or page.vlm_reading.strip():
+    tables = [r for r in page.regions
+              if r.kind == "table" and (r.table_vlm or "<table" in r.table_html)]
+    has_vlm_table = any(r.table_vlm for r in tables)
+    # Take the block path (each table placed at its region position, loose lines
+    # interleaved) when a focused table read exists, OR when there's no page reading to
+    # fall back on. If the page got a full reading and we have no focused table read,
+    # that reading already carries the table — keep it whole (better flow than
+    # reassembling from segments).
+    if not tables or (page.vlm_reading.strip() and not has_vlm_table):
         return _page_markdown_flat(page)
 
     blocks: list[tuple] = []
@@ -104,7 +108,8 @@ def _page_markdown(page: Page) -> str:
         for s in page.segments:
             if not s.superseded and _contains_centre(r.box, s.box):
                 table_seg_ids.add(id(s))
-        blocks.append(((r.reading_order, 0, 0.0), _extract_table(r.table_html)))
+        # focused VLM table read (clean content) preferred; else the deterministic grid
+        blocks.append(((r.reading_order, 0, 0.0), r.table_vlm or _extract_table(r.table_html)))
     for s in page.segments:
         if s.superseded or not s.best_text or id(s) in table_seg_ids:
             continue

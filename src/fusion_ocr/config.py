@@ -46,6 +46,11 @@ class Config:
     # still escalate to the VLM.
     prefer_apple_vision: bool = False
     apple_vision_skip_vlm: float = 0.92
+    # Route detected table regions on scanned pages to a focused VLM table read (crop +
+    # table prompt), regardless of the page-level read — tables are structure that line-
+    # OCR/Apple Vision handle poorly. Geometry still comes from the deterministic grid;
+    # this supplies clean cell content. Born-digital tables are left to the text layer.
+    table_vlm_read: bool = True
     vlm: VLMConfig = None  # type: ignore[assignment]
     # per-script routing overrides: {script: {paddle_lang, vlm_model, vlm_base_url}}
     routes: dict = None  # type: ignore[assignment]
@@ -73,6 +78,7 @@ def load(path: str | Path = "config.toml") -> Config:
         overlay_font=run.get("overlay_font", ""),
         prefer_apple_vision=run.get("prefer_apple_vision", False),
         apple_vision_skip_vlm=run.get("apple_vision_skip_vlm", 0.92),
+        table_vlm_read=run.get("table_vlm_read", True),
         vlm=VLMConfig(
             base_url=vlm.get("base_url", "http://localhost:8080/v1"),
             model=vlm.get("model", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),

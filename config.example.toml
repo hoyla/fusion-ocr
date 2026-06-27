@@ -19,6 +19,13 @@ overlay_font = ""
 # pages (handwriting/degraded) still fall through / escalate to the VLM.
 prefer_apple_vision = false
 apple_vision_skip_vlm = 0.92
+# Route detected table regions on SCANNED pages to a focused VLM table read (crop the
+# region + table prompt), regardless of the page-level read — tables are structure that
+# line-OCR / Apple Vision read poorly. Geometry still comes from the deterministic
+# PaddleOCR grid (cell boxes + per-cell confidence); this only supplies clean cell
+# content. Born-digital tables are left to the text layer (the exact text is already in
+# the file — re-reading a raster with a generative model would only add error).
+table_vlm_read = true
 
 [vlm]
 # DEFAULT generalist reader. Ollama / MLX / vLLM all speak this OpenAI-compatible API,

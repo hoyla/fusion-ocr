@@ -20,6 +20,7 @@ from .stages.ocr_det import OcrDet
 from .stages.render import Render
 from .stages.table import Table
 from .stages.table_fill import TableFill
+from .stages.table_read import TableRead
 from .stages.triage import Triage
 from .stages.vlm_read import VlmRead
 
@@ -38,6 +39,7 @@ DEFAULT_PIPELINE: list[Stage] = [
     Language(),
     OcrDet(),
     VlmRead(),
+    TableRead(),
     Fusion(),
     TableFill(),
     Render(),
