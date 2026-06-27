@@ -168,20 +168,28 @@ def _xy_cut(boxes: list[Box], idx: list[int], order: list[int]) -> None:
     if len(idx) <= 1:
         order.extend(idx)
         return
-    groups = _split_on_gap(boxes, idx, axis=1)        # horizontal band (rows) first
-    if groups is None:
-        groups = _split_on_gap(boxes, idx, axis=0)    # else vertical band (columns)
-    if groups is None:                                 # no clean cut -> y then x
+    hg, hk, hspans = _best_gap(boxes, idx, axis=1)    # widest horizontal band (rows)
+    vg, vk, vspans = _best_gap(boxes, idx, axis=0)    # widest vertical band (columns)
+    # Cut on the MORE significant separator — the larger box-free band — not always
+    # horizontal-first. A horizontal band inside one column (e.g. the whitespace above a
+    # figure) is narrower than the column gutter, so columns get separated before such a
+    # band can slice a neighbouring column in half. Horizontal wins ties, so a header/
+    # footer still peels off first and an evenly-spaced grid stays row-major.
+    if hk is not None and (vk is None or hg >= vg):
+        spans, k = hspans, hk
+    elif vk is not None:
+        spans, k = vspans, vk
+    else:                                              # no clean cut -> y then x
         order.extend(sorted(idx, key=lambda i: (boxes[i].bbox[1], boxes[i].bbox[0])))
         return
-    for g in groups:
+    for g in ([t[2] for t in spans[:k]], [t[2] for t in spans[k:]]):
         _xy_cut(boxes, g, order)
 
 
-def _split_on_gap(boxes: list[Box], idx: list[int], axis: int):
-    """Split idx into [before, after] across the widest empty band along `axis`
-    (axis=1 -> a horizontal gap in y; axis=0 -> a vertical gap in x), or None if no box-
-    free band spans the group."""
+def _best_gap(boxes: list[Box], idx: list[int], axis: int):
+    """Widest box-free band along `axis` (axis=1 -> a horizontal gap in y; axis=0 -> a
+    vertical gap in x). Returns (gap_size, split_index, sorted_spans); split_index is
+    None when no box-free band spans the group."""
     lo, hi = axis, axis + 2  # bbox is (x0,y0,x1,y1)
     spans = sorted(((boxes[i].bbox[lo], boxes[i].bbox[hi], i) for i in idx),
                    key=lambda t: t[0])
@@ -192,9 +200,7 @@ def _split_on_gap(boxes: list[Box], idx: list[int], axis: int):
         if gap > best_gap:
             best_gap, best_k = gap, k
         max_hi = max(max_hi, spans[k][1])
-    if best_k is None or best_gap <= 0:
-        return None
-    return [[t[2] for t in spans[:best_k]], [t[2] for t in spans[best_k:]]]
+    return best_gap, best_k, spans
 
 
 def _to_display(x: float, y: float, base_w: float, base_h: float, rot: int):

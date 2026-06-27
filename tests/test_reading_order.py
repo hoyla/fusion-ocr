@@ -36,11 +36,29 @@ def test_header_columns_footer():
     assert xy_cut_order(boxes) == [0, 1, 2, 3]
 
 
-def test_table_is_row_major():
-    # aligned 2x2 grid -> rows top-to-bottom, cells left-to-right
-    boxes = [_box(0, 0, 40, 20), _box(60, 0, 100, 20),     # row 1
-             _box(0, 30, 40, 50), _box(60, 30, 100, 50)]   # row 2
+def test_wide_gutter_reads_column_major():
+    # a 2x2 grid of REGIONS whose column gutter (20) is wider than the row gap (10) is
+    # two-column text -> read down each column. (Real tables are a single region; their
+    # cells come from the table grid, not XY-cut, so this isn't table-cell ordering.)
+    boxes = [_box(0, 0, 40, 20), _box(60, 0, 100, 20),     # "row 1"
+             _box(0, 30, 40, 50), _box(60, 30, 100, 50)]   # "row 2"
+    assert xy_cut_order(boxes) == [0, 2, 1, 3]             # down col, then across
+
+
+def test_row_dominant_grid_is_row_major():
+    # when the row gap (30) dominates the column gap (10), horizontal wins -> row-major
+    boxes = [_box(0, 0, 45, 20), _box(55, 0, 100, 20),     # row 1
+             _box(0, 50, 45, 70), _box(55, 50, 100, 70)]   # row 2 (big row gap)
     assert xy_cut_order(boxes) == [0, 1, 2, 3]
+
+
+def test_figure_band_does_not_split_neighbouring_column():
+    # the 4imprint p24 bug: a tall middle column + a right column with a figure-sized gap
+    # at the same height. The right column's whitespace band must NOT slice the middle
+    # column in half (column gutter 20 beats the 10px intra-column band).
+    boxes = [_box(0, 0, 40, 30), _box(0, 40, 40, 90),       # middle col: top, bottom
+             _box(60, 0, 100, 20), _box(60, 70, 100, 90)]   # right col: top, then figure gap
+    assert xy_cut_order(boxes) == [0, 1, 2, 3]              # each column read fully
 
 
 def test_footer_not_read_first():

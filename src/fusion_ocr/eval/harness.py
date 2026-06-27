@@ -23,6 +23,10 @@ _MIN_REF_CHARS = 50   # too little text to score (cover/figure page) -> skip
 
 
 def page_text_layer(pdf_path, page_index: int) -> str:
+    # NB: this is PDF content-stream order, which is NOT guaranteed to be visual reading
+    # order on multi-column pages (and sort=True is worse — a naive y,x sort interleaves
+    # columns). So CER/WER carry reading-order noise on multi-column; the reliable
+    # recognition signal is word recall/precision. See __init__ for the caveat.
     import fitz
     with fitz.open(pdf_path) as d:
         return d[page_index].get_text("text")
