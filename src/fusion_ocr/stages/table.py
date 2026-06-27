@@ -1,22 +1,47 @@
-"""Stage — Table-cell extraction (PaddleOCR TableStructureRecognition).
+"""Stage — table structure + content for each `table` region, two engines by page class.
 
-For each `table` region the layout stage found, recover the DETERMINISTIC table
-structure: an HTML grid (`region.table_html`) and per-cell boxes (`region.cells`, in
-page coordinates). This sits alongside the VLM's table reading — the VLM gives cell
-*content* as markdown/HTML; this gives auditable cell *geometry* (for per-cell
-highlighting and a structured export), independent of the model.
+  - BORN-DIGITAL (text layer authoritative) -> PyMuPDF ``find_tables``: exact cell text
+    AND geometry straight from the layer — no rasterise, no OCR, no model. Decisively
+    better than vision on dense financial tables (every digit exact; the vision+line-fill
+    path comes out mostly "spanning" and smushes adjacent columns). Gated to layout
+    `table` regions, which also filters find_tables' own false positives (a coloured
+    diagram is not a layout table).
+  - SCANNED -> PaddleOCR TableStructureRecognition (vision): the grid from the rendered
+    image; cells filled later by TableFill, content read by the VLM (table_read).
 
-Crops each table region from the rendered page and maps the returned cell polygons
-back to page space. Rotated pages are skipped for now (crop-on-rotated is a refinement;
-the table reading still comes through the VLM). Clean passthrough without PaddleOCR.
+Geometry stays deterministic either way; `region.table_engine` records which produced
+it (provenance: exact vs OCR'd). Rotated pages skipped for now. Clean passthrough if
+neither engine is importable. A find_tables miss falls through to the vision path, so
+nothing regresses.
 """
 
 from __future__ import annotations
 
+from ..compose import grid_to_table_html
 from ..config import Config
-from ..models import Box, Document
+from ..models import Box, Document, Page
 
 _DPI = 150
+_MIN_OVERLAP = 0.30   # a find_tables table must cover this fraction of the layout region
+
+
+def _overlap_frac(a, b) -> float:
+    """Intersection area / smaller box area — how much two bboxes coincide."""
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    if inter <= 0:
+        return 0.0
+    area_a = max((a[2] - a[0]) * (a[3] - a[1]), 1.0)
+    area_b = max((b[2] - b[0]) * (b[3] - b[1]), 1.0)
+    return inter / min(area_a, area_b)
+
+
+def _box(bb) -> Box | None:
+    if not bb:
+        return None
+    x0, y0, x1, y1 = bb
+    return Box(points=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
 
 
 class Table:
@@ -33,48 +58,96 @@ class Table:
         return self._model
 
     def run(self, doc: Document, cfg: Config) -> Document:
-        # any content page with a detected table (incl. born-digital); rotated pages
-        # skipped for now (crop-on-rotated is a refinement).
         targets = [p for p in doc.pages
                    if not p.rotation and any(r.kind == "table" for r in p.regions)]
         if not targets:
             return doc
         try:
             import fitz  # PyMuPDF
-            import numpy as np
-        except ImportError:
-            return doc
-        try:
-            model = self._table_model()
         except ImportError:
             return doc
 
-        scale = self.dpi / 72.0
         with fitz.open(doc.source_path) as pdf:
             for page in targets:
                 if page.index >= pdf.page_count:
                     continue
-                pix = pdf[page.index].get_pixmap(dpi=self.dpi)
-                arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
-                    pix.height, pix.width, pix.n)
-                if pix.n == 4:
-                    arr = arr[:, :, :3]
-                elif pix.n == 1:
-                    arr = np.repeat(arr, 3, axis=2)
-                img = np.ascontiguousarray(arr)
-                H, W = img.shape[:2]
-
-                for region in page.regions:
-                    if region.kind != "table":
-                        continue
-                    x0, y0, x1, y1 = region.box.bbox
-                    px0, py0 = max(0, int(x0 * scale)), max(0, int(y0 * scale))
-                    px1, py1 = min(W, int(x1 * scale)), min(H, int(y1 * scale))
-                    if px1 - px0 < 8 or py1 - py0 < 8:
-                        continue
-                    crop = np.ascontiguousarray(img[py0:py1, px0:px1])
-                    self._extract(model, crop, region, px0, py0, scale)
+                if not page.needs_ocr:                       # born-digital -> exact
+                    self._extract_find_tables(pdf[page.index], page)
+                remaining = [r for r in page.regions
+                             if r.kind == "table" and not r.table_html]
+                if remaining:                                # scanned / find_tables miss
+                    self._extract_vision(pdf[page.index], page, remaining)
         return doc
+
+    # ---- born-digital: PyMuPDF find_tables (exact, text-layer) ----------------
+
+    def _extract_find_tables(self, pg, page: Page) -> None:
+        try:
+            found = pg.find_tables().tables
+        except Exception:
+            return
+        if not found:
+            return
+        for region in page.regions:
+            if region.kind != "table" or region.table_html:
+                continue
+            best, best_f = None, _MIN_OVERLAP
+            for t in found:
+                f = _overlap_frac(region.box.bbox, t.bbox)
+                if f > best_f:
+                    best, best_f = t, f
+            if best is None:
+                continue
+            html, cells = grid_to_table_html(self._grid(best))
+            if "<td" not in html:
+                continue
+            region.table_html = html
+            region.cells = cells
+            region.table_engine = "find_tables"
+
+    @staticmethod
+    def _grid(t) -> list[list[tuple[str, Box | None]]]:
+        """Row-major (text, box) grid from a find_tables Table. An external header (one
+        detected above the body) is prepended as a text row so it isn't lost."""
+        rows: list[list[tuple[str, Box | None]]] = []
+        hdr = getattr(t, "header", None)
+        if hdr is not None and getattr(hdr, "external", False):
+            names = getattr(hdr, "names", None) or []
+            if any((n or "").strip() for n in names):
+                rows.append([((n or ""), None) for n in names])
+        box_rows = t.rows
+        for ri, trow in enumerate(t.extract()):
+            brow = box_rows[ri].cells if ri < len(box_rows) else []
+            rows.append([((txt or ""), _box(brow[ci] if ci < len(brow) else None))
+                         for ci, txt in enumerate(trow)])
+        return rows
+
+    # ---- scanned: PaddleOCR TableStructureRecognition (vision) ----------------
+
+    def _extract_vision(self, pg, page: Page, regions) -> None:
+        try:
+            import numpy as np
+            model = self._table_model()
+        except ImportError:
+            return
+        scale = self.dpi / 72.0
+        pix = pg.get_pixmap(dpi=self.dpi)
+        arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+            pix.height, pix.width, pix.n)
+        if pix.n == 4:
+            arr = arr[:, :, :3]
+        elif pix.n == 1:
+            arr = np.repeat(arr, 3, axis=2)
+        img = np.ascontiguousarray(arr)
+        H, W = img.shape[:2]
+        for region in regions:
+            x0, y0, x1, y1 = region.box.bbox
+            px0, py0 = max(0, int(x0 * scale)), max(0, int(y0 * scale))
+            px1, py1 = min(W, int(x1 * scale)), min(H, int(y1 * scale))
+            if px1 - px0 < 8 or py1 - py0 < 8:
+                continue
+            crop = np.ascontiguousarray(img[py0:py1, px0:px1])
+            self._extract(model, crop, region, px0, py0, scale)
 
     def _extract(self, model, crop, region, ox, oy, scale) -> None:
         res = model.predict(crop)
@@ -83,6 +156,7 @@ class Table:
         r = res[0]
         struct = r.get("structure", []) if hasattr(r, "get") else []
         region.table_html = "".join(struct)
+        region.table_engine = "table_structure"
         cells = []
         for cb in (r.get("bbox", []) if hasattr(r, "get") else []):
             xs, ys = cb[0::2], cb[1::2]

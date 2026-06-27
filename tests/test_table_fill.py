@@ -122,3 +122,37 @@ def test_render_emits_table_and_suppresses_its_loose_lines():
     assert "Table caption" in md                      # non-table text kept
     # the table's cell segments are NOT also dumped as loose lines
     assert md.count("r1c1") == 1
+
+
+# ---- find_tables (born-digital) grid build + TableFill skip ----------------
+
+def test_grid_to_table_html_clean_empty_and_escape():
+    from fusion_ocr.compose import grid_to_table_html
+    b = _box(0, 0, 10, 10)
+    rows = [[("Name", b), ("", b)],            # a blank cell -> empty
+            [("A & B", b), ("3", None)]]       # & escaped; None box -> no cell box
+    html, cells = grid_to_table_html(rows)
+    assert html.count("<tr>") == 2
+    assert '<td data-confidence="clean">Name</td>' in html
+    assert '<td data-confidence="empty"></td>' in html
+    assert ">A &amp; B</td>" in html                  # escaped
+    assert len(cells) == 3                            # only the 3 non-None boxes
+
+
+def test_table_fill_skips_find_tables_grid():
+    # a find_tables grid is already exact -> TableFill must not refill it (no doubled
+    # attribute, no segment text injected into its empty cells)
+    page = Page(index=0, width=200, height=100)
+    region = Region(box=_box(0, 0, 100, 40), kind="table", table_engine="find_tables")
+    region.table_html = ('<table><tbody><tr><td data-confidence="clean">A</td>'
+                         '<td data-confidence="empty"></td></tr></tbody></table>')
+    region.cells = [_box(0, 0, 50, 40), _box(50, 0, 100, 40)]
+    page.regions = [region]
+    page.segments = [_seg("s", 55, 5, 95, 35, best="X")]   # sits in the empty cell
+    doc = Document(source_path="x", sha256="x", pages=[page])
+
+    TableFill().run(doc, config_mod.Config())
+    html = doc.pages[0].regions[0].table_html
+    assert 'data-confidence="empty" data-confidence=' not in html   # not refilled
+    assert ">X</td>" not in html                                    # segment not injected
+    assert html.count("data-confidence") == 2                        # exactly one per cell

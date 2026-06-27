@@ -126,6 +126,29 @@ def populate_table_html(table_html: str, cells: list[Box],
     return _EMPTY_CELL.sub(_fill, table_html)
 
 
+def grid_to_table_html(rows: list[list[tuple[str, Box | None]]]):
+    """Build a filled HTML grid + aligned cell boxes from a row-major list of
+    ``(text, box|None)`` cells — the find_tables (born-digital) path.
+
+    The text is exact from the PDF's own layer and already correctly celled, so every
+    non-empty cell is ``data-confidence="clean"`` (``empty`` where blank): there is no
+    segment-to-cell straddling to flag, unlike the vision+fill path. Returns
+    ``(table_html, [Box])`` ready for render, _conf_counts, and the segment index."""
+    out = ["<table><tbody>"]
+    cells: list[Box] = []
+    for row in rows:
+        out.append("<tr>")
+        for text, box in row:
+            t = (text or "").strip()
+            out.append(f'<td data-confidence="{"clean" if t else "empty"}">'
+                       f'{_escape(t)}</td>')
+            if box is not None:
+                cells.append(box)
+        out.append("</tr>")
+    out.append("</tbody></table>")
+    return "".join(out), cells
+
+
 def xy_cut_order(boxes: list[Box]) -> list[int]:
     """Reading order via recursive XY-cut — the same approach PP-StructureV3 uses,
     applied to our layout regions. Returns indices into ``boxes`` in reading order.

@@ -5,8 +5,10 @@ boxes. This stage — run AFTER fusion, when segments carry their final `best_te
 populates the grid by assigning each cell the text of the segments inside it. The
 result is a structured table whose every cell backs to a box and a source.
 
-Works for scanned tables (OCR/VLM text) and born-digital tables (text-layer text)
-alike, since both arrive as segments with best_text.
+Only the vision grid (PaddleOCR) arrives with empty cells to fill. A find_tables grid
+(`table_engine == "find_tables"`) is already exact — cell text came straight from the
+layer — so it is skipped here (re-filling would double its attributes and re-introduce
+the coarse line-intersection that find_tables avoids).
 """
 
 from __future__ import annotations
@@ -22,7 +24,8 @@ class TableFill:
     def run(self, doc: Document, cfg: Config) -> Document:
         for page in doc.pages:
             tables = [r for r in page.regions
-                      if r.kind == "table" and r.table_html and r.cells]
+                      if r.kind == "table" and r.table_html and r.cells
+                      and r.table_engine != "find_tables"]   # already exact, don't refill
             if not tables:
                 continue
             segs = [s for s in page.segments if s.best_text and not s.superseded]

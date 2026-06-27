@@ -73,6 +73,9 @@ class Region:
     cells: list[Box] = field(default_factory=list)
     table_vlm: str = ""      # focused VLM read of a table region (markdown/HTML)
     table_read_by: str = ""  # provenance: model that produced table_vlm
+    # provenance: how table_html was produced — "" (none), "find_tables" (PyMuPDF, exact
+    # text-layer extraction for born-digital), or "table_structure" (PaddleOCR vision).
+    table_engine: str = ""
 
 
 @dataclass
@@ -119,7 +122,8 @@ class Document:
                        cells=[Box(points=[tuple(pt) for pt in cb["points"]])
                               for cb in r.get("cells", [])],
                        table_vlm=r.get("table_vlm", ""),
-                       table_read_by=r.get("table_read_by", ""))
+                       table_read_by=r.get("table_read_by", ""),
+                       table_engine=r.get("table_engine", ""))
                 for r in p.get("regions", [])
             ]
             segments = [

@@ -42,6 +42,8 @@ class Render:
                      {"kind": r.kind, "reading_order": r.reading_order,
                       "source": r.source, "bbox": list(r.box.bbox),
                       **({"table_html": r.table_html,
+                          "table_engine": r.table_engine,      # find_tables | table_structure
+                          "table_read_by": r.table_read_by,    # VLM model, if read
                           "cells": [list(c.bbox) for c in r.cells],
                           "cell_confidence": _conf_counts(r.table_html)}
                          if r.kind == "table" else {})}
