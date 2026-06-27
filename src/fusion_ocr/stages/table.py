@@ -6,8 +6,10 @@
     path comes out mostly "spanning" and smushes adjacent columns). Gated to layout
     `table` regions, which also filters find_tables' own false positives (a coloured
     diagram is not a layout table).
-  - SCANNED -> PaddleOCR TableStructureRecognition (vision): the grid from the rendered
-    image; cells filled later by TableFill, content read by the VLM (table_read).
+  - SCANNED -> PaddleOCR vision: classify the table wired/wireless (TableClassification)
+    and recover its grid with the matching SLANeXt (the current structure model
+    PP-StructureV3 uses); cells filled later by TableFill, content read by the VLM
+    (table_read). All public PaddleOCR predictors — no reimplemented layout logic.
 
 Geometry stays deterministic either way; `region.table_engine` records which produced
 it (provenance: exact vs OCR'd). Rotated pages skipped for now. Clean passthrough if
@@ -49,13 +51,41 @@ class Table:
 
     def __init__(self, dpi: int = _DPI, model=None) -> None:
         self.dpi = dpi
-        self._model = model  # injectable for tests
+        self._model = model        # injected structure model -> used for all crops (tests)
+        self._cls = None           # wired/wireless classifier (lazy)
+        self._structure: dict = {}  # variant -> SLANeXt model (lazy, per variant)
 
-    def _table_model(self):
-        if self._model is None:
+    def _classifier(self):
+        if self._cls is None:
+            from paddleocr import TableClassification
+            self._cls = TableClassification()
+        return self._cls
+
+    def _structure_model(self, variant: str):
+        """SLANeXt for the table type — the current structure model (what PP-StructureV3
+        uses), same structure+bbox output as the old SLANet default. Loaded per variant
+        on first use; an injected model overrides (tests)."""
+        if self._model is not None:
+            return self._model
+        if variant not in self._structure:
             from paddleocr import TableStructureRecognition
-            self._model = TableStructureRecognition()
-        return self._model
+            self._structure[variant] = TableStructureRecognition(
+                model_name=f"SLANeXt_{variant}")
+        return self._structure[variant]
+
+    def _variant_for(self, crop) -> str:
+        """wired (ruled) vs wireless (borderless), via PaddleOCR's public
+        TableClassification, so the right SLANeXt is used. Defaults to wired on any issue."""
+        try:
+            d = self._classifier().predict(crop)[0]
+            names = d.get("label_names", []) if hasattr(d, "get") else []
+            scores = d.get("scores", []) if hasattr(d, "get") else []
+            if len(names) and len(scores):
+                top = names[max(range(len(scores)), key=lambda i: scores[i])]
+                return "wireless" if "wireless" in str(top) else "wired"
+        except Exception:
+            pass
+        return "wired"
 
     def run(self, doc: Document, cfg: Config) -> Document:
         targets = [p for p in doc.pages
@@ -127,9 +157,13 @@ class Table:
     def _extract_vision(self, pg, page: Page, regions) -> None:
         try:
             import numpy as np
-            model = self._table_model()
         except ImportError:
             return
+        if self._model is None:                  # need the real predictors
+            try:
+                from paddleocr import TableClassification, TableStructureRecognition  # noqa: F401
+            except ImportError:
+                return
         scale = self.dpi / 72.0
         pix = pg.get_pixmap(dpi=self.dpi)
         arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
@@ -147,7 +181,8 @@ class Table:
             if px1 - px0 < 8 or py1 - py0 < 8:
                 continue
             crop = np.ascontiguousarray(img[py0:py1, px0:px1])
-            self._extract(model, crop, region, px0, py0, scale)
+            variant = "wired" if self._model is not None else self._variant_for(crop)
+            self._extract(self._structure_model(variant), crop, region, px0, py0, scale)
 
     def _extract(self, model, crop, region, ox, oy, scale) -> None:
         res = model.predict(crop)
