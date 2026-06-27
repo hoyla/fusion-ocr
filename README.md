@@ -108,6 +108,22 @@ route: `paddle_lang=th` reads Thai forms that the generalist VLMs can't, and a
 config `[routing.thai]` section points the *reader* at a served Typhoon endpoint when
 one's available.
 
+## Evaluation
+
+Accuracy is a number, not a claim. A born-digital page carries its own exact text in the
+layer, so the eval renders it to an image (dropping the text layer), forces the OCR path,
+and scores the recovered text against the embedded text — no hand-labelling:
+
+```bash
+python -m fusion_ocr.eval report.pdf --pages 6,9,24 --apple-vision
+```
+
+It reports **word recall / precision** (order-insensitive: recognition completeness and
+the hallucination rate) alongside **CER / WER** (sequence-based, so reading order on
+multi-column pages inflates them — trust CER on single-column text). Caveat: rendered-clean
+pages are a floor on difficulty; genuinely degraded scans / handwriting need a small
+hand-labelled set. See `src/fusion_ocr/eval/`.
+
 ## Roadmap
 
 1. **PaddleOCR geometry** — boxes + text + confidence (`stages/ocr_det.py`). ✅ *done — 2.x & 3.x; per-language recogniser via the router.*
