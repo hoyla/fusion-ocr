@@ -9,8 +9,9 @@ be serialised between stages for cheap resume / re-run.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
-from typing import Literal
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
+from types import UnionType
+from typing import Literal, Union, get_args, get_origin, get_type_hints
 
 Point = tuple[float, float]
 
@@ -110,45 +111,33 @@ class Document:
 
     @classmethod
     def from_json(cls, text: str) -> "Document":
-        raw = json.loads(text)
-        pages = []
-        for p in raw.get("pages", []):
-            regions = [
-                Region(box=Box(points=[tuple(pt) for pt in r["box"]["points"]]),
-                       kind=r.get("kind", "paragraph"),
-                       reading_order=r.get("reading_order", 0),
-                       source=r.get("source", ""),
-                       table_html=r.get("table_html", ""),
-                       cells=[Box(points=[tuple(pt) for pt in cb["points"]])
-                              for cb in r.get("cells", [])],
-                       table_vlm=r.get("table_vlm", ""),
-                       table_read_by=r.get("table_read_by", ""),
-                       table_engine=r.get("table_engine", ""))
-                for r in p.get("regions", [])
-            ]
-            segments = [
-                Segment(
-                    id=s["id"], page=s["page"],
-                    box=Box(points=[tuple(pt) for pt in s["box"]["points"]]),
-                    best_text=s.get("best_text", ""), source=s.get("source", "paddle"),
-                    det_text=s.get("det_text"), det_conf=s.get("det_conf"),
-                    vlm_text=s.get("vlm_text"), read_by=s.get("read_by", ""),
-                    superseded=s.get("superseded", False),
-                    translations=s.get("translations", {}),
-                )
-                for s in p.get("segments", [])
-            ]
-            pages.append(Page(index=p["index"], width=p.get("width", 0.0),
-                              height=p.get("height", 0.0),
-                              has_text_layer=p.get("has_text_layer", False),
-                              needs_ocr=p.get("needs_ocr", True),
-                              rotation=p.get("rotation", 0),
-                              script=p.get("script", ""),
-                              read_model=p.get("read_model", ""),
-                              image_ref=p.get("image_ref"),
-                              vlm_reading=p.get("vlm_reading", ""),
-                              regions=regions, segments=segments))
-        return cls(source_path=raw["source_path"], sha256=raw["sha256"],
-                   languages=raw.get("languages", []), pages=pages,
-                   artifacts=raw.get("artifacts", {}),
-                   stage_completed=raw.get("stage_completed"))
+        return _from_dict(cls, json.loads(text))
+
+
+def _build(typ, value):
+    """Reconstruct a value of annotated type ``typ`` from JSON-decoded ``value``,
+    recursing into dataclasses and list/tuple element types. Plain/unknown types
+    (str, int, dict, Literal, ...) pass through unchanged."""
+    if value is None:
+        return None
+    if is_dataclass(typ):
+        return _from_dict(typ, value)
+    origin = get_origin(typ)
+    if origin in (Union, UnionType):                       # e.g. str | None
+        args = [a for a in get_args(typ) if a is not type(None)]
+        return _build(args[0], value) if len(args) == 1 else value
+    if origin in (list, tuple) and get_args(typ):          # list[Box], list[Point], ...
+        elem = get_args(typ)[0]
+        built = [_build(elem, v) for v in value]
+        return tuple(built) if origin is tuple else built
+    return value
+
+
+def _from_dict(cls, data: dict):
+    """Schema-driven dataclass deserializer. Walks ``cls``'s own fields and their
+    resolved types, so a newly-added field (with a default) round-trips automatically
+    — there's no parallel hand-written mapping to forget to update, which used to drop
+    fields silently on resume. Unknown keys in ``data`` are ignored (forward-compat)."""
+    hints = get_type_hints(cls)
+    return cls(**{f.name: _build(hints[f.name], data[f.name])
+                  for f in fields(cls) if f.name in data})
