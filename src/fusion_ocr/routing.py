@@ -1,9 +1,10 @@
 """Tool routing — pick a (PaddleOCR recogniser, VLM reader) pair per region.
 
 Deterministic and auditable: a region's script is detected by Unicode-range counting,
-then mapped to a Route. PaddleOCR is ALWAYS the geometry engine; only its recogniser
-language varies. The VLM reader varies by specialist (generalist default, e.g. Typhoon
-for Thai). See Docs/routing.md.
+then mapped to a Route. Geometry always comes from a DETERMINISTIC engine — PaddleOCR,
+or Apple Vision when prefer_apple_vision is set (macOS) — never the VLM; only the
+recogniser/engine varies. The VLM reader varies by specialist (generalist default, e.g.
+Typhoon for Thai). See Docs/routing.md.
 
 Config overrides: a [routing.<script>] table in config.toml may set paddle_lang,
 vlm_model, vlm_base_url for any script (e.g. point Thai at a served Typhoon endpoint).

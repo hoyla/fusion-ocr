@@ -39,8 +39,8 @@
 
   <!-- GEOMETRY axis -->
   <rect class="geom b" x="450" y="120" width="330" height="120" rx="10"/>
-  <text class="t" x="615" y="144" text-anchor="middle">Geometry axis — PaddleOCR (ALWAYS)</text>
-  <text class="s" x="615" y="162" text-anchor="middle">detection = boxes (script-agnostic); recogniser varies</text>
+  <text class="t" x="615" y="144" text-anchor="middle">Geometry axis — deterministic, ALWAYS (never the VLM)</text>
+  <text class="s" x="615" y="162" text-anchor="middle">PaddleOCR / Apple Vision; boxes script-agnostic, recogniser varies</text>
   <rect class="stage b" x="468" y="178" width="92" height="44" rx="6"/>
   <text class="s" x="514" y="198" text-anchor="middle" font-weight="600">en / latin</text>
   <text class="s" x="514" y="212" text-anchor="middle">default</text>
@@ -75,7 +75,7 @@
   <path class="lns" d="M540,420 C560,440 580,448 600,456" marker-end="url(#as)"/>
 
   <!-- legend -->
-  <rect x="40" y="500" width="13" height="13" rx="3" class="geom b"/><text class="lg" x="60" y="511">geometry (PaddleOCR, always)</text>
+  <rect x="40" y="500" width="13" height="13" rx="3" class="geom b"/><text class="lg" x="60" y="511">geometry (deterministic, always)</text>
   <rect x="40" y="522" width="13" height="13" rx="3" class="sem b"/><text class="lg" x="60" y="533">reading (VLM, routed)</text>
   <rect x="250" y="522" width="13" height="13" rx="3" class="route b"/><text class="lg" x="270" y="533">router</text>
   <rect x="330" y="522" width="13" height="13" rx="3" class="fuse b"/><text class="lg" x="350" y="533">fusion</text>

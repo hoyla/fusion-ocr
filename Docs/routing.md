@@ -9,11 +9,12 @@ For every region we make **two** independent tool choices — they are orthogona
 
 | Axis | Owner | Always on? | What varies |
 | --- | --- | --- | --- |
-| **Geometry** (boxes) | deterministic — **PaddleOCR** | **yes, always** | which *recogniser language* (Thai / Latin / Cyrillic / CJK …) |
+| **Geometry** (boxes) | a **deterministic** engine — PaddleOCR, or Apple Vision when `prefer_apple_vision` | **yes, always — never the VLM** | which *engine* + *recogniser language* (Thai / Latin / Cyrillic / CJK …) |
 | **Reading** (semantics) | a **VLM** | when OCR is needed | which *reader* — generalist (Qwen) or a specialist (Typhoon for Thai, …) |
 
-Routing to a specialist VLM **never** removes PaddleOCR. Geometry is always
-deterministic; only the *reader* changes. The Thai route is:
+Routing to a specialist VLM **never** moves geometry to the VLM. Geometry is always
+deterministic (PaddleOCR, or Apple Vision on macOS when preferred); only the *reader*
+changes. The Thai route is:
 
 ```
 Thai region → PaddleOCR detection (boxes) + PaddleOCR-Thai recogniser (det_text)

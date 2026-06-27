@@ -99,8 +99,8 @@ Paddle won't attempt its connectivity check.
 ## Tool routing
 
 The pipeline triages each region and routes it on two independent axes — geometry
-(PaddleOCR, always on, recogniser language varies) and reading (VLM, specialist
-varies). See **[Docs/routing.md](Docs/routing.md)**. Thai is the first specialist
+(always a deterministic engine — PaddleOCR, or Apple Vision when preferred — never the
+VLM) and reading (VLM, specialist varies). See **[Docs/routing.md](Docs/routing.md)**. Thai is the first specialist
 route: `paddle_lang=th` reads Thai forms that the generalist VLMs can't, and a
 config `[routing.thai]` section points the *reader* at a served Typhoon endpoint when
 one's available.

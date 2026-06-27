@@ -64,8 +64,9 @@ class Render:
         # Markdown reading view (segments already in reading order). Table regions are
         # emitted as their filled HTML table at their position; everything else as text.
         parts = [t for t in (_page_markdown(p) for p in doc.pages) if t]
+        body = "\n\n".join(parts) if parts else "_(no text extracted yet)_\n"
         md_path = work / "document.md"
-        md_path.write_text("\n\n".join(parts) if parts else "_(no text extracted yet)_\n")
+        md_path.write_text(_provenance_note(doc) + body)
         doc.artifacts["markdown"] = str(md_path)
 
         overlay_path = work / "overlay.pdf"
@@ -87,6 +88,21 @@ def _conf_counts(table_html: str) -> dict:
     for level in re.findall(r'data-confidence="(\w+)"', table_html):
         counts[level] = counts.get(level, 0) + 1
     return counts
+
+
+def _provenance_note(doc: Document) -> str:
+    """Honest header for the reading view. document.md is a READING aid; the overlay and
+    segment index are the gated, provenance-bearing artifacts. The VLM caveat appears
+    only when a vision-language model actually read a page — born-digital / Apple-Vision
+    output is exact text (or ink-gated OCR), not a model transcription."""
+    vlm_used = any(p.read_model and p.read_model != "apple_vision" for p in doc.pages)
+    if not vlm_used:
+        return ""
+    return (
+        "> _Reading view. Pages read by a vision-language model are a transcription and "
+        "may contain model inferences on degraded or handwritten text. The searchable "
+        "`overlay.pdf` and `segment_index.json` are the ink-gated, provenance-bearing "
+        "record — every segment backs to a detected box and its source._\n\n")
 
 
 def _page_markdown(page: Page) -> str:
