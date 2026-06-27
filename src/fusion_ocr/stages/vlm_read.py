@@ -15,7 +15,7 @@ born-digital docs never hit the VLM.
 
 from __future__ import annotations
 
-from ..config import Config
+from ..config import AirgapError, Config
 from ..models import Document
 from ..routing import resolve
 from ..vlm.openai_compat import OpenAICompatVLM
@@ -91,8 +91,10 @@ class VlmRead:
         client = self._client or self._client_for(base_url, model, cfg)
         try:
             return client.read(png, select_prompt(model)) or ""
+        except AirgapError:
+            raise  # misconfigured sensitive tier (remote endpoint): fail loud, not det_text
         except Exception:
-            return ""  # degrade: fusion falls back to det_text
+            return ""  # transient/other: degrade, fusion falls back to det_text
 
 
 _REFUSAL_MARKERS = (

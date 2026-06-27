@@ -21,7 +21,7 @@ refinement, matching the Table stage).
 
 from __future__ import annotations
 
-from ..config import Config
+from ..config import AirgapError, Config
 from ..models import Document
 from ..routing import resolve
 from ..vlm.openai_compat import OpenAICompatVLM
@@ -84,5 +84,7 @@ class TableRead:
         client = self._client or self._client_for(base_url, model, cfg)
         try:
             return (client.read(png, select_table_prompt(model)) or "").strip()
+        except AirgapError:
+            raise  # misconfigured sensitive tier: fail loud, not silent grid fallback
         except Exception:
             return ""  # degrade: render falls back to the deterministic grid

@@ -102,3 +102,23 @@ def test_born_digital_skips_vlm(tmp_path):
     fake = _FakeVLM("should not be called")
     VlmRead(client=fake).run(doc, config_mod.Config())
     assert fake.calls == 0
+
+
+class _AirgapClient:
+    def read(self, image_png, prompt, **opts):
+        from fusion_ocr.config import AirgapError
+        raise AirgapError("airgap: outbound connection refused")
+
+
+def test_airgap_refusal_fails_loud_not_silent_det_text(tmp_path):
+    # a sealed tier pointed at a remote endpoint must surface, not quietly fall back to
+    # det_text (which would hide that the reader was unreachable)
+    from fusion_ocr.config import AirgapError
+    pdf = tmp_path / "scan.pdf"
+    d = fitz.open(); pg = d.new_page()
+    pg.insert_image(pg.rect, pixmap=fitz.open().new_page().get_pixmap(dpi=72))
+    d.save(str(pdf)); d.close()
+    doc = Document(source_path=str(pdf), sha256="x")
+    doc.pages = [Page(index=0, needs_ocr=True, width=612, height=792)]
+    with pytest.raises(AirgapError):
+        VlmRead(client=_AirgapClient()).run(doc, config_mod.Config())

@@ -42,11 +42,14 @@ def test_fusion_picks_best_text():
 
 
 def test_airgap_blocks_non_loopback():
-    config_mod.enforce_airgap()
-    s = socket.socket()
-    with pytest.raises(OSError):
-        s.connect(("203.0.113.1", 80))  # TEST-NET-3, must be refused
-    s.close()
+    try:
+        config_mod.enforce_airgap()
+        s = socket.socket()
+        with pytest.raises(OSError):
+            s.connect(("203.0.113.1", 80))  # TEST-NET-3, must be refused
+        s.close()
+    finally:
+        config_mod._disable_airgap()        # don't leak the patch to the rest of the run
 
 
 @pytest.mark.skipif(

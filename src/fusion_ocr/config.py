@@ -8,6 +8,7 @@ download can't silently leak. The local VLM endpoint (loopback) still works.
 
 from __future__ import annotations
 
+import ipaddress
 import socket
 import tomllib
 from dataclasses import dataclass
@@ -91,16 +92,51 @@ def load(path: str | Path = "config.toml") -> Config:
     )
 
 
-_LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+class AirgapError(OSError):
+    """Raised when the airgap guard refuses an outbound connection or DNS lookup.
+
+    Distinct from a generic network error so callers can fail LOUD on a misconfigured
+    sensitive tier (e.g. a remote VLM endpoint) instead of silently degrading to
+    det_text — which would hide that the reader was unreachable."""
+
+
+def _is_loopback_host(host) -> bool:
+    """True for localhost and the whole loopback range (127/8, ::1, ::ffff:127.0.0.1) —
+    not just three literal strings."""
+    h = str(host)
+    if h == "localhost":
+        return True
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        return False
+    if getattr(ip, "ipv4_mapped", None) is not None:   # ::ffff:127.0.0.1
+        ip = ip.ipv4_mapped
+    return ip.is_loopback
+
+
+def _is_ip_literal(host) -> bool:
+    try:
+        ipaddress.ip_address(str(host))
+        return True
+    except ValueError:
+        return False
+
+
+_AIRGAP_ORIG: dict = {}
 
 
 def enforce_airgap() -> None:
-    """Refuse any non-loopback socket connection. Idempotent.
+    """Seal the process: refuse any non-loopback connection AND DNS lookup. Idempotent.
 
-    Also tells PaddleOCR not to phone home: its model-source connectivity check
-    would otherwise hit the network (and be refused below, aborting OCR). In airgap
-    mode the OCR models must already be present in ~/.paddlex — pre-pull them once
-    on a connected machine, then run sealed.
+    Patches connect, connect_ex (a code path that previously bypassed the guard) and
+    getaddrinfo (so a non-loopback hostname can't egress a DNS query before connect
+    would refuse it). Only AF_INET/AF_INET6 are guarded — AF_UNIX is local IPC and must
+    keep working. Refusals raise AirgapError so callers can surface them loudly.
+
+    Also tells PaddleOCR not to phone home: its model-source connectivity check would
+    otherwise hit the network. In airgap mode the OCR models must already be present in
+    ~/.paddlex — pre-pull them once on a connected machine, then run sealed.
     """
     import os
 
@@ -109,15 +145,50 @@ def enforce_airgap() -> None:
     if getattr(socket.socket, "_fusion_airgapped", False):
         return
     orig_connect = socket.socket.connect
+    orig_connect_ex = socket.socket.connect_ex
+    orig_getaddrinfo = socket.getaddrinfo
+    _AIRGAP_ORIG.update(connect=orig_connect, connect_ex=orig_connect_ex,
+                        getaddrinfo=orig_getaddrinfo)
 
-    def guarded_connect(self, address):  # type: ignore[no-untyped-def]
+    def _refuse_if_remote(sock, address) -> None:
+        if sock.family not in (socket.AF_INET, socket.AF_INET6):
+            return  # AF_UNIX etc. — local IPC, allowed
         host = address[0] if isinstance(address, tuple) else address
-        if str(host) not in _LOOPBACK:
-            raise OSError(
+        if not _is_loopback_host(host):
+            raise AirgapError(
                 f"airgap: outbound connection to {host!r} refused. "
-                "Set run.airgap = false to allow remote endpoints."
-            )
+                "Set run.airgap = false to allow remote endpoints.")
+
+    def guarded_connect(self, address):
+        _refuse_if_remote(self, address)
         return orig_connect(self, address)
 
-    socket.socket.connect = guarded_connect  # type: ignore[method-assign]
-    socket.socket._fusion_airgapped = True  # type: ignore[attr-defined]
+    def guarded_connect_ex(self, address):
+        _refuse_if_remote(self, address)
+        return orig_connect_ex(self, address)
+
+    def guarded_getaddrinfo(host, *args, **kwargs):
+        # IP literals and loopback names resolve locally; a non-loopback hostname would
+        # send a DNS query (egress) before connect could refuse it.
+        if (isinstance(host, str) and host
+                and not _is_ip_literal(host) and not _is_loopback_host(host)):
+            raise AirgapError(
+                f"airgap: DNS resolution of {host!r} refused (would egress a query). "
+                "Use a loopback endpoint, or set run.airgap = false.")
+        return orig_getaddrinfo(host, *args, **kwargs)
+
+    socket.socket.connect = guarded_connect          # type: ignore[method-assign]
+    socket.socket.connect_ex = guarded_connect_ex    # type: ignore[method-assign]
+    socket.getaddrinfo = guarded_getaddrinfo         # type: ignore[assignment]
+    socket.socket._fusion_airgapped = True           # type: ignore[attr-defined]
+
+
+def _disable_airgap() -> None:
+    """Restore the patched socket functions. For tests only — production stays sealed
+    for the life of the process; this stops the guard leaking across the test run."""
+    if not getattr(socket.socket, "_fusion_airgapped", False):
+        return
+    socket.socket.connect = _AIRGAP_ORIG["connect"]
+    socket.socket.connect_ex = _AIRGAP_ORIG["connect_ex"]
+    socket.getaddrinfo = _AIRGAP_ORIG["getaddrinfo"]
+    del socket.socket._fusion_airgapped
