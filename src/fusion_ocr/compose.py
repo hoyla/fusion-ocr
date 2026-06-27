@@ -174,13 +174,40 @@ def _split_on_gap(boxes: list[Box], idx: list[int], axis: int):
     return [[t[2] for t in spans[:best_k]], [t[2] for t in spans[best_k:]]]
 
 
-def reading_key(seg: Segment, regions: list[Region]):
+def _to_display(x: float, y: float, base_w: float, base_h: float, rot: int):
+    """Map a base-space (derotated) point to displayed space, matching PyMuPDF's
+    page.rotation_matrix. Segment boxes are stored derotated; ordering them by the
+    stored y/x sorts by the unrotated layout, which is wrong on a rotated page. We
+    sort by what the eye sees instead. Empirically (probe of page.rotation_matrix):
+      90 -> (H-y, x)   180 -> (W-x, H-y)   270 -> (y, W-x),   where W,H are base dims."""
+    if rot == 90:
+        return (base_h - y, x)
+    if rot == 180:
+        return (base_w - x, base_h - y)
+    if rot == 270:
+        return (y, base_w - x)
+    return (x, y)
+
+
+def reading_key(seg: Segment, regions: list[Region], rotation: int = 0,
+                disp_w: float = 0.0, disp_h: float = 0.0):
     """Sort key for reading order: the containing region's order, then top-to-bottom,
-    then left-to-right. Segments outside every region sort after, by position."""
+    then left-to-right. Segments outside every region sort after, by position.
+
+    On a rotated page, region order is already correct (Layout orders in displayed
+    space), but a region's lines are stored derotated — so within-region order must be
+    taken in displayed space too. disp_w/disp_h are the displayed page dims (page.rect);
+    base dims are those swapped back for 90/270. rotation==0 keeps the exact original
+    key (top-left corner), so unrotated ordering is unchanged."""
     order = 1_000_000
     for r in regions:
         if _contains_centre(r.box, seg.box):
             order = r.reading_order
             break
-    x0, y0, _, _ = seg.box.bbox
+    x0, y0, x1, y1 = seg.box.bbox
+    if rotation in (90, 180, 270):
+        base_w, base_h = (disp_h, disp_w) if rotation in (90, 270) else (disp_w, disp_h)
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        dx, dy = _to_display(cx, cy, base_w, base_h, rotation)
+        return (order, round(dy / 5), dx)
     return (order, round(y0 / 5), x0)

@@ -159,7 +159,8 @@ class Fusion:
                     if seg.source in _OCR_SOURCES and seg.vlm_text:
                         seg.source = "fused"
             # combine both sets in reading order (machine-readable + OCR)
-            page.segments.sort(key=lambda s: reading_key(s, page.regions))
+            page.segments.sort(key=lambda s: reading_key(
+                s, page.regions, page.rotation, page.width, page.height))
         return doc
 
     def _compose(self, page: Page) -> None:

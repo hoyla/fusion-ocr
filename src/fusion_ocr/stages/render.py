@@ -108,7 +108,8 @@ def _page_markdown(page: Page) -> str:
     for s in page.segments:
         if s.superseded or not s.best_text or id(s) in table_seg_ids:
             continue
-        blocks.append((reading_key(s, page.regions), s.best_text))
+        blocks.append((reading_key(
+            s, page.regions, page.rotation, page.width, page.height), s.best_text))
     blocks.sort(key=lambda b: b[0])
     return "\n\n".join(text for _, text in blocks)
 
