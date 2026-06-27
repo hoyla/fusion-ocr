@@ -54,6 +54,16 @@ def test_recipe_fingerprint_sensitivity(tmp_path):
     assert recipe_fingerprint(_cfg(tmp_path), pipe[:2]) != base   # pipeline shape change
 
 
+def test_passed_digest_keys_artifacts(tmp_path):
+    # The API/watcher pass the digest they already hashed; process must use it (not
+    # re-hash), so the artifact dir can't drift from the job-status key if the source
+    # path is overwritten between the two hashes.
+    cfg, pdf, calls = _cfg(tmp_path), _pdf(tmp_path), []
+    doc = process(pdf, cfg, pipeline=_pipe(calls), digest="deadbeef")
+    assert doc.sha256 == "deadbeef"
+    assert (cfg.out_dir / "deadbeef").is_dir()
+
+
 # ---- resume / reprocess ----------------------------------------------------
 
 def test_same_recipe_resumes_nothing_reruns(tmp_path):

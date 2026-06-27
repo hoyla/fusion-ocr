@@ -20,10 +20,13 @@ Handles both PaddleOCR 2.x (`.ocr()` -> [[ [box,(text,score)], ... ]]) and 3.x
 
 from __future__ import annotations
 
+import logging
+
 from ..config import Config
 from ..models import Box, Document, Segment
 
 _DEFAULT_DPI = 200
+_log = logging.getLogger(__name__)
 
 
 class OcrDet:
@@ -156,7 +159,13 @@ class OcrDet:
             from ..engines import apple_vision
             langs = apple_vision.VISION_LANGS.get(script or "latin", ["en-US"])
             return apple_vision.recognize(Image.fromarray(img), langs)
+        except ImportError:
+            return []   # ocrmac/PIL not installed (e.g. non-macOS) — routing handles it
         except Exception:
+            # A RUNTIME Vision failure on a page we routed to it: this silently drops the
+            # page's geometry (no overlay/search there), so surface it rather than hide it.
+            _log.warning("Apple Vision failed on a page (script=%s); no boxes for it",
+                         script, exc_info=True)
             return []
 
     @staticmethod

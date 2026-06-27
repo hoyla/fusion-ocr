@@ -97,6 +97,7 @@ def process(
     resume: bool = True,
     rerun_from: str | None = None,
     force: bool = False,
+    digest: str | None = None,
 ) -> Document:
     """Run a PDF through the pipeline, resuming from cached per-stage snapshots.
 
@@ -112,7 +113,10 @@ def process(
     if rerun_from is not None and rerun_from not in names:
         raise ValueError(f"rerun_from={rerun_from!r} is not a stage in {names}")
 
-    digest = sha256_of(pdf_path)
+    # Use the caller's digest when given, so the artifact dir (out/<digest>) can't drift
+    # from the digest the job status was recorded under if the source path is overwritten
+    # between the caller's hash and here. Falls back to hashing for direct callers.
+    digest = digest or sha256_of(pdf_path)
     work = cfg.out_dir / digest
     work.mkdir(parents=True, exist_ok=True)
     recipe = recipe_fingerprint(cfg, pipeline)

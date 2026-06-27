@@ -19,19 +19,26 @@ from .pipeline import process, sha256_of
 
 
 def scan_once(cfg: config_mod.Config, jobs: JobStore,
-              force: bool = False, rerun_from: str | None = None) -> int:
+              force: bool = False, rerun_from: str | None = None,
+              min_settle: float = 2.0) -> int:
     in_dir = Path(cfg.in_dir)
     in_dir.mkdir(parents=True, exist_ok=True)
     processed = 0
     reprocess = force or rerun_from is not None
+    now = time.time()
     for pdf in sorted(in_dir.glob("*.pdf")):
+        # Settle gate: skip a file still being written (mtime within min_settle of now).
+        # Hashing a half-copied drop would key the job under a digest that changes once
+        # the copy finishes — process it on a later scan instead.
+        if now - pdf.stat().st_mtime < min_settle:
+            continue
         digest = sha256_of(pdf)
         newly = jobs.upsert_queued(digest, str(pdf))
         if not newly and not reprocess:
             continue  # already seen — idempotent (unless an explicit reprocess is asked)
         jobs.set_status(digest, "running")
         try:
-            doc = process(pdf, cfg, force=force, rerun_from=rerun_from)
+            doc = process(pdf, cfg, force=force, rerun_from=rerun_from, digest=digest)
             jobs.set_status(digest, "done")
             print(f"[done] {pdf.name} -> out/{digest}/  "
                   f"({len(doc.artifacts)} artifacts)")

@@ -25,6 +25,7 @@ class JobStore:
         self.db_path = str(db_path)
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
+            c.execute("PRAGMA journal_mode=WAL")   # concurrent reads alongside a writer
             c.executescript(_SCHEMA)
 
     def _conn(self) -> sqlite3.Connection:
@@ -37,20 +38,18 @@ class JobStore:
             return c.execute("SELECT * FROM jobs WHERE sha256=?", (sha256,)).fetchone()
 
     def upsert_queued(self, sha256: str, source_path: str) -> bool:
-        """Return True if newly queued, False if it already existed."""
+        """Return True if newly queued, False if it already existed. Atomic: a single
+        INSERT .. ON CONFLICT DO NOTHING leans on the sha256 PK, so two concurrent submits
+        of the same content can't both 'win' (the old SELECT-then-INSERT could race into a
+        duplicate-processing or IntegrityError). rowcount is 1 on insert, 0 on conflict."""
         now = time.time()
         with self._conn() as c:
-            existing = c.execute(
-                "SELECT 1 FROM jobs WHERE sha256=?", (sha256,)
-            ).fetchone()
-            if existing:
-                return False
-            c.execute(
+            cur = c.execute(
                 "INSERT INTO jobs(sha256, source_path, status, created_at, updated_at)"
-                " VALUES(?,?,?,?,?)",
+                " VALUES(?,?,?,?,?) ON CONFLICT(sha256) DO NOTHING",
                 (sha256, source_path, "queued", now, now),
             )
-            return True
+            return cur.rowcount == 1
 
     def set_status(self, sha256: str, status: str, error: str | None = None) -> None:
         with self._conn() as c:

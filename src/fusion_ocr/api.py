@@ -56,7 +56,7 @@ def create_app(cfg=None):  # lazy so the api extra isn't needed unless you serve
         if newly or force or rerun_from:     # explicit reprocess overrides the seen-check
             jobs.set_status(digest, "running")
             try:
-                process(dest, cfg, force=force, rerun_from=rerun_from)
+                process(dest, cfg, force=force, rerun_from=rerun_from, digest=digest)
                 jobs.set_status(digest, "done")
             except Exception as exc:  # noqa: BLE001
                 jobs.set_status(digest, "error", str(exc))
