@@ -52,6 +52,14 @@ class Config:
     # OCR/Apple Vision handle poorly. Geometry still comes from the deterministic grid;
     # this supplies clean cell content. Born-digital tables are left to the text layer.
     table_vlm_read: bool = True
+    # Fusion anti-misalignment gate (see stages/fusion.py). Needleman-Wunsch always pairs
+    # a detected cluster with *some* VLM line rather than gapping both, so a confident OCR
+    # cluster can be handed a dissimilar line (a reading off-by-one). When the aligned line
+    # resembles the ink below fuse_min_sim AND the detector was at least fuse_det_conf_trust
+    # sure, that's misalignment not correction -> keep det_text. Gating on confidence is
+    # what protects the handwriting path (garbled det_text at low conf, VLM is the truth).
+    fuse_min_sim: float = 0.34
+    fuse_det_conf_trust: float = 0.80
     vlm: VLMConfig = None  # type: ignore[assignment]
     # per-script routing overrides: {script: {paddle_lang, vlm_model, vlm_base_url}}
     routes: dict = None  # type: ignore[assignment]
@@ -80,6 +88,8 @@ def load(path: str | Path = "config.toml") -> Config:
         prefer_apple_vision=run.get("prefer_apple_vision", False),
         apple_vision_skip_vlm=run.get("apple_vision_skip_vlm", 0.92),
         table_vlm_read=run.get("table_vlm_read", True),
+        fuse_min_sim=run.get("fuse_min_sim", 0.34),
+        fuse_det_conf_trust=run.get("fuse_det_conf_trust", 0.80),
         vlm=VLMConfig(
             base_url=vlm.get("base_url", "http://localhost:8080/v1"),
             model=vlm.get("model", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),

@@ -2,17 +2,23 @@
 identical whether the service runs on this desktop or later in a VPC, so moving it
 is invisible to callers.
 
-  POST /jobs   (multipart pdf)        -> {sha256, status}
-  GET  /jobs/{sha256}                 -> {status, artifacts}
+  POST  /jobs            (multipart pdf)  -> {sha256, status}
+  GET   /jobs/{sha256}                    -> {status, artifacts}
+  GET   /config                           -> {settings: [...]}   (every setting, surfaced)
+  PATCH /config          {path: value}    -> {path: value}       (configure the allowlist)
 
 Run: uvicorn fusion_ocr.api:app
 """
 
-from __future__ import annotations
+# NB: no `from __future__ import annotations` here. The route handlers are closures
+# inside create_app() and import UploadFile locally; stringised annotations would leave
+# FastAPI with an unresolvable ForwardRef (it resolves against module globals). Eager
+# annotations bind UploadFile to the real class at def-time. (str | None still evaluates.)
 
 from pathlib import Path
 
 from . import config as config_mod
+from . import settings as settings_mod
 from .jobs import JobStore
 from .pipeline import process, sha256_of
 
@@ -28,12 +34,13 @@ def _is_sha256(s: str) -> bool:
     return len(s) == 64 and all(c in "0123456789abcdef" for c in s.lower())
 
 
-def create_app():  # lazy so the api extra isn't needed unless you serve HTTP
-    from fastapi import FastAPI, UploadFile
+def create_app(cfg=None):  # lazy so the api extra isn't needed unless you serve HTTP
+    from fastapi import FastAPI, HTTPException, UploadFile
 
-    cfg = config_mod.load()
-    if cfg.airgap:
-        config_mod.enforce_airgap()
+    if cfg is None:                      # injectable for tests (skips the airgap seal)
+        cfg = config_mod.load()
+        if cfg.airgap:
+            config_mod.enforce_airgap()
     jobs = JobStore(Path(cfg.out_dir) / "jobs.sqlite")
     in_dir = Path(cfg.in_dir)
     in_dir.mkdir(parents=True, exist_ok=True)
@@ -67,6 +74,22 @@ def create_app():  # lazy so the api extra isn't needed unless you serve HTTP
         artifacts = [p.name for p in work.iterdir()] if work.exists() else []
         return {"sha256": sha256, "status": row["status"],
                 "error": row["error"], "artifacts": artifacts}
+
+    @app.get("/config")
+    def get_config():
+        # Surface every setting (secrets masked) so a consumer can see exactly how the
+        # service is configured — the read half of the get/set contract.
+        return {"settings": settings_mod.surface(cfg)}
+
+    @app.patch("/config")
+    def patch_config(updates: dict):
+        # Configure the allowlisted settings in-process (affects subsequent jobs; not
+        # written back to config.toml). Output-affecting changes re-key recipe_fingerprint,
+        # so the next job reprocesses rather than reusing a stale cache.
+        try:
+            return settings_mod.apply(cfg, updates)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
     return app
 

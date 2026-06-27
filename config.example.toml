@@ -26,6 +26,14 @@ apple_vision_skip_vlm = 0.92
 # content. Born-digital tables are left to the text layer (the exact text is already in
 # the file — re-reading a raster with a generative model would only add error).
 table_vlm_read = true
+# Fusion anti-misalignment gate. Needleman-Wunsch always pairs a detected cluster with
+# some VLM line; when the aligned line resembles the ink below fuse_min_sim AND the
+# detector was at least fuse_det_conf_trust sure, that's misalignment (not a correction)
+# so the trusted det_text is kept. Confidence-gated so the handwriting path (garbled
+# det_text at low confidence, VLM is the real read) is never penalised. Both are
+# surfaceable + tunable at runtime via the API (GET/PATCH /config).
+fuse_min_sim = 0.34
+fuse_det_conf_trust = 0.80
 
 [vlm]
 # DEFAULT generalist reader. Ollama / MLX / vLLM all speak this OpenAI-compatible API,

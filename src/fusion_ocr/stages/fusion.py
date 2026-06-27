@@ -31,10 +31,8 @@ from ..models import Box, Document, Page, Segment
 _IOU_OVERLAP = 0.5
 _GAP = -0.2  # alignment gap penalty
 _OCR_SOURCES = {"paddle", "vision"}  # deterministic OCR engines (geometry + det_text)
-_MIN_FUSE_SIM = 0.34    # below this a *confident* OCR cluster won't be overwritten by its
-                        # aligned VLM line — treat as misalignment, keep det_text
-_DET_CONF_TRUST = 0.80  # only gate when the detector is sure it read real text; protects
-                        # the handwriting path (garbled det_text at low conf, VLM is truth)
+# The anti-misalignment gate thresholds (fuse_min_sim / fuse_det_conf_trust) live on
+# Config — surfaceable and tunable via the settings registry / API.
 
 
 def _iou(a: Box, b: Box) -> float:
@@ -156,7 +154,7 @@ class Fusion:
         for page in doc.pages:
             self._compose(page)
             if page.vlm_reading.strip():
-                self._fuse_lines(page)
+                self._fuse_lines(page, cfg)
             for seg in page.segments:
                 if not seg.superseded and not seg.best_text:
                     seg.best_text = seg.vlm_text or seg.det_text or ""
@@ -197,7 +195,7 @@ class Fusion:
             if _overlaps(s, kept_ocr):
                 s.superseded = True       # contaminated layer -> OCR repairs it
 
-    def _fuse_lines(self, page: Page) -> None:
+    def _fuse_lines(self, page: Page, cfg: Config) -> None:
         ocr = [s for s in page.segments
                if s.source in _OCR_SOURCES and not s.superseded]
         ocr_ids = {id(s) for s in ocr}
@@ -220,8 +218,8 @@ class Fusion:
             # text yet the aligned line barely resembles it, that's misalignment, not a
             # correction — keep the trusted det_text. Gated on det_conf so the handwriting
             # path (garbled det_text, low conf, VLM is the real reading) is never penalised.
-            if line and _sim(cluster_text[ci], line) < _MIN_FUSE_SIM \
-                    and max((s.det_conf or 0.0) for s in cl) >= _DET_CONF_TRUST:
+            if line and _sim(cluster_text[ci], line) < cfg.fuse_min_sim \
+                    and max((s.det_conf or 0.0) for s in cl) >= cfg.fuse_det_conf_trust:
                 line = ""
             # a cluster with no aligned VLM line keeps its real engine's source
             # (vision/paddle) — NOT a hard-coded "paddle" (that mis-credited the engine)

@@ -76,7 +76,9 @@ def recipe_fingerprint(cfg: Config, pipeline: list[Stage]) -> str:
                   "apple_vision_skip_vlm": cfg.apple_vision_skip_vlm,
                   "table_vlm_read": cfg.table_vlm_read,
                   "granularity": cfg.granularity,
-                  "overlay_font": cfg.overlay_font},
+                  "overlay_font": cfg.overlay_font,
+                  "fuse_min_sim": cfg.fuse_min_sim,
+                  "fuse_det_conf_trust": cfg.fuse_det_conf_trust},
         "prompts": {"transcribe": prompts.TRANSCRIBE, "typhoon": prompts.TYPHOON_OCR,
                     "table": prompts.TABLE},
     }
