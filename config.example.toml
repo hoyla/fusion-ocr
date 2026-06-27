@@ -42,10 +42,10 @@ api_key  = "not-needed-locally"
 # the READER for that script (a specialist on its own endpoint). Omit a section to take
 # the default generalist above. These mirror the built-in DEFAULT_ROUTES; set them here
 # to point at YOUR machine's endpoints.
-# [routing.thai]                                  # Thai -> Typhoon specialist on Ollama
+# [routing.thai]                                  # Thai -> Typhoon specialist (MLX)
 # paddle_lang  = "th"                              # Thai recogniser -> Thai det_text -> better alignment
-# vlm_model    = "scb10x/typhoon-ocr1.5-3b:latest"
-# vlm_base_url = "http://localhost:11434/v1"
+# vlm_model    = "mlx-community/typhoon-ocr1.5-2b-8bit"   # served by the same mlx-vlm server
+# # vlm_base_url omitted -> uses [vlm] base_url (the MLX server on :8080)
 #
 # [routing.cyrillic]
 # paddle_lang = "cyrillic"
