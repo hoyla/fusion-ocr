@@ -149,60 +149,6 @@ def grid_to_table_html(rows: list[list[tuple[str, Box | None]]]):
     return "".join(out), cells
 
 
-def xy_cut_order(boxes: list[Box]) -> list[int]:
-    """Reading order via recursive XY-cut — the same approach PP-StructureV3 uses,
-    applied to our layout regions. Returns indices into ``boxes`` in reading order.
-
-    At each step it peels off a full-width horizontal band (top-to-bottom: header, then
-    the column block, then footer); where no horizontal gap exists it cuts on a
-    full-height vertical band (columns, left-to-right) and recurses. This gives the
-    right answer for single-column, multi-column, header+columns, and table-like
-    (row-major) layouts — and it's deterministic and explainable, not a black box.
-    """
-    order: list[int] = []
-    _xy_cut(boxes, list(range(len(boxes))), order)
-    return order
-
-
-def _xy_cut(boxes: list[Box], idx: list[int], order: list[int]) -> None:
-    if len(idx) <= 1:
-        order.extend(idx)
-        return
-    hg, hk, hspans = _best_gap(boxes, idx, axis=1)    # widest horizontal band (rows)
-    vg, vk, vspans = _best_gap(boxes, idx, axis=0)    # widest vertical band (columns)
-    # Cut on the MORE significant separator — the larger box-free band — not always
-    # horizontal-first. A horizontal band inside one column (e.g. the whitespace above a
-    # figure) is narrower than the column gutter, so columns get separated before such a
-    # band can slice a neighbouring column in half. Horizontal wins ties, so a header/
-    # footer still peels off first and an evenly-spaced grid stays row-major.
-    if hk is not None and (vk is None or hg >= vg):
-        spans, k = hspans, hk
-    elif vk is not None:
-        spans, k = vspans, vk
-    else:                                              # no clean cut -> y then x
-        order.extend(sorted(idx, key=lambda i: (boxes[i].bbox[1], boxes[i].bbox[0])))
-        return
-    for g in ([t[2] for t in spans[:k]], [t[2] for t in spans[k:]]):
-        _xy_cut(boxes, g, order)
-
-
-def _best_gap(boxes: list[Box], idx: list[int], axis: int):
-    """Widest box-free band along `axis` (axis=1 -> a horizontal gap in y; axis=0 -> a
-    vertical gap in x). Returns (gap_size, split_index, sorted_spans); split_index is
-    None when no box-free band spans the group."""
-    lo, hi = axis, axis + 2  # bbox is (x0,y0,x1,y1)
-    spans = sorted(((boxes[i].bbox[lo], boxes[i].bbox[hi], i) for i in idx),
-                   key=lambda t: t[0])
-    max_hi = spans[0][1]
-    best_gap, best_k = 0.0, None
-    for k in range(1, len(spans)):
-        gap = spans[k][0] - max_hi
-        if gap > best_gap:
-            best_gap, best_k = gap, k
-        max_hi = max(max_hi, spans[k][1])
-    return best_gap, best_k, spans
-
-
 def _to_display(x: float, y: float, base_w: float, base_h: float, rot: int):
     """Map a base-space (derotated) point to displayed space, matching PyMuPDF's
     page.rotation_matrix. Segment boxes are stored derotated; ordering them by the

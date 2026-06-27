@@ -8,9 +8,11 @@ footer — and stores them on `page.regions` with a reading order. Two downstrea
   * `table` regions are flagged for table-aware handling.
 
 Geometry is mapped back through the page derotation matrix (like ocr_det), so region
-boxes are in the PDF's native space. Reading order here is a simple geometric pass
-(row-major); a true multi-column reading-order model (PP-StructureV3) is a follow-up —
-the region-aware clustering is the main win and doesn't depend on perfect ordering.
+boxes are in the PDF's native space. Reading order comes from the model itself —
+PP-DocLayoutV2 predicts a per-region reading `order` (a learned head, what PP-StructureV3
+uses), so we no longer hand-roll an XY-cut. The model runs on the upright (displayed)
+raster, so its order is already correct on rotated pages; furniture it leaves unordered
+(running headers, page numbers) is placed by position.
 
 Clean passthrough if PaddleOCR / PyMuPDF aren't installed.
 """
@@ -45,7 +47,9 @@ class Layout:
     def _layout_model(self):
         if self._model is None:
             from paddleocr import LayoutDetection
-            self._model = LayoutDetection()
+            # PP-DocLayoutV2 (vs the default plus-L): same detection, PLUS a per-region
+            # reading-order head — so ordering comes from a maintained model, not our XY-cut.
+            self._model = LayoutDetection(model_name="PP-DocLayoutV2")
         return self._model
 
     def run(self, doc: Document, cfg: Config) -> Document:
@@ -79,24 +83,24 @@ class Layout:
                     arr = np.repeat(arr, 3, axis=2)
                 img = np.ascontiguousarray(arr)
 
-                regions, disp_boxes = [], []
+                ranked = []
                 for b in self._detect(model, img):
                     x0, y0, x1, y1 = b["coordinate"]
-                    # displayed (upright) box — what the eye reads, used for the XY-cut
-                    # reading order so it's correct on rotated pages.
-                    disp_boxes.append(Box(points=[
-                        (x0 / scale, y0 / scale), (x1 / scale, y0 / scale),
-                        (x1 / scale, y1 / scale), (x0 / scale, y1 / scale)]))
                     # base (derotated) box — stored, so overlay/search land on the page
                     p0 = fitz.Point(x0 / scale, y0 / scale) * deroter
                     p1 = fitz.Point(x1 / scale, y1 / scale) * deroter
                     bx0, bx1 = sorted((p0.x, p1.x))
                     by0, by1 = sorted((p0.y, p1.y))
-                    regions.append(Region(
+                    region = Region(
                         box=Box(points=[(bx0, by0), (bx1, by0), (bx1, by1), (bx0, by1)]),
                         kind=_KIND_MAP.get(str(b.get("label", "")).lower(), "other"),
-                    ))
-                page.regions = _order_regions(regions, disp_boxes)
+                    )
+                    # order from the model (on the upright raster -> correct when rotated)
+                    ranked.append((_rank(b.get("order"), (y0 + y1) / 2, pix.height), region))
+                ranked.sort(key=lambda t: t[0])
+                page.regions = [r for _, r in ranked]
+                for i, r in enumerate(page.regions):
+                    r.reading_order = i
         return doc
 
     @staticmethod
@@ -108,17 +112,12 @@ class Layout:
         return r.get("boxes", []) if hasattr(r, "get") else []
 
 
-def _order_regions(regions: list[Region], order_boxes: list[Box] | None = None) -> list[Region]:
-    """Reading order via XY-cut (handles multi-column / header+columns / tables), the
-    same approach PP-StructureV3 uses — deterministic and explainable. `order_boxes`
-    (displayed/upright space) is used for ordering when given, so the order is visually
-    correct on rotated pages even though the stored region boxes are in base space."""
-    from ..compose import xy_cut_order
-
-    if not regions:
-        return regions
-    boxes = order_boxes if order_boxes is not None else [r.box for r in regions]
-    ordered = [regions[i] for i in xy_cut_order(boxes)]
-    for i, r in enumerate(ordered):
-        r.reading_order = i
-    return ordered
+def _rank(order, cy: float, page_h: float):
+    """Sort key from PP-DocLayoutV2's predicted reading order. In-flow regions carry an
+    integer `order`; furniture (running headers, page numbers) come back as None, so
+    place top furniture first and bottom furniture last, by vertical position. If the
+    model emits no order at all (an older layout model), everything is None and this
+    degrades to a plain top-to-bottom pass."""
+    if order is not None:
+        return (1, float(order))
+    return (0 if cy < 0.15 * page_h else 2, cy)
