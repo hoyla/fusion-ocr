@@ -76,3 +76,28 @@ def test_guard_restores_cleanly(airgapped):
 def test_socket_unpatched_after_fixture():
     # outside the airgapped fixture the guard is gone (no leak)
     assert not getattr(socket.socket, "_fusion_airgapped", False)
+
+
+def test_language_probe_reraises_airgap_error():
+    # The script probe hits the VLM endpoint. In a sealed tier misconfigured to a remote
+    # endpoint it must fail loud (like vlm_read), not silently default routing.
+    from fusion_ocr.stages.language import _probe_script
+
+    class _Remote:
+        def read(self, png, prompt):
+            raise AirgapError("remote endpoint refused")
+
+    with pytest.raises(AirgapError):
+        _probe_script(_Remote(), b"png")
+
+
+def test_language_probe_swallows_ordinary_errors():
+    # A genuine probe hiccup still degrades to "" (unknown script) — only AirgapError
+    # is escalated.
+    from fusion_ocr.stages.language import _probe_script
+
+    class _Broken:
+        def read(self, png, prompt):
+            raise RuntimeError("model hiccup")
+
+    assert _probe_script(_Broken(), b"png") == ""

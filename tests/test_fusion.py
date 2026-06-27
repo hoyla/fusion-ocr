@@ -58,6 +58,39 @@ def test_line_fusion_no_duplication():
     assert all(s.source == "fused" for s in fused)
 
 
+def test_confident_ocr_not_overwritten_by_dissimilar_vlm_line():
+    # A single confident OCR cluster gets aligned (NW always pairs) to a VLM line that
+    # is unrelated. The detector is sure (high conf), so this is misalignment, not a
+    # correction: keep det_text, don't stamp the stray VLM line onto the box.
+    page = Page(index=0, needs_ocr=True)
+    s = _seg("a", 50, 100, 300, 120, "Invoice total 10.00")
+    s.det_conf = 0.97
+    page.segments = [s]
+    page.vlm_reading = "Completely unrelated hallucinated sentence"
+    doc = Document(source_path="x", sha256="x", pages=[page])
+
+    Fusion().run(doc, config_mod.Config())
+    seg = doc.pages[0].segments[0]
+    assert seg.best_text == "Invoice total 10.00"   # trusted ink preserved
+    assert seg.source == "paddle"                    # not 'fused'
+
+
+def test_handwriting_keeps_vlm_read_despite_garbled_det_text():
+    # The headline path: det_text is garbage at LOW confidence; the VLM line is the real
+    # reading. Similarity is ~0 but the gate must NOT fire (low det_conf) — VLM wins.
+    page = Page(index=0, needs_ocr=True)
+    s = _seg("a", 50, 100, 300, 120, "rn vvi lll oo")  # garbled handwriting OCR
+    s.det_conf = 0.20
+    page.segments = [s]
+    page.vlm_reading = "Dear David, today is polling day"
+    doc = Document(source_path="x", sha256="x", pages=[page])
+
+    Fusion().run(doc, config_mod.Config())
+    seg = doc.pages[0].segments[0]
+    assert seg.best_text == "Dear David, today is polling day"
+    assert seg.source == "fused"
+
+
 def _region(kind, x0, y0, x1, y1, order):
     r = Region(box=Box(points=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]), kind=kind)
     r.reading_order = order

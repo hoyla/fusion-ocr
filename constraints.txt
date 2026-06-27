@@ -78,6 +78,7 @@ pypdfium2==5.10.1
 pytest==9.1.1
 python-bidi==0.6.10
 python-dateutil==2.9.0.post0
+python-multipart==0.0.18
 PyYAML==6.0.2
 regex==2026.5.9
 requests==2.34.2

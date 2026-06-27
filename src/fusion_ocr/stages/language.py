@@ -13,7 +13,7 @@ page, so the routing decision stays auditable. Client is injectable for tests.
 
 from __future__ import annotations
 
-from ..config import Config
+from ..config import AirgapError, Config
 from ..models import Document
 from ..routing import detect_script
 
@@ -79,6 +79,8 @@ class Language:
 def _probe_script(client, png: bytes) -> str:
     try:
         ans = (client.read(png, _SCRIPT_PROBE) or "").strip().lower()
+    except AirgapError:
+        raise  # sealed tier pointed at a remote endpoint: fail loud, like vlm_read
     except Exception:
         return ""
     # scan every word so a verbose answer ("the script is Cyrillic") still resolves

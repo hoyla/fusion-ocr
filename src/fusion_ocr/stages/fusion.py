@@ -31,6 +31,10 @@ from ..models import Box, Document, Page, Segment
 _IOU_OVERLAP = 0.5
 _GAP = -0.2  # alignment gap penalty
 _OCR_SOURCES = {"paddle", "vision"}  # deterministic OCR engines (geometry + det_text)
+_MIN_FUSE_SIM = 0.34    # below this a *confident* OCR cluster won't be overwritten by its
+                        # aligned VLM line — treat as misalignment, keep det_text
+_DET_CONF_TRUST = 0.80  # only gate when the detector is sure it read real text; protects
+                        # the handwriting path (garbled det_text at low conf, VLM is truth)
 
 
 def _iou(a: Box, b: Box) -> float:
@@ -210,6 +214,15 @@ class Fusion:
         fused: list[Segment] = []
         for ci, cl in enumerate(clusters):
             line = vlm_lines[mapping[ci]] if ci in mapping else ""
+            # Anti-misalignment gate: NW always pairs a cluster with *some* line rather
+            # than gapping both, so a confident OCR cluster can be handed a dissimilar VLM
+            # line (an off-by-one in the reading). Where the detector is sure it read real
+            # text yet the aligned line barely resembles it, that's misalignment, not a
+            # correction — keep the trusted det_text. Gated on det_conf so the handwriting
+            # path (garbled det_text, low conf, VLM is the real reading) is never penalised.
+            if line and _sim(cluster_text[ci], line) < _MIN_FUSE_SIM \
+                    and max((s.det_conf or 0.0) for s in cl) >= _DET_CONF_TRUST:
+                line = ""
             # a cluster with no aligned VLM line keeps its real engine's source
             # (vision/paddle) — NOT a hard-coded "paddle" (that mis-credited the engine)
             base_source = cl[0].source if cl else "paddle"
