@@ -124,6 +124,13 @@ multi-column pages inflates them — trust CER on single-column text). Caveat: r
 pages are a floor on difficulty; genuinely degraded scans / handwriting need a small
 hand-labelled set. See `src/fusion_ocr/eval/`.
 
+## Design principles
+
+Build-vs-adopt, determinism vs learned models, and auditing model defaults are codified in
+**[Docs/principles.md](Docs/principles.md)** — the short version: orchestrate trusted tools,
+build only the connective tissue and the journalism-specific guarantees no component
+provides, and prefer a library's public surface over its internals.
+
 ## Roadmap
 
 1. **PaddleOCR geometry** — boxes + text + confidence (`stages/ocr_det.py`). ✅ *done — 2.x & 3.x; per-language recogniser via the router.*
