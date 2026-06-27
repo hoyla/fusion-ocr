@@ -22,14 +22,20 @@ calls**. The most-sensitive tier runs fully air-gapped.
 Boxes never come from the VLM. That's what makes the searchable overlay reliable and
 keeps the VLM from inventing text where there was no ink.
 
-## Status: walking skeleton
+## Status: working pipeline
 
-The plumbing runs end-to-end with **every model stage stubbed as a passthrough** —
-a dropped PDF flows triage → … → render and emits a (currently trivial) segment
-index, markdown, and overlay. Stages get filled in one at a time, starting with
-PaddleOCR. The contract that makes that safe — `Document` in / `Document` out, raw +
-inferred both retained, serialised between stages for resume — is already in place
-and tested.
+The real stages are in: triage → layout → language → OCR (PaddleOCR / Apple Vision) →
+VLM read → tables → fusion → render. A dropped PDF emits a provenance-carrying segment
+index, per-language markdown, and a searchable bbox overlay. On a born-digital
+recognition eval the OCR path scores **~95% word recall / ~96% precision**; the headline
+case — a handwritten note tesseract recovers 6 characters from — comes through at ~3,185
+searchable characters, fully local.
+
+The contract underneath — `Document` in / `Document` out, raw **and** inferred both
+retained, serialised between stages for a recipe-fingerprinted resume — is in place and
+tested (130 tests). Degraded scans and handwriting still want a small hand-labelled set to
+measure against; word-level overlay subdivision and a few table refinements are follow-ups
+(see the roadmap).
 
 ## Run it
 
@@ -56,7 +62,7 @@ pip install -e ".[ocr,vlm,api]" -c constraints.txt
 | --- | --- | --- |
 | `ocr` | PyMuPDF, PaddleOCR, PaddlePaddle | triage + geometry + structure |
 | `vlm` | httpx, Pillow | the OpenAI-compatible VLM client |
-| `api` | FastAPI, uvicorn | the HTTP job API |
+| `api` | FastAPI, uvicorn, python-multipart | the HTTP job API |
 
 ## Serving the readers (the toolkit)
 
@@ -77,6 +83,24 @@ The router sends Latin/handwriting/etc. → Qwen3-VL/MLX (`:8080`), Thai → Typ
 the same API, so swapping local → transcription-GPU is just a `base_url` change. See
 [Docs/routing.md](Docs/routing.md).
 
+## Configuration & the job API
+
+Configure via `config.toml` (copy from `config.example.toml`), or change the
+output-affecting tuning knobs on a **running** service over HTTP. The job API (the `api`
+extra, `uvicorn fusion_ocr.api:app`) is the stable contract callers use:
+
+| Method & path | Purpose |
+| --- | --- |
+| `POST /jobs` (multipart `pdf`) | submit a PDF → `{sha256, status}` |
+| `GET /jobs/{sha256}` | job status + artifact list |
+| `GET /config` | surface every setting (secrets masked) + its constraints |
+| `PATCH /config` `{path: value}` | configure the allowlisted settings in-process |
+
+Security/identity fields (`airgap`, `in_dir`, `out_dir`, `routes`) are surfaced but
+**read-only** — the API can't unseal the airgap tier or repoint paths. A tuning change
+re-keys the resume cache, so the next job reprocesses rather than reusing a stale result.
+**Full settings table and endpoint details: [Docs/configuration.md](Docs/configuration.md).**
+
 ## Layout
 
 ```
@@ -84,9 +108,10 @@ src/fusion_ocr/
   models.py          the Document/Page/Region/Segment record
   pipeline.py        Stage protocol + orchestration + resume
   config.py          config + airgap guard
+  settings.py        settings registry — what's surfaceable vs runtime-configurable
   jobs.py            SQLite job table (idempotent by content hash)
   watcher.py         drop-folder entrypoint
-  api.py             HTTP job API (stable contract for callers)
+  api.py             HTTP job + config API (stable contract for callers)
   stages/            triage · layout · language · ocr_det · vlm_read · fusion · render
   vlm/               client protocol + OpenAI-compatible impl + prompts
   overlay/           PyMuPDF invisible-text overlay (line- → word-level)

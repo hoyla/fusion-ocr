@@ -3,7 +3,8 @@
 This is the design-rationale doc: the *motivation* behind the tool and the *strategies*
 that follow from it. For usage see the [README](../../README.md); for the per-region tool
 router see [routing.md](../routing.md); for the build-vs-adopt rule see
-[principles.md](../principles.md).
+[principles.md](../principles.md); for every config setting and the job/config API see
+[configuration.md](../configuration.md).
 
 ## The problem
 
