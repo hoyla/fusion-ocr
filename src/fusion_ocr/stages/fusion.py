@@ -176,8 +176,13 @@ class Fusion:
         if page.regions:
             classify_regions(page.regions, clean_tl)
             for s in ocr:
-                if in_machine_readable_region(s, page.regions):
-                    s.superseded = True   # exact text layer covers this region
+                # superseded if the enclosing region is machine-readable, OR the OCR box
+                # directly overlaps a clean text-layer line. The overlap check catches a
+                # machine-readable header/footer band on a scanned form: the region may
+                # not cross the coverage threshold, but where exact text sits on top of
+                # the OCR the OCR is still redundant (else it renders twice).
+                if in_machine_readable_region(s, page.regions) or _overlaps(s, clean_tl):
+                    s.superseded = True   # exact text layer covers this box
         else:
             for s in ocr:
                 if _overlaps(s, clean_tl):

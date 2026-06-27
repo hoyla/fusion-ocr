@@ -111,6 +111,28 @@ def test_overlap_dedup_prefers_clean_textlayer():
     assert next(s for s in segs if s.source == "paddle").superseded is True
 
 
+def test_region_overlap_supersedes_ocr_under_textlayer():
+    # The Thai scanned-form duplicate-header bug: a machine-readable header band sits in
+    # a large region that doesn't cross the coverage threshold (so the region isn't
+    # classified machine-readable), yet the OCR copy directly overlaps the exact text-
+    # layer line. It must still be superseded, else the header renders twice.
+    page = Page(index=0)
+    page.regions = [Region(box=Box(points=[(0, 0), (600, 0), (600, 800), (0, 800)]),
+                           kind="header")]
+    tl = _seg("tl", 50, 100, 300, 120, "exact header", source="textlayer")
+    tl.best_text = "exact header"
+    pad = _seg("pad", 52, 101, 298, 119, "exatc heeder", source="paddle")  # overlaps tl
+    page.segments = [tl, pad]
+    doc = Document(source_path="x", sha256="x", pages=[page])
+
+    Fusion().run(doc, config_mod.Config())
+    segs = doc.pages[0].segments
+    primary = [s for s in segs if not s.superseded]
+    assert len(primary) == 1 and primary[0].source == "textlayer"   # no duplicate
+    assert next(s for s in segs if s.source == "paddle").superseded is True
+    assert len(segs) == 2                                            # OCR kept (provenance)
+
+
 def test_fallback_best_text_without_vlm_reading():
     page = Page(index=0)
     s = _seg("a", 50, 100, 150, 120, "raw ocr")
