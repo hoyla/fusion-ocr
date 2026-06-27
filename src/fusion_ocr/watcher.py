@@ -18,17 +18,20 @@ from .jobs import JobStore
 from .pipeline import process, sha256_of
 
 
-def scan_once(cfg: config_mod.Config, jobs: JobStore) -> int:
+def scan_once(cfg: config_mod.Config, jobs: JobStore,
+              force: bool = False, rerun_from: str | None = None) -> int:
     in_dir = Path(cfg.in_dir)
     in_dir.mkdir(parents=True, exist_ok=True)
     processed = 0
+    reprocess = force or rerun_from is not None
     for pdf in sorted(in_dir.glob("*.pdf")):
         digest = sha256_of(pdf)
-        if not jobs.upsert_queued(digest, str(pdf)):
-            continue  # already seen — idempotent
+        newly = jobs.upsert_queued(digest, str(pdf))
+        if not newly and not reprocess:
+            continue  # already seen — idempotent (unless an explicit reprocess is asked)
         jobs.set_status(digest, "running")
         try:
-            doc = process(pdf, cfg)
+            doc = process(pdf, cfg, force=force, rerun_from=rerun_from)
             jobs.set_status(digest, "done")
             print(f"[done] {pdf.name} -> out/{digest}/  "
                   f"({len(doc.artifacts)} artifacts)")
@@ -44,6 +47,11 @@ def main() -> None:
     parser.add_argument("--config", default="config.toml")
     parser.add_argument("--once", action="store_true", help="process then exit")
     parser.add_argument("--interval", type=float, default=2.0)
+    parser.add_argument("--force", action="store_true",
+                        help="reprocess from scratch even if already done (with --once)")
+    parser.add_argument("--rerun-from", metavar="STAGE", default=None,
+                        help="re-run from STAGE onward, reusing earlier cached stages "
+                             "(e.g. --rerun-from vlm_read to retune the prompt; --once)")
     args = parser.parse_args()
 
     cfg = config_mod.load(args.config)
@@ -55,8 +63,9 @@ def main() -> None:
     print(f"[watch] {cfg.in_dir}/  ->  {cfg.out_dir}/   (vlm: {cfg.vlm.base_url})")
 
     if args.once:
-        scan_once(cfg, jobs)
+        scan_once(cfg, jobs, force=args.force, rerun_from=args.rerun_from)
         return
+    # Loop mode watches for NEW files; --force/--rerun-from are for one-shot reprocessing.
     try:
         while True:
             scan_once(cfg, jobs)

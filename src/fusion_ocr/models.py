@@ -105,6 +105,10 @@ class Document:
     artifacts: dict[str, str] = field(default_factory=dict)
     # name of the last stage that completed, for resume
     stage_completed: str | None = None
+    # fingerprint of the processing recipe (pipeline + model + prompts + config) that
+    # produced this doc. Resume only reuses a snapshot whose recipe matches the current
+    # one, so changing a prompt/model/route reprocesses instead of silently reusing.
+    recipe: str = ""
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, ensure_ascii=False)

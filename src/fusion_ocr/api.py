@@ -41,15 +41,15 @@ def create_app():  # lazy so the api extra isn't needed unless you serve HTTP
     app = FastAPI(title="fusion-ocr")
 
     @app.post("/jobs")
-    async def submit(pdf: UploadFile):
+    async def submit(pdf: UploadFile, force: bool = False, rerun_from: str | None = None):
         dest = in_dir / _safe_name(pdf.filename)
         dest.write_bytes(await pdf.read())
         digest = sha256_of(dest)
         newly = jobs.upsert_queued(digest, str(dest))
-        if newly:
+        if newly or force or rerun_from:     # explicit reprocess overrides the seen-check
             jobs.set_status(digest, "running")
             try:
-                process(dest, cfg)
+                process(dest, cfg, force=force, rerun_from=rerun_from)
                 jobs.set_status(digest, "done")
             except Exception as exc:  # noqa: BLE001
                 jobs.set_status(digest, "error", str(exc))
