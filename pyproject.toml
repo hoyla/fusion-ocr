@@ -7,12 +7,18 @@ requires-python = ">=3.11"
 # bare plumbing runs (and tests) on any machine.
 dependencies = []
 
+# Pinned with a major-version ceiling so a silent upgrade can't change OCR output for a
+# given PDF — reproducibility is load-bearing for defensibility. PaddleOCR especially had
+# breaking 2.x->3.x churn (ocr_det.py works around 3.x). Floors are the tested versions
+# below; for an EXACT rebuild use constraints.txt (pip install ... -c constraints.txt).
+# Tested set: fastapi 0.138.1, uvicorn 0.49.0, pymupdf 1.27.2.3, numpy 2.3.5,
+# paddleocr 3.7.0, paddlepaddle 3.3.1, httpx 0.28.1, pillow 12.2.0, ocrmac 1.0.1.
 [project.optional-dependencies]
-api = ["fastapi", "uvicorn"]
-ocr = ["pymupdf", "numpy", "paddleocr", "paddlepaddle"]   # geometry + structure (PP-StructureV3)
-vlm = ["httpx", "pillow"]                          # OpenAI-compatible client + image handling
-vision = ["ocrmac"]                                # Apple Vision OCR (macOS only, on-device)
-dev = ["pytest"]
+api = ["fastapi>=0.138,<1", "uvicorn>=0.49,<1"]
+ocr = ["pymupdf>=1.27,<2", "numpy>=2.3,<3", "paddleocr>=3.7,<4", "paddlepaddle>=3.3,<4"]
+vlm = ["httpx>=0.28,<1", "pillow>=12,<13"]         # OpenAI-compatible client + image handling
+vision = ["ocrmac>=1,<2"]                          # Apple Vision OCR (macOS only, on-device)
+dev = ["pytest>=8,<10"]
 
 [project.scripts]
 fusion-ocr = "fusion_ocr.watcher:main"

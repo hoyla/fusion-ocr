@@ -47,6 +47,9 @@ Add capability behind extras as stages are implemented:
 
 ```bash
 pip install -e ".[ocr,vlm,api]"
+# For a byte-for-byte reproducible environment (same OCR output for a given PDF),
+# install against the pinned lock — versions are bounded in pyproject, exact in the lock:
+pip install -e ".[ocr,vlm,api]" -c constraints.txt
 ```
 
 | Extra | Brings | For |
