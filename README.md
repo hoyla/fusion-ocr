@@ -126,6 +126,9 @@ hand-labelled set. See `src/fusion_ocr/eval/`.
 
 ## Design principles
 
+Why this tool exists and how its architecture serves that is narrated in
+**[Docs/dev_notes/motivation_and_strategy.md](Docs/dev_notes/motivation_and_strategy.md)**.
+
 Build-vs-adopt, determinism vs learned models, and auditing model defaults are codified in
 **[Docs/principles.md](Docs/principles.md)** — the short version: orchestrate trusted tools,
 build only the connective tissue and the journalism-specific guarantees no component
