@@ -14,7 +14,7 @@ dependencies = []
 # Tested set: fastapi 0.138.1, uvicorn 0.49.0, pymupdf 1.27.2.3, numpy 2.3.5,
 # paddleocr 3.7.0, paddlepaddle 3.3.1, httpx 0.28.1, pillow 12.2.0, ocrmac 1.0.1.
 [project.optional-dependencies]
-api = ["fastapi>=0.138,<1", "uvicorn>=0.49,<1", "python-multipart>=0.0.18,<1", "tomli-w>=1,<2"]  # multipart for UploadFile; tomli-w for POST /config/save
+api = ["fastapi>=0.138,<1", "uvicorn>=0.49,<1", "python-multipart>=0.0.18,<1", "tomli-w>=1,<2", "python-dotenv>=1,<2"]  # multipart for UploadFile; tomli-w for POST /config/save; dotenv loads .env (FUSION_OCR_API_TOKEN)
 ocr = ["pymupdf>=1.27,<2", "numpy>=2.3,<3", "paddleocr>=3.7,<4", "paddlepaddle>=3.3,<4"]
 vlm = ["httpx>=0.28,<1", "pillow>=12,<13"]         # OpenAI-compatible client + image handling
 vision = ["ocrmac>=1,<2"]                          # Apple Vision OCR (macOS only, on-device)

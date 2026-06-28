@@ -160,6 +160,13 @@ def main() -> None:
     (`api_host`/`api_port`); the app is built lazily, so the airgap seal and the
     FUSION_OCR_API_TOKEN fail-closed check happen as the worker imports it."""
     import uvicorn
+    from dotenv import load_dotenv
+
+    # Load .env (project convention) so FUSION_OCR_API_TOKEN can live in a per-project
+    # .env file instead of the shell. Real environment variables already set win — by
+    # default load_dotenv() does not override them, so an explicit `export` still takes
+    # precedence over the file.
+    load_dotenv()
 
     cfg = config_mod.load()
     where = "localhost only" if cfg.api_host in ("127.0.0.1", "localhost") else "LAN-reachable"
