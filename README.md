@@ -175,11 +175,6 @@ provides, and prefer a library's public surface over its internals.
 
 ## Roadmap
 
-1. **PaddleOCR geometry** — boxes + text + confidence (`stages/ocr_det.py`). ✅ *done — 2.x & 3.x; per-language recogniser via the router.*
-2. **VLM read + fusion** — read via the swappable client; cluster boxes + sequence-align VLM lines onto them; ink-gate. ✅ *done — proven on the handwritten note (6 → 3,185 searchable chars).*
-3. **Tool router** — script detection → per-region `{PaddleOCR recogniser + VLM reader}`; provenance; generalist-refusal fallback. ✅ *done.*
-4. **Readers** — default generalist Qwen3-VL via **MLX** (`mlx_vlm.server`, ~10-40× faster than Ollama on Apple Silicon); **Typhoon** specialist for Thai (Ollama); confidence-gated escalation to a stronger model. ✅ *done.*
-5. **Layout + tables (PP-DocLayout)** — region detection + region-aware clustering (columns don't merge) + deterministic table-cell extraction (HTML grid + cell boxes). ✅ *done.*
-6. **Script detection** — text-layer Unicode classify + one-word VLM probe for image-only pages. ✅ *done.*
-7. **Overlay** — Unicode font so non-Latin search works ✅; word-level subdivision for precise highlights *(follow-up)*.
-8. **Follow-ups** — true multi-column reading order (PP-StructureV3); per-cell table content; the "Giant rejects" eval (old vs new); Qwen3.5-VL re-test when its MLX build lands.
+What's shipped is logged in **[Docs/dev_notes/done.md](Docs/dev_notes/done.md)**; what's next
+— and the scale-triggered items (distributed queue, object store) — is in
+**[Docs/dev_notes/roadmap.md](Docs/dev_notes/roadmap.md)**.
