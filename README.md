@@ -2,10 +2,14 @@
 
 A hybrid **deterministic + Vision-LLM** OCR pipeline for confidential documents.
 
-It pairs a deterministic engine (PaddleOCR / PP-StructureV3) with a self-hosted VLM
-so you get the best of both: **trustworthy bounding boxes** from the deterministic
-side and **clean, structure-aware reading** (tables → markdown, translation) from the
-VLM — fused into one "best of" output with a searchable bbox text overlay.
+It pairs a deterministic engine (PaddleOCR / PP-DocLayoutV2, or Apple Vision) with a
+self-hosted VLM so you get the best of both: **trustworthy bounding boxes** from the
+deterministic side and **clean, structure-aware reading** (tables → markdown, translation)
+from the VLM — fused into one "best of" output with a searchable bbox text overlay.
+
+![The fusion-ocr pipeline: a PDF is triaged and laid out, then forks into a deterministic
+geometry track and a VLM semantics track that meet at fusion, rendering an overlay PDF,
+per-language markdown, and a segment index.](Docs/fusion-ocr-pipeline.png)
 
 Everything runs **on your own estate** — local models via Ollama/MLX now, an in-VPC
 CUDA endpoint (e.g. vLLM on the transcription GPU) later — with **no third-party LLM
@@ -15,7 +19,7 @@ calls**. The most-sensitive tier runs fully air-gapped.
 
 | Concern | Owner |
 | --- | --- |
-| **Geometry** (boxes, tables, reading order) | deterministic — PaddleOCR / PP-StructureV3 |
+| **Geometry** (boxes, tables, reading order) | deterministic — PaddleOCR / Apple Vision; layout via PP-DocLayoutV2 |
 | **Semantics** (reading, structure, translation) | VLM |
 | **Fusion** | align VLM text onto deterministic boxes; the deterministic layer is the anti-hallucination gate |
 

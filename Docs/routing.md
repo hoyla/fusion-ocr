@@ -2,6 +2,8 @@
 
 The pipeline does not rely on one OCR engine or one VLM. It **triages each region and
 routes it to the right tools.** This document is the design of record for that routing.
+For the whole-pipeline view this routing sits inside, see the
+[pipeline diagram](fusion-ocr-pipeline.png).
 
 ## The core idea: two independent axes per region
 
@@ -52,7 +54,7 @@ Features used (cheap, deterministic, auditable):
 
 - **script** — Thai / Cyrillic / CJK / Arabic / Latin (detected by Unicode-range
   classification of available text; see below)
-- **layout class** — paragraph / table / figure (from PP-StructureV3, future) →
+- **layout class** — paragraph / table / figure (from PP-DocLayoutV2) →
   table prompt vs prose
 - **rotation**, and **PaddleOCR confidence** — low confidence ≈ handwriting/degraded →
   escalate to a stronger/specialist reader (confidence-gated escalation)

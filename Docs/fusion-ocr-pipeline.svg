@@ -1,0 +1,125 @@
+<svg viewBox="0 0 860 800" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif" role="img">
+  <title>Fusion OCR data pipeline</title>
+  <desc>A PDF enters, is triaged for text layers, analysed for layout, then forks into a deterministic geometry track (PaddleOCR boxes) and a VLM semantics track (reading and translation). The born-digital text and both tracks meet at a fusion stage that fills a Segment record, which renders into an overlay PDF, per-language markdown, and a segment index.</desc>
+
+  <rect x="0" y="0" width="860" height="800" fill="#ffffff"/>
+
+  <style>
+    .stage { fill: #f4f4f2; stroke: #d9d9d4; stroke-width: 1.5; }
+    .geom  { fill: #e8f0fe; stroke: #4a72c4; stroke-width: 1.5; }
+    .sem   { fill: #fdeede; stroke: #d08a2e; stroke-width: 1.5; }
+    .fuse  { fill: #e7e3f5; stroke: #7b5ec9; stroke-width: 2; }
+    .out   { fill: #ecf3ec; stroke: #4f9a5e; stroke-width: 1.5; }
+    .t  { fill: #1b1b1b; font-size: 13.5px; font-weight: 600; }
+    .s  { fill: #6b6b6b; font-size: 10.5px; }
+    .d  { fill: #8a6d2f; font-size: 10px; font-style: italic; }
+    .lg { fill: #6b6b6b; font-size: 11px; }
+    .ln  { stroke: #b5b5ad; stroke-width: 1.5; fill: none; }
+    .lng { stroke: #4a72c4; stroke-width: 1.5; fill: none; }
+    .lns { stroke: #d08a2e; stroke-width: 1.5; fill: none; }
+    .lnt { stroke: #b5b5ad; stroke-width: 1.5; fill: none; stroke-dasharray: 4 3; }
+  </style>
+
+  <defs>
+    <marker id="a"  markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#b5b5ad"/></marker>
+    <marker id="ag" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#4a72c4"/></marker>
+    <marker id="as" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#d08a2e"/></marker>
+  </defs>
+
+  <!-- PDF -->
+  <rect class="stage" x="335" y="14" width="190" height="46" rx="8"/>
+  <text class="t" x="430" y="33" text-anchor="middle">PDF in</text>
+  <text class="s" x="430" y="49" text-anchor="middle">drop-folder or POST /jobs</text>
+
+  <!-- Triage -->
+  <rect class="stage" x="330" y="84" width="200" height="46" rx="8"/>
+  <text class="t" x="430" y="105" text-anchor="middle">Triage · PyMuPDF</text>
+  <text class="s" x="430" y="120" text-anchor="middle">text-layer? per page</text>
+  <path class="ln" d="M430,60 L430,82" marker-end="url(#a)"/>
+  <text class="d" x="438" y="72">pages + sha256</text>
+
+  <!-- born-digital shortcut -->
+  <rect class="stage" x="40" y="300" width="190" height="52" rx="8"/>
+  <text class="t" x="135" y="322" text-anchor="middle">Born-digital region</text>
+  <text class="s" x="135" y="337" text-anchor="middle">text + char boxes, no OCR</text>
+  <path class="lnt" d="M330,112 C180,130 135,200 135,298" marker-end="url(#a)"/>
+  <text class="d" x="150" y="200">embedded text layer</text>
+
+  <!-- Layout -->
+  <rect class="stage" x="320" y="158" width="220" height="50" rx="8"/>
+  <text class="t" x="430" y="179" text-anchor="middle">Layout · PP-DocLayoutV2</text>
+  <text class="s" x="430" y="194" text-anchor="middle">regions · tables · order</text>
+  <path class="ln" d="M430,130 L430,156" marker-end="url(#a)"/>
+  <text class="d" x="438" y="148">image regions</text>
+
+  <!-- Language -->
+  <rect class="stage" x="595" y="158" width="180" height="50" rx="8"/>
+  <text class="t" x="685" y="179" text-anchor="middle">Language ID</text>
+  <text class="s" x="685" y="194" text-anchor="middle">script → models</text>
+  <path class="ln" d="M540,183 L593,183" marker-end="url(#a)"/>
+
+  <!-- fork label -->
+  <text class="lg" x="430" y="236" text-anchor="middle" font-style="italic">fork per region</text>
+
+  <!-- Geometry track -->
+  <rect class="geom" x="250" y="252" width="230" height="56" rx="8"/>
+  <text class="t" x="365" y="275" text-anchor="middle">PaddleOCR / Apple Vision</text>
+  <text class="s" x="365" y="292" text-anchor="middle">geometry · routed by script</text>
+  <path class="lng" d="M410,208 C380,224 368,234 366,250" marker-end="url(#ag)"/>
+
+  <!-- Semantics track -->
+  <rect class="sem" x="580" y="252" width="230" height="56" rx="8"/>
+  <text class="t" x="695" y="275" text-anchor="middle">VLM — semantics</text>
+  <text class="s" x="695" y="292" text-anchor="middle">read · tables · translate</text>
+  <path class="lns" d="M685,208 C690,224 694,234 695,250" marker-end="url(#as)"/>
+
+  <!-- data on each track -->
+  <text class="d" x="365" y="332" text-anchor="middle">polygons + text + conf</text>
+  <text class="d" x="695" y="332" text-anchor="middle">markdown + translation</text>
+
+  <!-- Fusion -->
+  <rect class="fuse" x="320" y="392" width="280" height="66" rx="10"/>
+  <text class="t" x="460" y="416" text-anchor="middle">Fusion + alignment</text>
+  <text class="s" x="460" y="433" text-anchor="middle">VLM text → boxes · ink-gate</text>
+  <text class="s" x="460" y="448" text-anchor="middle">choose best-of per segment</text>
+  <path class="lng" d="M366,308 C366,355 410,372 430,390" marker-end="url(#ag)"/>
+  <path class="lns" d="M695,308 C695,355 600,372 545,390" marker-end="url(#as)"/>
+  <path class="lnt" d="M135,352 C135,420 240,428 318,430" marker-end="url(#a)"/>
+
+  <!-- Segment record -->
+  <rect x="300" y="486" width="320" height="92" rx="10" fill="#f4f4f2" stroke="#7b5ec9" stroke-width="2"/>
+  <text class="t" x="460" y="508" text-anchor="middle">Segment record</text>
+  <text class="s" x="316" y="528">id · page · box(polygon)</text>
+  <text class="s" x="316" y="544">det_text · det_conf · vlm_text</text>
+  <text class="s" x="316" y="560">best_text · source · translations{}</text>
+  <text x="316" y="574" fill="#7b5ec9" font-size="10.5px" font-weight="600">raw + inferred both kept (provenance)</text>
+  <path class="ln" d="M460,458 L460,484" marker-end="url(#a)"/>
+
+  <!-- Render fan-out -->
+  <path class="ln" d="M400,578 C340,608 240,612 175,636" marker-end="url(#a)"/>
+  <path class="ln" d="M460,578 L460,636" marker-end="url(#a)"/>
+  <path class="ln" d="M520,578 C580,608 680,612 745,636" marker-end="url(#a)"/>
+  <text class="lg" x="460" y="606" text-anchor="middle" font-style="italic">render.py</text>
+
+  <!-- Outputs -->
+  <rect class="out" x="55" y="640" width="240" height="62" rx="8"/>
+  <text class="t" x="175" y="664" text-anchor="middle">Overlay PDF</text>
+  <text class="s" x="175" y="682" text-anchor="middle">invisible text · render mode 3</text>
+
+  <rect class="out" x="340" y="640" width="240" height="62" rx="8"/>
+  <text class="t" x="460" y="664" text-anchor="middle">Markdown / language</text>
+  <text class="s" x="460" y="682" text-anchor="middle">tables intact · translations</text>
+
+  <rect class="out" x="625" y="640" width="240" height="62" rx="8"/>
+  <text class="t" x="745" y="664" text-anchor="middle">Segment index (JSON)</text>
+  <text class="s" x="745" y="682" text-anchor="middle">id ↔ box ↔ text</text>
+
+  <text class="lg" x="460" y="728" text-anchor="middle" font-style="italic">the index powers "show me this line in situ"</text>
+
+  <!-- Legend -->
+  <rect x="55"  y="756" width="13" height="13" rx="3" class="geom"/><text class="lg" x="74"  y="767">geometry</text>
+  <rect x="180" y="756" width="13" height="13" rx="3" class="sem"/><text class="lg" x="199" y="767">semantics</text>
+  <rect x="320" y="756" width="13" height="13" rx="3" class="fuse"/><text class="lg" x="339" y="767">fusion</text>
+  <rect x="425" y="756" width="13" height="13" rx="3" class="out"/><text class="lg" x="444" y="767">outputs</text>
+  <line x1="545" y1="762" x2="575" y2="762" class="lnt"/><text class="lg" x="582" y="767">born-digital shortcut</text>
+</svg>
