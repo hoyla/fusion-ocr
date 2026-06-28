@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 
+from .. import raster
 from ..config import Config
 from ..models import Box, Document, Segment
 
@@ -97,7 +98,7 @@ class OcrDet:
                     # derotation matrix maps the upright-render coords back into the
                     # PDF's native space, so boxes land on rotated pages.
                     deroter = pg.derotation_matrix
-                    img = self._rasterise(fitz, pg)
+                    img = raster.page_ndarray(pdf, page.index, self.dpi)
 
                     if route.engine == "apple_vision":
                         lines, source = self._run_vision(img, page.script), "vision"
@@ -130,19 +131,6 @@ class OcrDet:
         return doc
 
     # -- helpers ------------------------------------------------------------
-
-    def _rasterise(self, fitz, pg):
-        import numpy as np
-
-        pix = pg.get_pixmap(dpi=self.dpi)
-        arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
-            pix.height, pix.width, pix.n
-        )
-        if pix.n == 4:  # drop alpha
-            arr = arr[:, :, :3]
-        elif pix.n == 1:  # grey -> 3-channel
-            arr = np.repeat(arr, 3, axis=2)
-        return np.ascontiguousarray(arr)
 
     def _run(self, engine, mode, img) -> list[tuple[list, str, float]]:
         """Return [(quad_points_px, text, confidence), ...] across both APIs."""

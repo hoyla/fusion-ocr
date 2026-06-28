@@ -19,6 +19,7 @@ Clean passthrough if PaddleOCR / PyMuPDF aren't installed.
 
 from __future__ import annotations
 
+from .. import raster
 from ..config import Config
 from ..models import Box, Document, Region
 
@@ -55,7 +56,7 @@ class Layout:
     def run(self, doc: Document, cfg: Config) -> Document:
         try:
             import fitz  # PyMuPDF
-            import numpy as np
+            import numpy as np  # noqa: F401 — gate the ocr extra before raster.page_ndarray
         except ImportError:
             return doc
         # all content pages, incl. born-digital — so born-digital tables get a grid too
@@ -74,14 +75,7 @@ class Layout:
                     continue
                 pg = pdf[page.index]
                 deroter = pg.derotation_matrix
-                pix = pg.get_pixmap(dpi=self.dpi)
-                arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
-                    pix.height, pix.width, pix.n)
-                if pix.n == 4:
-                    arr = arr[:, :, :3]
-                elif pix.n == 1:
-                    arr = np.repeat(arr, 3, axis=2)
-                img = np.ascontiguousarray(arr)
+                img = raster.page_ndarray(pdf, page.index, self.dpi)
 
                 ranked = []
                 for b in self._detect(model, img):

@@ -13,6 +13,7 @@ page, so the routing decision stays auditable. Client is injectable for tests.
 
 from __future__ import annotations
 
+from .. import raster
 from ..config import AirgapError, Config
 from ..models import Document
 from ..routing import detect_script
@@ -66,7 +67,7 @@ class Language:
             for page in pages:
                 if page.index >= pdf.page_count:
                     continue
-                png = pdf[page.index].get_pixmap(dpi=self.dpi).tobytes("png")
+                png = raster.page_png(pdf, page.index, self.dpi)
                 page.script = _probe_script(client, png) or ""
 
     @staticmethod

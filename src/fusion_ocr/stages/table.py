@@ -19,6 +19,7 @@ nothing regresses.
 
 from __future__ import annotations
 
+from .. import raster
 from ..compose import grid_to_table_html
 from ..config import Config
 from ..models import Box, Document, Page
@@ -165,14 +166,7 @@ class Table:
             except ImportError:
                 return
         scale = self.dpi / 72.0
-        pix = pg.get_pixmap(dpi=self.dpi)
-        arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
-            pix.height, pix.width, pix.n)
-        if pix.n == 4:
-            arr = arr[:, :, :3]
-        elif pix.n == 1:
-            arr = np.repeat(arr, 3, axis=2)
-        img = np.ascontiguousarray(arr)
+        img = raster.page_ndarray(pg.parent, page.index, self.dpi)
         H, W = img.shape[:2]
         for region in regions:
             x0, y0, x1, y1 = region.box.bbox

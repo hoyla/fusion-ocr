@@ -12,6 +12,10 @@ Five items, in suggested order of execution.
 
 ## 1. Page-raster cache — collapse the duplicate rasterisation
 
+**✅ Done** — `src/fusion_ocr/raster.py` (LRU Pixmap cache under a byte budget; serves both
+the ndarray and PNG consumers and centralises the conversion the three stages had
+copy-pasted). All six rasterising stages migrated; `test_raster.py` added (suite 134).
+
 **Problem.** Seven stages each `fitz.open(doc.source_path)` and `get_pixmap()`
 independently. The DPIs:
 

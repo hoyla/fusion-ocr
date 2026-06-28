@@ -15,6 +15,7 @@ born-digital docs never hit the VLM.
 
 from __future__ import annotations
 
+from .. import raster
 from ..config import AirgapError, Config
 from ..models import Document
 from ..routing import resolve
@@ -61,7 +62,7 @@ class VlmRead:
                 route = resolve(page.script or "latin", cfg)
                 model = route.vlm_model or cfg.vlm.model
                 base_url = route.vlm_base_url or cfg.vlm.base_url
-                png = pdf[page.index].get_pixmap(dpi=self.dpi).tobytes("png")
+                png = raster.page_png(pdf, page.index, self.dpi)
                 det_chars = sum(len(s.det_text or "") for s in page.segments
                                 if s.source == "paddle")
 

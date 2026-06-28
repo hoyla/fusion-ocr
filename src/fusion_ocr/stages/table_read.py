@@ -21,6 +21,7 @@ refinement, matching the Table stage).
 
 from __future__ import annotations
 
+from .. import raster
 from ..config import AirgapError, Config
 from ..models import Document
 from ..routing import resolve
@@ -73,7 +74,8 @@ class TableRead:
                     clip = fitz.Rect(*region.box.bbox)
                     if clip.is_empty or clip.width < 8 or clip.height < 8:
                         continue
-                    png = pdf[page.index].get_pixmap(dpi=self.dpi, clip=clip).tobytes("png")
+                    png = raster.page_png(pdf, page.index, self.dpi,
+                                          clip=tuple(region.box.bbox))
                     text = self._read(png, model, base_url, cfg)
                     if text:
                         region.table_vlm = text

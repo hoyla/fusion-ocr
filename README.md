@@ -109,6 +109,7 @@ src/fusion_ocr/
   pipeline.py        Stage protocol + orchestration + resume
   config.py          config + airgap guard
   settings.py        settings registry — what's surfaceable vs runtime-configurable
+  raster.py          page-raster cache — render a page once, share across stages
   jobs.py            SQLite job table (idempotent by content hash)
   watcher.py         drop-folder entrypoint
   api.py             HTTP job + config API (stable contract for callers)
