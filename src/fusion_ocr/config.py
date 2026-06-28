@@ -60,6 +60,12 @@ class Config:
     # what protects the handwriting path (garbled det_text at low conf, VLM is the truth).
     fuse_min_sim: float = 0.34
     fuse_det_conf_trust: float = 0.80
+    # Drop-folder watcher: move a file out of in_dir once handled — processed/ on success,
+    # failed/ on error — so the backlog isn't re-hashed on every scan. The watch loop
+    # honours this; `--once` never moves (a manual re-run shouldn't disturb the folder).
+    move_processed: bool = True
+    # API ingest guard: reject an upload larger than this (MB) with 413, before it's hashed.
+    max_upload_mb: float = 50.0
     vlm: VLMConfig = None  # type: ignore[assignment]
     # per-script routing overrides: {script: {paddle_lang, vlm_model, vlm_base_url}}
     routes: dict = None  # type: ignore[assignment]
@@ -90,6 +96,8 @@ def load(path: str | Path = "config.toml") -> Config:
         table_vlm_read=run.get("table_vlm_read", True),
         fuse_min_sim=run.get("fuse_min_sim", 0.34),
         fuse_det_conf_trust=run.get("fuse_det_conf_trust", 0.80),
+        move_processed=run.get("move_processed", True),
+        max_upload_mb=run.get("max_upload_mb", 50.0),
         vlm=VLMConfig(
             base_url=vlm.get("base_url", "http://localhost:8080/v1"),
             model=vlm.get("model", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),

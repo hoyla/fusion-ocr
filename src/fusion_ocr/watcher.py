@@ -18,9 +18,21 @@ from .jobs import JobStore
 from .pipeline import process, sha256_of
 
 
+def _move_out(pdf: Path, in_dir: Path, subdir: str, digest: str) -> None:
+    """Move a handled file into in_dir/<subdir>/<digest>.pdf (collision-free, ties it to its
+    job). The glob is non-recursive, so files here aren't re-scanned. Best-effort: a failed
+    move is logged, not fatal."""
+    target_dir = in_dir / subdir
+    target_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        pdf.replace(target_dir / f"{digest}.pdf")   # atomic within the same filesystem
+    except OSError as exc:
+        print(f"[warn] could not move {pdf.name} -> {subdir}/: {exc}", file=sys.stderr)
+
+
 def scan_once(cfg: config_mod.Config, jobs: JobStore,
               force: bool = False, rerun_from: str | None = None,
-              min_settle: float = 2.0) -> int:
+              min_settle: float = 2.0, move_processed: bool = False) -> int:
     in_dir = Path(cfg.in_dir)
     in_dir.mkdir(parents=True, exist_ok=True)
     processed = 0
@@ -43,9 +55,13 @@ def scan_once(cfg: config_mod.Config, jobs: JobStore,
             print(f"[done] {pdf.name} -> out/{digest}/  "
                   f"({len(doc.artifacts)} artifacts)")
             processed += 1
+            if move_processed:
+                _move_out(pdf, in_dir, "processed", digest)
         except Exception as exc:  # noqa: BLE001 — surface, don't crash the loop
             jobs.set_status(digest, "error", str(exc))
             print(f"[error] {pdf.name}: {exc}", file=sys.stderr)
+            if move_processed:
+                _move_out(pdf, in_dir, "failed", digest)
     return processed
 
 
@@ -70,12 +86,13 @@ def main() -> None:
     print(f"[watch] {cfg.in_dir}/  ->  {cfg.out_dir}/   (vlm: {cfg.vlm.base_url})")
 
     if args.once:
+        # --once never moves: a manual re-run shouldn't disturb the drop folder.
         scan_once(cfg, jobs, force=args.force, rerun_from=args.rerun_from)
         return
     # Loop mode watches for NEW files; --force/--rerun-from are for one-shot reprocessing.
     try:
         while True:
-            scan_once(cfg, jobs)
+            scan_once(cfg, jobs, move_processed=cfg.move_processed)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         print("\n[stop]")

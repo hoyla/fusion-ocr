@@ -27,6 +27,8 @@ and this table are generated from. `GET /config` returns every row below (secret
 | `table_vlm_read` | `true` | bool | Route detected table regions on **scanned** pages to a focused VLM table read (crop + table prompt). Geometry still comes from the deterministic grid; this only supplies clean cell content. Born-digital tables are left to the exact text layer. |
 | `fuse_min_sim` | `0.34` | `0.0`–`1.0` | Fusion anti-misalignment gate. Needleman–Wunsch always pairs a detected cluster with *some* VLM line; below this det↔VLM similarity the aligned line is treated as a misalignment, not a correction. |
 | `fuse_det_conf_trust` | `0.80` | `0.0`–`1.0` | The other half of the gate: only *refuse* a dissimilar line when the detector was at least this confident. This is what protects the handwriting path — garbled `det_text` at low confidence never overrides the VLM read, which there is the truth. |
+| `move_processed` | `true` | bool | Watcher moves a handled file to `in/processed/<sha>.pdf` (success) or `in/failed/<sha>.pdf` (error), so the drop folder doesn't accumulate and re-hash on every scan. **Loop only** — `--once` never moves, so a manual re-run doesn't disturb the folder. |
+| `max_upload_mb` | `50` | `≥ 1.0` | `POST /jobs` rejects an upload larger than this with **413**, streamed and checked *before* the body is hashed or processed (a non-PDF body is **415**). |
 
 `[vlm]` section — the reader endpoint (the runtime is a free variable):
 
@@ -52,6 +54,8 @@ that keys the resume cache. So a `PATCH /config` that changes, say, `fuse_min_si
 re-keys the cache: the next job on a previously-seen PDF **reprocesses** with the new value
 rather than silently returning a stale result. The read-only fields are either security
 (`airgap`) or identity (`in_dir`/`out_dir`/`routes`) and don't belong on a live HTTP path.
+`move_processed` and `max_upload_mb` are settable but govern ingest/ops, not OCR output, so
+they're deliberately **not** fingerprinted.
 
 ## The job + config API (`api` extra)
 
@@ -64,6 +68,9 @@ now or in a VPC later.
 | `GET /jobs/{sha256}` | — | `{sha256, status, error, artifacts}` |
 | `GET /config` | — | `{settings: [{path, value, settable, kind, min?, max?, choices?, help?}, …]}` |
 | `PATCH /config` | `{path: value, …}` | `{path: value, …}` (new values, secrets masked) |
+
+`POST /jobs` streams the upload to disk in chunks (never the whole body in memory), rejecting
+a non-PDF with **415** and one over `max_upload_mb` with **413** before it's hashed.
 
 `PATCH /config` validates the **whole** body before applying anything (all-or-nothing) and
 returns HTTP 400 with a `detail` message for an unknown setting, a read-only setting, or an

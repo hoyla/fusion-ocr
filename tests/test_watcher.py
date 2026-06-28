@@ -44,3 +44,37 @@ def test_settled_file_processed_with_passed_digest(tmp_path, monkeypatch):
     monkeypatch.setattr(watcher_mod, "process", _stub_process(ran))
     assert watcher_mod.scan_once(cfg, jobs, min_settle=0.0) == 1   # no settle window
     assert ran == [sha256_of(pdf)]                                 # passed through, not re-hashed
+
+
+def test_processed_file_is_moved_and_not_rescanned(tmp_path, monkeypatch):
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out")
+    pdf = _drop(tmp_path / "in")
+    jobs = JobStore(tmp_path / "jobs.sqlite")
+    monkeypatch.setattr(watcher_mod, "process", _stub_process([]))
+    assert watcher_mod.scan_once(cfg, jobs, min_settle=0.0, move_processed=True) == 1
+    assert not pdf.exists()                                        # moved out of in/
+    assert len(list((tmp_path / "in" / "processed").glob("*.pdf"))) == 1
+    # the moved file isn't re-globbed (in/processed is a subdir) -> nothing to do next scan
+    assert watcher_mod.scan_once(cfg, jobs, min_settle=0.0, move_processed=True) == 0
+
+
+def test_failed_file_moved_to_failed(tmp_path, monkeypatch):
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out")
+    pdf = _drop(tmp_path / "in")
+    jobs = JobStore(tmp_path / "jobs.sqlite")
+
+    def _boom(*a, **k):
+        raise RuntimeError("nope")
+    monkeypatch.setattr(watcher_mod, "process", _boom)
+    watcher_mod.scan_once(cfg, jobs, min_settle=0.0, move_processed=True)
+    assert not pdf.exists()
+    assert len(list((tmp_path / "in" / "failed").glob("*.pdf"))) == 1
+
+
+def test_no_move_by_default(tmp_path, monkeypatch):
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out")
+    pdf = _drop(tmp_path / "in")
+    jobs = JobStore(tmp_path / "jobs.sqlite")
+    monkeypatch.setattr(watcher_mod, "process", _stub_process([]))
+    watcher_mod.scan_once(cfg, jobs, min_settle=0.0)              # default: --once semantics
+    assert pdf.exists()                                           # left in place

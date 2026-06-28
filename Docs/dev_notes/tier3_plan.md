@@ -79,6 +79,10 @@ responds while a job runs.
 
 ## 3. Upload size limit + content sniff
 
+**✅ Done** — `_save_upload` streams the upload in 1 MiB chunks, sniffs the `%PDF-` header
+(415) and enforces `cfg.max_upload_mb` (413) before hashing, cleaning up the partial file on
+rejection. New settable setting `max_upload_mb` (default 50).
+
 **Problem.** `api.py:46` — `dest.write_bytes(await pdf.read())` reads the entire upload
 into memory with no ceiling and no type check before hashing/processing.
 
@@ -117,6 +121,10 @@ per the fail-closed decision.
 ---
 
 ## 5. Watcher — move processed files out of `in/`
+
+**✅ Done** — on success a file moves to `in/processed/<sha>.pdf`, on error to
+`in/failed/<sha>.pdf` (the glob is non-recursive, so they're not re-scanned). New settable
+setting `move_processed` (default on); the watch loop honours it, `--once` never moves.
 
 **Problem.** `watcher.py` globs `in/*.pdf` and `sha256_of`-hashes **every settled file on
 every 2s tick**; processed files are never moved, so the whole backlog is re-hashed forever

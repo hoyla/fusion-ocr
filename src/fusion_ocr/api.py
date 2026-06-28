@@ -34,6 +34,36 @@ def _is_sha256(s: str) -> bool:
     return len(s) == 64 and all(c in "0123456789abcdef" for c in s.lower())
 
 
+_PDF_MAGIC = b"%PDF-"
+_UPLOAD_CHUNK = 1 << 20   # 1 MiB
+
+
+async def _save_upload(pdf, dest: Path, max_mb: float, http_exc) -> None:
+    """Stream an upload to `dest`, enforcing a size cap and a PDF content sniff so a huge or
+    non-PDF body is rejected before it's hashed/processed. Reads in chunks (never the whole
+    file into memory), raises http_exc(413) past the cap and http_exc(415) if the bytes
+    aren't a PDF, and removes the partial file on any rejection."""
+    max_bytes = int(max_mb * 1024 * 1024)
+    total, sniffed = 0, False
+    try:
+        with dest.open("wb") as f:
+            while chunk := await pdf.read(_UPLOAD_CHUNK):
+                if not sniffed:
+                    if _PDF_MAGIC not in chunk[:1024]:
+                        raise http_exc(status_code=415, detail="not a PDF (no %PDF- header)")
+                    sniffed = True
+                total += len(chunk)
+                if total > max_bytes:
+                    raise http_exc(status_code=413,
+                                   detail=f"upload exceeds the {max_mb:g} MB limit")
+                f.write(chunk)
+        if not sniffed:
+            raise http_exc(status_code=415, detail="empty upload")
+    except BaseException:
+        dest.unlink(missing_ok=True)   # don't leave a partial / oversized file in in/
+        raise
+
+
 def create_app(cfg=None):  # lazy so the api extra isn't needed unless you serve HTTP
     from fastapi import FastAPI, HTTPException, UploadFile
 
@@ -50,7 +80,7 @@ def create_app(cfg=None):  # lazy so the api extra isn't needed unless you serve
     @app.post("/jobs")
     async def submit(pdf: UploadFile, force: bool = False, rerun_from: str | None = None):
         dest = in_dir / _safe_name(pdf.filename)
-        dest.write_bytes(await pdf.read())
+        await _save_upload(pdf, dest, cfg.max_upload_mb, HTTPException)
         digest = sha256_of(dest)
         newly = jobs.upsert_queued(digest, str(dest))
         if newly or force or rerun_from:     # explicit reprocess overrides the seen-check

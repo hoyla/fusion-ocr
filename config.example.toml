@@ -34,6 +34,11 @@ table_vlm_read = true
 # surfaceable + tunable at runtime via the API (GET/PATCH /config).
 fuse_min_sim = 0.34
 fuse_det_conf_trust = 0.80
+# Watcher: move a handled file out of in_dir (processed/ on success, failed/ on error) so the
+# drop folder doesn't accumulate and get re-hashed on every scan. Loop only; --once never moves.
+move_processed = true
+# API ingest guard: reject an upload larger than this many MB with 413, before it's hashed.
+max_upload_mb = 50
 
 [vlm]
 # DEFAULT generalist reader. Ollama / MLX / vLLM all speak this OpenAI-compatible API,
