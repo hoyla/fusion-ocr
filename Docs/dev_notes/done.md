@@ -10,8 +10,11 @@ the big remediations is in the review/plan notes — this is the index, not a du
 - Deterministic geometry + VLM reading, fused with the **ink-gate**; provenance retained
   (`det_text` / `vlm_text` / `source` / `read_by` / `superseded`).
 - **Headline proof:** the handwritten Mandelson→Lammy note — 6 source chars → ~3,185
-  searchable chars, fully local. Now *measured*: **0.95 word recall** vs a hand transcript of
-  the 2-page letter, where the deterministic engines (PaddleOCR / Apple Vision) manage ≈0.45.
+  searchable chars, fully local. Now *measured* old-vs-new against a hand transcript of the
+  2-page letter (word recall): **tesseract ~0.10 → deterministic engines (PaddleOCR / Apple
+  Vision) ~0.45 → our VLM pipeline ~0.95** — a ~10× recall gain over the old (Giant) stack,
+  which recovered only the printed header/footer and essentially nothing of the handwriting.
+  (n=1, the canonical reject.)
 - Two-axis routing ([routing.md](../routing.md)): Apple Vision cheap tier, Typhoon Thai
   specialist, Qwen3-VL generalist via MLX.
 - Layout PP-DocLayoutV2 (learned reading order); classified SLANeXt scanned tables;

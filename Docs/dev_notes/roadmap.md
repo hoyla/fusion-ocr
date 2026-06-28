@@ -10,33 +10,39 @@ real, not before.
 
 ## Now / near-term
 
-- **Expand the hand-labelled eval set.** Scaffold + first baseline shipped (see
+- **Expand the hand-labelled eval set (non-Thai).** Scaffold + first baseline shipped (see
   [done.md](done.md)): `--labels` manifest with multi-page spans, `--no-vlm` to isolate the
   deterministic engine, guide in [eval-labelling.md](../eval-labelling.md). Four hard pages are
-  labelled (handwritten Mandelson letter, a printed-email scan, a rotated page, a redacted scan),
-  giving the first measured numbers (VLM ~0.92 aggregate recall, handwriting ~0.95). The
-  born-digital ~95% is only a difficulty floor, so the work now is **breadth**: label more hard
-  pages to grow it past n=4, and source **Thai** ground truth — the Thai scan was dropped for
-  want of a Thai reader. (The big-corpus alternative is the 3rd-party SROIE/FUNSD set under
-  *Later → Input formats*, once images can be ingested.)
-- **The "Giant rejects" eval** — old (tesseract / OCRmyPDF) vs new on the real reject corpus.
-  This is the headline value claim, measured rather than asserted.
-- **Word-level overlay subdivision** for precise click-to-highlight. Honest word boxes only
-  from the Apple Vision per-word API / PyMuPDF `words` — *not* proportional splitting (that
-  manufactures precision; principle: calibrate, don't manufacture).
-- **Thai overlay search reliability** (combining vowels / tone marks, NFC vs NFD). Reading is
-  solid; reliable highlight is the remaining gap.
+  labelled, with the first measured numbers (VLM ~0.92 aggregate recall, handwriting ~0.95). The
+  born-digital ~95% is only a difficulty floor, so the work now is **breadth**: label more
+  **non-Thai** hard pages (handwriting, degraded scans, the rotations / redactions in test set 1).
+  Thai ground truth is parked under Next (no Thai reader); the big-corpus alternative is the
+  3rd-party SROIE/FUNSD set under *Later → Input formats*, once images can be ingested.
+- **VLM client hardening** (pulled up from Next — no external dependency, the most actionable
+  robustness work; [review_01](review_01_260627.md)): a `max_tokens` cap (a pathological page can
+  otherwise generate until the 600s timeout — latency/cost on a shared GPU); retry/backoff on a
+  transient 5xx (today a 503 becomes a silent empty read → `det_text` fallback); reuse one
+  `httpx.Client` (keep-alive) instead of one per page; and **JPEG** rather than PNG base64 (a
+  150-DPI page is multi-MB, +33% for base64 — matters on the remote-reader / in-VPC path).
 
 ## Next
 
-- **VLM client hardening** ([review_01](review_01_260627.md)): a `max_tokens` cap (a
-  pathological page can otherwise generate until the 600s timeout — latency/cost on a shared
-  GPU); retry/backoff on a transient 5xx (today a 503 becomes a silent empty read →
-  `det_text` fallback); reuse one `httpx.Client` (keep-alive) instead of one per page; and
-  **JPEG** rather than PNG base64 (a 150-DPI page is multi-MB, +33% for base64 — matters on
-  the remote-reader / in-VPC path).
 - **Tables:** multi-level-header semantics for `find_tables`; cross-validate `find_tables` vs
   the vision grid; cleaner per-cell content on scanned tables.
+- **Thai ground truth for the eval** — *parked from near-term:* needs a Thai reader. The Thai
+  scan was dropped from the labelled set for this reason; pick it up when a reader is available.
+- **Thai overlay search reliability** — *parked from near-term:* combining vowels / tone marks,
+  NFC vs NFD; reading is solid, reliable highlight is the gap. Also needs a Thai reader to verify.
+- **Word-level overlay subdivision** — *parked from near-term, behind a trigger:* revisit only if
+  **line-level** highlighting proves inadequate in real reporter use. Honest word boxes would come
+  from the Apple Vision per-word API / PyMuPDF `words` (never proportional splitting — that
+  manufactures precision), but it adds an alignment step over fusion that can itself err, and
+  per-word geometry isn't always available (PaddleOCR detection is line-level). Don't build the
+  refinement before the simpler thing is shown wanting (*look before infra*).
+- **"Giant rejects" eval at corpus scale** — *parked from near-term:* needs more reject documents
+  than test set 1 holds. The *small* old-vs-new comparison is **done** (Mandelson letter:
+  tesseract ~0.10 vs our ~0.95 word recall — see [done.md](done.md)); the corpus-scale version
+  waits on a larger reject set.
 - **Reading order:** actually measure it. The hand-labelled transcripts (in true visual order)
   are now that oracle — CER against them folds in reading order, unlike the born-digital text
   layer — so what remains is scoring multi-column / complex layouts against the labelled set as
