@@ -36,6 +36,7 @@ def test_surface_masks_secrets_and_marks_readonly():
     assert by_path["in_dir"]["settable"] is False
     assert by_path["routes"]["settable"] is False
     assert by_path["api_host"]["settable"] is False       # bind address is startup-only
+    assert by_path["forwarded_allow_ips"]["settable"] is False
 
 
 def test_apply_sets_allowlisted_value():
@@ -94,13 +95,15 @@ def test_tunable_change_rekeys_recipe_fingerprint():
 def test_config_save_round_trips(tmp_path):
     pytest.importorskip("tomli_w", reason="needs the api extra")
     cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out", airgap=False,
-                            api_host="0.0.0.0", api_port=9000)
+                            api_host="0.0.0.0", api_port=9000,
+                            forwarded_allow_ips="10.0.0.0/8")
     settings_mod.apply(cfg, {"fuse_min_sim": 0.5, "vlm.base_url": "http://localhost:9001/v1"})
     back = config_mod.load(config_mod.save(cfg, tmp_path / "config.toml"))
     assert back.fuse_min_sim == 0.5
     assert back.vlm.base_url == "http://localhost:9001/v1"
     assert back.airgap is False                          # read-only fields persist too
     assert back.api_host == "0.0.0.0" and back.api_port == 9000
+    assert back.forwarded_allow_ips == "10.0.0.0/8"
 
 
 def test_config_endpoints_roundtrip(tmp_path):

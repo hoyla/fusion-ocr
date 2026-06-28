@@ -103,8 +103,9 @@ to start without one) and send `Authorization: Bearer …`. Security/identity fi
 unseal the airgap tier or repoint paths. A tuning change re-keys the resume cache, so the
 next job reprocesses rather than reusing a stale result. To reach it from other machines on
 your LAN, set `api_host = "0.0.0.0"` and serve — see
-**[Docs/configuration.md](Docs/configuration.md)** for the full settings table, endpoint
-details, and the local-network setup (airgap + TLS notes).
+**[Docs/configuration.md](Docs/configuration.md)** for the full settings table and endpoint
+details, and **[Docs/deployment.md](Docs/deployment.md)** for a TLS deployment behind nginx
+(sample configs in [`deploy/`](deploy)).
 
 ## Layout
 

@@ -57,6 +57,8 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("api_host", "str", settable=False,
             help="HTTP bind address (startup-only); 0.0.0.0 or a LAN IP to expose on the network"),
     Setting("api_port", "int", settable=False, help="HTTP port (startup-only)"),
+    Setting("forwarded_allow_ips", "str", settable=False,
+            help="trust X-Forwarded-* from these proxy IPs (startup-only)"),
     Setting("fuse_min_sim", "float", settable=True, lo=0.0, hi=1.0,
             help="fusion gate: min det<->VLM similarity to accept an aligned line"),
     Setting("fuse_det_conf_trust", "float", settable=True, lo=0.0, hi=1.0,

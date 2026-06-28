@@ -161,7 +161,10 @@ def main() -> None:
     cfg = config_mod.load()
     where = "localhost only" if cfg.api_host in ("127.0.0.1", "localhost") else "LAN-reachable"
     print(f"[serve] http://{cfg.api_host}:{cfg.api_port}  ({where}; bearer token required)")
-    uvicorn.run("fusion_ocr.api:app", host=cfg.api_host, port=cfg.api_port)
+    # proxy_headers: behind a TLS-terminating reverse proxy (see Docs/deployment.md), trust
+    # X-Forwarded-* only from forwarded_allow_ips so the app sees the real client IP/scheme.
+    uvicorn.run("fusion_ocr.api:app", host=cfg.api_host, port=cfg.api_port,
+                proxy_headers=True, forwarded_allow_ips=cfg.forwarded_allow_ips)
 
 
 def __getattr__(name: str):

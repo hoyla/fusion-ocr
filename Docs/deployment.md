@@ -1,0 +1,90 @@
+# Deploying behind nginx + TLS
+
+The job API speaks plain HTTP and authenticates with a bearer token. For a real deployment,
+put it behind a reverse proxy that terminates TLS, so the token and the documents travel
+encrypted. This is the groundwork; sample configs are in [`deploy/`](../deploy).
+
+```
+client ──HTTPS──▶ nginx :443  ──HTTP──▶ fusion-ocr-serve  127.0.0.1:8000
+                 (TLS, certs)          (localhost only, bearer-token auth)
+                                        │
+                                        └─▶ reader (VLM) — loopback, or another host if airgap=false
+```
+
+The backend stays on **localhost**; only nginx is exposed on the network. nginx terminates
+TLS and forwards requests (with the `Authorization` header intact) to the app, which still
+enforces the token.
+
+## 1. Backend config (`config.toml`)
+
+```toml
+[run]
+api_host = "127.0.0.1"          # behind the proxy — NOT 0.0.0.0; only nginx faces the network
+api_port = 8000                 # must match the upstream in the nginx config
+forwarded_allow_ips = "127.0.0.1"   # trust X-Forwarded-* from the colocated proxy
+max_upload_mb = 50              # nginx client_max_body_size must be >= this
+```
+
+The bearer token is **env, not config**: `FUSION_OCR_API_TOKEN` (the API won't start without
+it). On Linux it lives in the systemd `EnvironmentFile`; see [`deploy/fusion-ocr.service`](../deploy/fusion-ocr.service).
+
+Run it with `fusion-ocr-serve` (it enables `proxy_headers` so the app sees the real client IP
+and the `https` scheme via `forwarded_allow_ips`).
+
+## 2. Certificates
+
+- **Internal / testing — self-signed** (fine on a trusted estate; clients must trust the cert):
+  ```bash
+  openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+    -keyout privkey.pem -out fullchain.pem -subj "/CN=ocr.internal.example"
+  ```
+- **Proper CA** — Let's Encrypt (`certbot --nginx`) if the host has a public DNS name, or your
+  organisation's internal CA for an on-estate name. Point `ssl_certificate` /
+  `ssl_certificate_key` at the issued files.
+
+## 3. nginx
+
+Copy [`deploy/nginx.fusion-ocr.conf`](../deploy/nginx.fusion-ocr.conf), fill the
+`<PLACEHOLDERS>` (hostname, cert paths, backend port), then `nginx -t && systemctl reload nginx`.
+
+**Two settings that bite if you skip them:**
+- `client_max_body_size` must be **≥ `max_upload_mb`** or nginx 413s the upload before the app
+  can apply its own (more informative) limit.
+- `proxy_read_timeout` / `proxy_send_timeout` must cover your **worst-case job time**.
+  `POST /jobs` holds the connection until the OCR finishes (seconds to minutes on a big or
+  handwritten PDF); the nginx default of 60s will 504. The sample uses 600s.
+
+> **Long jobs.** Because submit is synchronous, a slow PDF ties up a connection for its whole
+> run. That's fine at MVP volume. If it becomes a problem, the cleaner shape is to have
+> `POST /jobs` return `202 queued` immediately and have clients poll `GET /jobs/{sha256}`
+> (which already exists) — a background-worker change to revisit when throughput grows.
+
+## 4. Run as a service (Linux)
+
+Install [`deploy/fusion-ocr.service`](../deploy/fusion-ocr.service), drop the token into
+`/etc/fusion-ocr/fusion-ocr.env` (root-owned, `chmod 600`), then
+`systemctl enable --now fusion-ocr`. On macOS use launchd / `brew services`; in a container,
+run `fusion-ocr-serve` as the entrypoint with the token injected as an env var.
+
+## Simpler alternative: Caddy (automatic TLS)
+
+If you'd rather not manage certs, Caddy auto-provisions and renews them. The whole config is:
+
+```caddyfile
+ocr.internal.example {
+    request_body { max_size 60MB }
+    reverse_proxy 127.0.0.1:8000 {
+        transport http { read_timeout 600s }
+    }
+}
+```
+
+## Security checklist
+
+- [ ] `FUSION_OCR_API_TOKEN` set to a strong random value; never committed, never in `config.toml`.
+- [ ] Backend on `127.0.0.1` — confirm it's **not** also reachable on `0.0.0.0` (only nginx should be).
+- [ ] TLS only; HTTP 301-redirects to HTTPS (the sample does this).
+- [ ] `client_max_body_size` ≥ `max_upload_mb`; proxy timeouts ≥ worst-case job.
+- [ ] If the reader (VLM) is on another host, `airgap = false` and `vlm.base_url` is that
+      host's **IP** — otherwise keep `airgap = true` with a loopback reader.
+- [ ] Firewall: only 443 (and 80 for the redirect) open to the network.

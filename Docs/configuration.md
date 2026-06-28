@@ -31,6 +31,7 @@ and this table are generated from. `GET /config` returns every row below (secret
 | `max_upload_mb` | `50` | `≥ 1.0` | `POST /jobs` rejects an upload larger than this with **413**, streamed and checked *before* the body is hashed or processed (a non-PDF body is **415**). |
 | `api_host` | `"127.0.0.1"` | **read-only** | Bind address for `fusion-ocr-serve` (startup-only — a live server isn't rebound). Localhost by default; set `"0.0.0.0"` or a specific LAN IP to expose it on the network. Use an IP literal under airgap (a hostname needs DNS, which the seal refuses). |
 | `api_port` | `8000` | **read-only** | HTTP port for `fusion-ocr-serve` (startup-only). |
+| `forwarded_allow_ips` | `"127.0.0.1"` | **read-only** | Behind a reverse proxy, trust `X-Forwarded-*` (client IP, https scheme) only from these source IPs (startup-only). See [deployment.md](deployment.md). |
 
 `[vlm]` section — the reader endpoint (the runtime is a free variable):
 
@@ -137,4 +138,5 @@ DNS, which the seal refuses). Keep airgap on only when the reader is loopback on
 are unencrypted. That's acceptable on a trusted network between your own machines; for
 confidential material crossing anything less trusted, put `fusion-ocr-serve` behind a reverse
 proxy that terminates TLS (Caddy/nginx). The app contract is unchanged — only the address
-your clients hit moves to the proxy.
+your clients hit moves to the proxy. **Sample nginx + systemd configs and a full walkthrough:
+[deployment.md](deployment.md).**

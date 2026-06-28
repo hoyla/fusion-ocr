@@ -71,6 +71,10 @@ class Config:
     # airgap — a hostname would need a DNS lookup, which the seal refuses.
     api_host: str = "127.0.0.1"
     api_port: int = 8000
+    # Behind a reverse proxy: trust X-Forwarded-* (client IP, https scheme) only from these
+    # source IPs. Default 127.0.0.1 = a proxy colocated on this host; widen if the proxy is
+    # on another machine. A direct client's forged headers are ignored (its IP won't match).
+    forwarded_allow_ips: str = "127.0.0.1"
     vlm: VLMConfig = None  # type: ignore[assignment]
     # per-script routing overrides: {script: {paddle_lang, vlm_model, vlm_base_url}}
     routes: dict = None  # type: ignore[assignment]
@@ -105,6 +109,7 @@ def load(path: str | Path = "config.toml") -> Config:
         max_upload_mb=run.get("max_upload_mb", 50.0),
         api_host=run.get("api_host", "127.0.0.1"),
         api_port=run.get("api_port", 8000),
+        forwarded_allow_ips=run.get("forwarded_allow_ips", "127.0.0.1"),
         vlm=VLMConfig(
             base_url=vlm.get("base_url", "http://localhost:8080/v1"),
             model=vlm.get("model", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),
@@ -136,6 +141,7 @@ def to_toml_dict(cfg: Config) -> dict:
             "max_upload_mb": cfg.max_upload_mb,
             "api_host": cfg.api_host,
             "api_port": cfg.api_port,
+            "forwarded_allow_ips": cfg.forwarded_allow_ips,
         },
         "vlm": {
             "base_url": cfg.vlm.base_url,

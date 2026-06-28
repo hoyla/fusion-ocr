@@ -1,0 +1,33 @@
+# systemd unit for the fusion-ocr job API (Linux hosts).
+#   sudo cp deploy/fusion-ocr.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now fusion-ocr
+# macOS host? Use launchd or `brew services` instead; the env/command are the same.
+
+[Unit]
+Description=fusion-ocr job API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fusion-ocr
+WorkingDirectory=/opt/fusion-ocr
+
+# Secrets live here, NOT in the unit: a root-owned, chmod-600 file holding at least
+#   FUSION_OCR_API_TOKEN=<random>
+# (the API refuses to start without it). Add HF_TOKEN etc. here too if needed.
+EnvironmentFile=/etc/fusion-ocr/fusion-ocr.env
+
+ExecStart=/opt/fusion-ocr/.venv/bin/fusion-ocr-serve
+Restart=on-failure
+RestartSec=5
+
+# Hardening — the service only needs to read the repo and write in/ and out/.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/fusion-ocr/in /opt/fusion-ocr/out
+
+[Install]
+WantedBy=multi-user.target
