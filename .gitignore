@@ -4,6 +4,10 @@
 /models/*
 !**/.gitkeep
 
+# Local machine config (paths, endpoints, reader api_key) — never committed.
+# config.example.toml is the committed template; config.toml is per-machine.
+/config.toml
+
 # Python
 __pycache__/
 *.py[cod]
