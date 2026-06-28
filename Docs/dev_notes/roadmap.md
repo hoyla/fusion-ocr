@@ -10,13 +10,15 @@ real, not before.
 
 ## Now / near-term
 
-- **Hand-labelled eval set** for degraded scans + handwriting. The born-digital eval
-  (~95% recall) is a *difficulty floor* — rendered-clean pages flatter the system; the hard
-  cases need real labels to measure. _Scaffold built_ (`python -m fusion_ocr.eval --labels`,
-  manifest + transcript stubs in `eval_labels/`, guide in [eval-labelling.md](../eval-labelling.md)).
-  **Pending = the human transcription**: fill the `.txt` files for the five seeded hard pages
-  (handwritten Mandelson note, a Thai scan, a rotated page, a redacted scan). Transcripts give
-  a true reading-order oracle too, so this also covers the Reading-order item under Next.
+- **Expand the hand-labelled eval set.** Scaffold + first baseline shipped (see
+  [done.md](done.md)): `--labels` manifest with multi-page spans, `--no-vlm` to isolate the
+  deterministic engine, guide in [eval-labelling.md](../eval-labelling.md). Four hard pages are
+  labelled (handwritten Mandelson letter, a printed-email scan, a rotated page, a redacted scan),
+  giving the first measured numbers (VLM ~0.92 aggregate recall, handwriting ~0.95). The
+  born-digital ~95% is only a difficulty floor, so the work now is **breadth**: label more hard
+  pages to grow it past n=4, and source **Thai** ground truth — the Thai scan was dropped for
+  want of a Thai reader. (The big-corpus alternative is the 3rd-party SROIE/FUNSD set under
+  *Later → Input formats*, once images can be ingested.)
 - **The "Giant rejects" eval** — old (tesseract / OCRmyPDF) vs new on the real reject corpus.
   This is the headline value claim, measured rather than asserted.
 - **Word-level overlay subdivision** for precise click-to-highlight. Honest word boxes only
@@ -35,9 +37,10 @@ real, not before.
   the remote-reader / in-VPC path).
 - **Tables:** multi-level-header semantics for `find_tables`; cross-validate `find_tables` vs
   the vision grid; cleaner per-cell content on scanned tables.
-- **Reading order:** a hand-labelled set to actually measure order (CER is reading-order-noisy
-  on multi-column, so it isn't a reliable oracle today). The hand-labelled eval set above is
-  this oracle — transcripts are in true visual order — so it lands with that work.
+- **Reading order:** actually measure it. The hand-labelled transcripts (in true visual order)
+  are now that oracle — CER against them folds in reading order, unlike the born-digital text
+  layer — so what remains is scoring multi-column / complex layouts against the labelled set as
+  it grows.
 - **Qwen3.5-VL re-test** when its MLX build lands (was a statistical tie with Qwen3-VL-8B;
   revisit then).
 - **Result push for non-airgap tiers:** an optional webhook / callback on completion. The
