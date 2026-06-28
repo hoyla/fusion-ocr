@@ -47,6 +47,26 @@ Capability beyond the MVP target:
   rotated pages ([review_02](review_02_2602627.md) #8). Add support when rotated scans turn
   up in the corpus.
 
+Input formats — an **ingest adapter** that normalises any input to a PDF, after which the
+existing pipeline runs unchanged (PDF is the identity case). The original is kept as the
+**canonical source**; the PDF is a derived, provenanced artifact. This is the same workflow
+as Giant's built-in processor, so reuse its approach for parity.
+
+- **Images (PNG / JPEG / TIFF)** — PyMuPDF opens and `convert_to_pdf`s them (multi-page TIFF
+  split via Pillow); they flow straight through the scanned-page path. The most common
+  non-PDF input we receive.
+- **Office (.docx / .xlsx / .pptx)** — convert via LibreOffice headless
+  (`soffice --headless --convert-to pdf`). The existing mixed-content composition then
+  separates content *for free*: digital body text → text layer (not OCR'd, exact), embedded
+  charts / tables / scans → figure/table regions → VLM read. Scope is the **image-borne**
+  text; a pure-text doc is an upstream concern (OCR is the wrong tool for already-digital
+  text). Caveats: LibreOffice is a heavyweight optional `office` extra (pre-pull for the
+  airgap tier); Office files are untrusted (macros — headless doesn't run them, but sandbox
+  it); docx provenance is looser (drill-back is to the rendered page).
+
+> Attach points for the adapter are already marked in the code: the API format gate
+> (`api._save_upload`) and the watcher glob (`watcher.scan_once`) — both accept PDF only today.
+
 Scale-triggered — don't build until the load is real (principle 6, *look before infra*):
 
 - **Distributed queue adapter** (ElasticMQ / SQS, on-estate) implementing the `JobStore`

@@ -55,6 +55,9 @@ async def _save_upload(pdf, dest: Path, max_mb: float, http_exc) -> None:
         with dest.open("wb") as f:
             while chunk := await pdf.read(_UPLOAD_CHUNK):
                 if not sniffed:
+                    # Ingest format gate: PDF only today. The future ingest adapter
+                    # (Docs/dev_notes/roadmap.md) accepts images / Office docs here and
+                    # normalises them to a PDF instead of 415-ing.
                     if _PDF_MAGIC not in chunk[:1024]:
                         raise http_exc(status_code=415, detail="not a PDF (no %PDF- header)")
                     sniffed = True

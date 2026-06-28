@@ -43,6 +43,8 @@ def scan_once(cfg: config_mod.Config, jobs: JobStore,
     processed = 0
     reprocess = force or rerun_from is not None
     now = time.time()
+    # Ingest format boundary: PDF only today. The future ingest adapter (Docs/dev_notes/
+    # roadmap.md) normalises images / Office docs to a PDF here before they reach the queue.
     for pdf in sorted(in_dir.glob("*.pdf")):
         # Settle gate: skip a file still being written (mtime within min_settle of now).
         # Hashing a half-copied drop would key the job under a digest that changes once
