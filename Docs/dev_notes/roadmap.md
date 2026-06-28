@@ -92,9 +92,13 @@ as Giant's built-in processor, so reuse its approach for parity.
 eval-only image path) this becomes a recognition + geometry eval far larger than hand-labelling.
 What's usable, and the traps:
 
-- **SROIE** (`invoice/`, 973 receipts) and **FUNSD** (`form/`, 199 scanned forms) — genuine human
-  GT, in-domain document images. **Use these first.** Ignore their key-value / entity / linking
-  labels (that's downstream analysis, not this tool — principle 1); only the text+box GT applies.
+- **SROIE** (`invoice/`, 973 receipts) — genuine human GT, in-domain; loader + benchmark wired
+  (`eval/datasets.py`, `--dataset sroie`), pairs 98/98 by stem. Ignore its key-value / entity
+  labels (downstream scope, principle 1); only the text GT applies.
+- **FUNSD** (`form/`, 199 scanned forms) — genuine GT in principle, but in THIS packaging the
+  images and annotations have desynchronised filenames (zero stem overlap, no image ref in the
+  JSON), so they can't be paired — `--dataset funsd` yields nothing rather than mispairing. Needs
+  re-pairing from the original FUNSD before use.
 - **IAM** (`document/`, 1539 handwriting pages) — the headline-case prize, BUT the bundled json
   annotations carry a per-line `confidence`: they're an OCR engine's *output*, not human
   transcriptions, so scoring our OCR against them is **circular**. Source IAM's original
@@ -102,8 +106,15 @@ What's usable, and the traps:
 - **Total-Text** (`real_life/`, ~1554) — scene text (photos / signage), arguably **out of the
   document domain**; likely set aside.
 
-Each source needs a small annotation→eval-reference loader (FUNSD/SROIE json, Total-Text txt;
-pixel coords). Fuller analysis in the `dataset-3rdparty-ocr-benchmark` session memory.
+The ingest adapter + SROIE loader are now built, so this is partly explored. **First benchmark
+run** (SROIE test, n=12, via the image→PDF ingest path), aggregate word recall / CER:
+PaddleOCR **0.595 / 0.485**, Apple Vision **0.589 / 0.492**, Qwen3-VL **0.624 / 0.319**. So on
+degraded thermal receipts all three sit ~0.6 recall (a hard-scan floor — faint print, dense
+codes), the VLM leads on recall and clearly on CER (cleaner reading/order), and PaddleOCR ≈ Apple
+Vision (consistent with [[feedback-paddleocr-is-the-deterministic-baseline]]). Not the handwriting
+story (there the VLM was transformational); on printed scans the deterministic engines already do
+most of the work and the VLM refines. To grow this: re-pair FUNSD, add per-source loaders, scale
+n. Fuller analysis in the `dataset-3rdparty-ocr-benchmark` session memory.
 
 Scale-triggered — don't build until the load is real (principle 6, *look before infra*):
 

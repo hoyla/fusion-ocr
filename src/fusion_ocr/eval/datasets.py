@@ -14,6 +14,12 @@ is scene text, out of the document domain.
 
 Note: FUNSD annotation order isn't strict visual reading order, so on forms trust the
 order-INSENSITIVE word recall / precision over CER/WER (the usual caveat).
+
+CAVEAT (this packaging): in samples/file_tests_3rdparty_01 the FUNSD `form/` images and
+annotations have DESYNCHRONISED filenames — zero stem overlap, and the JSON doesn't name
+its image — so they can't be paired here and `iter_pairs("funsd")` yields nothing (it refuses
+to mispair rather than score image A against form B). SROIE pairs correctly (98/98 by stem).
+Use FUNSD only after re-pairing from the original dataset. `funsd_reference` itself is correct.
 """
 
 from __future__ import annotations
