@@ -76,3 +76,36 @@ def test_scored_entry_compares_transcript_to_recovered_text(tmp_path, monkeypatc
     assert res["cer"] == 0.0                  # transcript == recovered text
     assert res["word_recall"] == 1.0
     assert res["word_precision"] == 1.0
+
+
+def test_deterministic_pipeline_drops_only_the_vlm_stages():
+    from fusion_ocr.pipeline import DEFAULT_PIPELINE, deterministic_pipeline
+    names = [s.name for s in deterministic_pipeline()]
+    assert "vlm_read" not in names and "table_read" not in names
+    assert names == [s.name for s in DEFAULT_PIPELINE
+                     if s.name not in ("vlm_read", "table_read")]
+
+
+def test_no_vlm_runs_the_deterministic_pipeline(tmp_path, monkeypatch):
+    (tmp_path / "a.txt").write_text("hello world", encoding="utf-8")
+    manifest = _write_manifest(tmp_path, [
+        {"id": "a", "pdf": "samples/x.pdf", "page": 0, "transcript": "a.txt"},
+    ])
+    monkeypatch.setattr(labels_mod, "_extract_pages", lambda *a, **k: None)
+    monkeypatch.setattr(labels_mod, "recovered_text", lambda page: "hello world")
+
+    captured = {}
+
+    class _Doc:
+        pages = [object()]
+
+    import fusion_ocr.pipeline as pipeline_mod
+
+    def fake_process(pdf, cfg, pipeline=None, **k):
+        captured["names"] = [s.name for s in pipeline] if pipeline is not None else None
+        return _Doc()
+    monkeypatch.setattr(pipeline_mod, "process", fake_process)
+
+    evaluate_labelset(manifest, config_mod.Config(), tmp_root=tmp_path / "t", no_vlm=True)
+    assert captured["names"] is not None
+    assert "vlm_read" not in captured["names"] and "table_read" not in captured["names"]

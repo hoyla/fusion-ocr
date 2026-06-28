@@ -6,9 +6,14 @@ Born-digital (text layer = ground truth, automatic):
 Hand-labelled (human transcripts = ground truth, for scans / handwriting):
   python -m fusion_ocr.eval --labels eval_labels/labelset.json
 
---apple-vision runs server-free (the deterministic engine); omit it to use the configured
-VLM. For the hand-labelled set — degraded scans and handwriting — you usually want the VLM,
-so start the reader (e.g. the MLX server) and omit --apple-vision. CER/WER are
+Engine selection (these compose, so you can A/B the same labels three ways):
+  - default                  PaddleOCR geometry + the configured VLM reader (start the reader)
+  - --no-vlm                 deterministic engine only, no reader — PaddleOCR recognition
+  - --no-vlm --apple-vision  deterministic engine only, on-device — Apple Vision recognition
+
+--no-vlm drops the VLM stages from the pipeline, so it measures the deterministic recogniser
+in isolation without stopping the reader server. For the hand-labelled set — degraded scans
+and handwriting — you usually want the full default (the VLM is the point). CER/WER are
 order-sensitive; word recall/precision are order-insensitive recognition numbers.
 """
 
@@ -58,6 +63,10 @@ def main() -> None:
     ap.add_argument("--config", default="config.toml")
     ap.add_argument("--apple-vision", action="store_true",
                     help="force the on-device engine (no VLM server needed)")
+    ap.add_argument("--no-vlm", action="store_true",
+                    help="deterministic engine only — drop the VLM stages and score the "
+                         "recogniser's own text (PaddleOCR, or Apple Vision with "
+                         "--apple-vision). No reader server needed.")
     args = ap.parse_args()
 
     if not args.labels and not args.pdfs:
@@ -67,9 +76,13 @@ def main() -> None:
     if args.apple_vision:
         cfg.prefer_apple_vision = True
 
+    engine = ("Apple Vision" if args.apple_vision else "PaddleOCR") if args.no_vlm \
+        else f"{'Apple Vision' if args.apple_vision else 'PaddleOCR'} + VLM ({cfg.vlm.model})"
+    print(f"engine: {engine}")
+
     if args.labels:
         from .labels import evaluate_labelset
-        results = evaluate_labelset(args.labels, cfg)
+        results = evaluate_labelset(args.labels, cfg, no_vlm=args.no_vlm)
         if not results:
             print("no labels in the manifest")
             return
@@ -80,7 +93,8 @@ def main() -> None:
 
     from .harness import evaluate
     pages = [int(x) for x in args.pages.split(",")] if args.pages else None
-    results = evaluate([Path(p) for p in args.pdfs], cfg, pages=pages, dpi=args.dpi)
+    results = evaluate([Path(p) for p in args.pdfs], cfg, pages=pages, dpi=args.dpi,
+                       no_vlm=args.no_vlm)
     if not results:
         print("no scorable pages (need a born-digital text layer with enough text)")
         return

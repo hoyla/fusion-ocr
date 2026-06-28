@@ -59,11 +59,12 @@ def recovered_text(page) -> str:
 
 
 def evaluate_pdf(pdf_path, cfg: Config, pages=None, dpi: int = 200,
-                 tmp_root=None) -> list[dict]:
+                 tmp_root=None, no_vlm: bool = False) -> list[dict]:
     """Score selected born-digital pages of one PDF. Returns a per-page score() list
-    (each annotated with pdf/page)."""
+    (each annotated with pdf/page). ``no_vlm=True`` measures the deterministic engine
+    alone (no reader)."""
     import fitz
-    from ..pipeline import process
+    from ..pipeline import deterministic_pipeline, process
 
     pdf_path = Path(pdf_path)
     with fitz.open(pdf_path) as d:
@@ -71,6 +72,7 @@ def evaluate_pdf(pdf_path, cfg: Config, pages=None, dpi: int = 200,
     sel = list(pages) if pages is not None else list(range(n))
     tmp_root = Path(tmp_root or tempfile.mkdtemp(prefix="fusion_eval_"))
     eval_cfg = dataclasses.replace(cfg, out_dir=tmp_root / "out")
+    pipeline = deterministic_pipeline() if no_vlm else None
 
     results = []
     for pi in sel:
@@ -81,14 +83,14 @@ def evaluate_pdf(pdf_path, cfg: Config, pages=None, dpi: int = 200,
             continue
         img_pdf = tmp_root / f"{pdf_path.stem}_p{pi}.pdf"
         make_image_only_pdf(pdf_path, pi, img_pdf, dpi=dpi)
-        doc = process(img_pdf, eval_cfg)
+        doc = process(img_pdf, eval_cfg, pipeline=pipeline)
         hyp = recovered_text(doc.pages[0]) if doc.pages else ""
         results.append({"pdf": str(pdf_path), "page": pi, **score(gt, hyp)})
     return results
 
 
-def evaluate(pdf_paths, cfg: Config, pages=None, dpi: int = 200) -> list[dict]:
+def evaluate(pdf_paths, cfg: Config, pages=None, dpi: int = 200, no_vlm: bool = False) -> list[dict]:
     out: list[dict] = []
     for p in pdf_paths:
-        out += evaluate_pdf(p, cfg, pages=pages, dpi=dpi)
+        out += evaluate_pdf(p, cfg, pages=pages, dpi=dpi, no_vlm=no_vlm)
     return out

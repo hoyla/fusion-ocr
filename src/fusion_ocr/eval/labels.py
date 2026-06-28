@@ -89,14 +89,17 @@ def _extract_pages(src, page_indices: list[int], dst) -> None:
         out.close()
 
 
-def evaluate_labelset(manifest_path, cfg: Config, tmp_root=None) -> list[dict]:
+def evaluate_labelset(manifest_path, cfg: Config, tmp_root=None, no_vlm: bool = False) -> list[dict]:
     """Score every labelled page in a manifest. Each result carries `status`: "scored"
-    (with the metric fields from score()) or "unlabelled" (transcript still empty)."""
-    from ..pipeline import process
+    (with the metric fields from score()) or "unlabelled" (transcript still empty).
+    ``no_vlm=True`` runs the deterministic engine only (no reader) — the recovered text is
+    pure PaddleOCR / Apple Vision recognition."""
+    from ..pipeline import deterministic_pipeline, process
 
     labels = load_labelset(manifest_path)
     tmp_root = Path(tmp_root or tempfile.mkdtemp(prefix="fusion_label_eval_"))
     eval_cfg = dataclasses.replace(cfg, out_dir=tmp_root / "out")
+    pipeline = deterministic_pipeline() if no_vlm else None
 
     results: list[dict] = []
     for lab in labels:
@@ -107,7 +110,7 @@ def evaluate_labelset(manifest_path, cfg: Config, tmp_root=None) -> list[dict]:
             continue
         page_pdf = tmp_root / f"{lab.id}.pdf"
         _extract_pages(lab.pdf, lab.pages, page_pdf)
-        doc = process(page_pdf, eval_cfg)
+        doc = process(page_pdf, eval_cfg, pipeline=pipeline)
         hyp = "\n".join(recovered_text(p) for p in doc.pages)   # concat across the span
         results.append({**base, "status": "scored", **score(ref, hyp)})
     return results

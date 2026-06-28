@@ -47,6 +47,18 @@ DEFAULT_PIPELINE: list[Stage] = [
     Render(),
 ]
 
+_VLM_STAGES = {"vlm_read", "table_read"}
+
+
+def deterministic_pipeline() -> list[Stage]:
+    """DEFAULT_PIPELINE with the VLM stages (vlm_read, table_read) removed — the
+    deterministic engine on its own. Fusion then falls back to the recogniser's det_text,
+    so the recovered reading is pure PaddleOCR / Apple Vision. The eval's --no-vlm uses
+    this to measure a deterministic engine in isolation without stopping the reader server
+    (and it re-keys the resume cache via the changed pipeline shape, so it never collides
+    with a VLM run's snapshots)."""
+    return [s for s in DEFAULT_PIPELINE if s.name not in _VLM_STAGES]
+
 
 def sha256_of(path: Path) -> str:
     h = hashlib.sha256()

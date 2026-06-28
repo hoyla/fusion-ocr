@@ -44,7 +44,7 @@ file waiting for its transcript. **Your job is to fill in those `.txt` files.**
      scored, so you can label incrementally.
 
 3. **Run the eval.** Handwriting and degraded scans need the VLM reader, so start it first
-   (e.g. the MLX server) and *don't* pass `--apple-vision`:
+   (e.g. the MLX server) and run the default:
 
    ```bash
    python -m fusion_ocr.eval --labels eval_labels/labelset.json
@@ -52,6 +52,20 @@ file waiting for its transcript. **Your job is to fill in those `.txt` files.**
 
    You'll get a per-page scorecard plus a micro-averaged aggregate. Run it again whenever you
    add a transcript or change a prompt/model — that's the regression guard.
+
+   **Comparing engines.** Three modes compose over the same labels, so you can A/B which part
+   is doing the work — no need to stop the reader server to isolate the deterministic engine:
+
+   | command | what it measures |
+   | --- | --- |
+   | (default) | PaddleOCR geometry **+ the VLM reader** — the real product output |
+   | `--no-vlm` | **PaddleOCR** recognition alone (drops the VLM stages) |
+   | `--no-vlm --apple-vision` | **Apple Vision** recognition alone (on-device) |
+
+   `--no-vlm` removes the VLM stages from the pipeline entirely, so the recovered text is the
+   deterministic recogniser's own — the honest baseline the VLM is improving on. (PaddleOCR is
+   the deterministic spine; Apple Vision is the fast on-device tier, not a stronger recogniser
+   — on this set it scores lower than PaddleOCR.)
 
 ## Reading the scorecard
 
