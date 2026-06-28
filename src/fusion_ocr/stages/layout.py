@@ -90,7 +90,7 @@ class Layout:
                         kind=_KIND_MAP.get(str(b.get("label", "")).lower(), "other"),
                     )
                     # order from the model (on the upright raster -> correct when rotated)
-                    ranked.append((_rank(b.get("order"), (y0 + y1) / 2, pix.height), region))
+                    ranked.append((_rank(b.get("order"), (y0 + y1) / 2, img.shape[0]), region))
                 ranked.sort(key=lambda t: t[0])
                 page.regions = [r for _, r in ranked]
                 for i, r in enumerate(page.regions):
