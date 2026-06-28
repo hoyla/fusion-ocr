@@ -8,6 +8,9 @@
 # config.example.toml is the committed template; config.toml is per-machine.
 /config.toml
 
+# Per-project secrets (FUSION_OCR_API_TOKEN) — never committed.
+/.env
+
 # Python
 __pycache__/
 *.py[cod]
