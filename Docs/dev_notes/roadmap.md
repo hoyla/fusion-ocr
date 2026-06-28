@@ -41,8 +41,12 @@ real, not before.
   are now that oracle — CER against them folds in reading order, unlike the born-digital text
   layer — so what remains is scoring multi-column / complex layouts against the labelled set as
   it grows.
-- **Qwen3.5-VL re-test** when its MLX build lands (was a statistical tie with Qwen3-VL-8B;
-  revisit then).
+- **Qwen3.5-VL re-test** — trigger now met. An earlier look called it a statistical tie with
+  Qwen3-VL-8B; a trusted MLX **vision** build now exists (`mlx-community/Qwen3.5-9B-MLX-4bit`,
+  apache-2.0, `image-text-to-text`, on HF since 2026-03-02), so a re-test is actionable. Use the
+  `mlx-community` build or self-convert from `Qwen/Qwen3.5-9B` — the Qwen3.5 VLM space has many
+  abliterated / "Heretic" / uncensored MLX-VLM variants; never run a tampered build on
+  confidential material.
 - **Result push for non-airgap tiers:** an optional webhook / callback on completion. The
   sealed (airgap) tier stays poll-only by construction — the process can't dial out — so this
   is a tier-gated enhancement, never the default.
