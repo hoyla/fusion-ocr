@@ -23,6 +23,7 @@ import secrets
 from pathlib import Path
 
 from . import config as config_mod
+from . import ingest
 from . import settings as settings_mod
 from . import storage
 from .jobs import JobStore
@@ -40,26 +41,26 @@ def _is_sha256(s: str) -> bool:
     return len(s) == 64 and all(c in "0123456789abcdef" for c in s.lower())
 
 
-_PDF_MAGIC = b"%PDF-"
 _UPLOAD_CHUNK = 1 << 20   # 1 MiB
 
 
 async def _save_upload(pdf, dest: Path, max_mb: float, http_exc) -> None:
-    """Stream an upload to `dest`, enforcing a size cap and a PDF content sniff so a huge or
-    non-PDF body is rejected before it's hashed/processed. Reads in chunks (never the whole
-    file into memory), raises http_exc(413) past the cap and http_exc(415) if the bytes
-    aren't a PDF, and removes the partial file on any rejection."""
+    """Stream an upload to `dest`, enforcing a size cap and a content sniff so a huge or
+    unsupported body is rejected before it's hashed/processed. Reads in chunks (never the
+    whole file into memory), raises http_exc(413) past the cap and http_exc(415) if the bytes
+    aren't a supported input, and removes the partial file on any rejection. The worker
+    normalises a non-PDF input (image) to a PDF on pickup (see ingest.py)."""
     max_bytes = int(max_mb * 1024 * 1024)
     total, sniffed = 0, False
     try:
         with dest.open("wb") as f:
             while chunk := await pdf.read(_UPLOAD_CHUNK):
                 if not sniffed:
-                    # Ingest format gate: PDF only today. The future ingest adapter
-                    # (Docs/dev_notes/roadmap.md) accepts images / Office docs here and
-                    # normalises them to a PDF instead of 415-ing.
-                    if _PDF_MAGIC not in chunk[:1024]:
-                        raise http_exc(status_code=415, detail="not a PDF (no %PDF- header)")
+                    # Ingest format gate: PDF (identity) or a raster image (PNG/JPEG/TIFF);
+                    # the worker converts images to PDF before processing.
+                    if ingest.sniff_format(chunk[:16]) is None:
+                        raise http_exc(status_code=415,
+                                       detail="unsupported format (expected PDF or PNG/JPEG/TIFF)")
                     sniffed = True
                 total += len(chunk)
                 if total > max_bytes:
