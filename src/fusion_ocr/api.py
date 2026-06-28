@@ -15,6 +15,9 @@ Run: uvicorn fusion_ocr.api:app
 # FastAPI with an unresolvable ForwardRef (it resolves against module globals). Eager
 # annotations bind UploadFile to the real class at def-time. (str | None still evaluates.)
 
+import functools
+import os
+import secrets
 from pathlib import Path
 
 from . import config as config_mod
@@ -64,18 +67,33 @@ async def _save_upload(pdf, dest: Path, max_mb: float, http_exc) -> None:
         raise
 
 
-def create_app(cfg=None):  # lazy so the api extra isn't needed unless you serve HTTP
-    from fastapi import FastAPI, HTTPException, UploadFile
+def create_app(cfg=None, token=None):  # lazy so the api extra isn't needed unless serving
+    import anyio
+    from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
 
     if cfg is None:                      # injectable for tests (skips the airgap seal)
         cfg = config_mod.load()
         if cfg.airgap:
             config_mod.enforce_airgap()
+    if token is None:
+        token = os.environ.get("FUSION_OCR_API_TOKEN", "")
+    if not token:
+        # Fail closed: never serve an unauthenticated API. Set FUSION_OCR_API_TOKEN.
+        # (The watcher / CLI need no token — they don't go through HTTP.)
+        raise RuntimeError(
+            "FUSION_OCR_API_TOKEN is not set — refusing to start an unauthenticated API")
+
+    def _require_auth(authorization: str = Header(default="")):
+        # constant-time compare so a wrong token can't be timed out character by character
+        if not secrets.compare_digest(authorization, f"Bearer {token}"):
+            raise HTTPException(status_code=401, detail="missing or invalid bearer token")
+
     jobs = JobStore(Path(cfg.out_dir) / "jobs.sqlite")
     in_dir = Path(cfg.in_dir)
     in_dir.mkdir(parents=True, exist_ok=True)
 
-    app = FastAPI(title="fusion-ocr")
+    # app-level dependency -> every route requires the bearer token
+    app = FastAPI(title="fusion-ocr", dependencies=[Depends(_require_auth)])
 
     @app.post("/jobs")
     async def submit(pdf: UploadFile, force: bool = False, rerun_from: str | None = None):
@@ -86,7 +104,10 @@ def create_app(cfg=None):  # lazy so the api extra isn't needed unless you serve
         if newly or force or rerun_from:     # explicit reprocess overrides the seen-check
             jobs.set_status(digest, "running")
             try:
-                process(dest, cfg, force=force, rerun_from=rerun_from, digest=digest)
+                # process() is synchronous and slow (CPU + blocking I/O) — run it off the
+                # event loop so one upload doesn't block other requests (e.g. status polls).
+                await anyio.to_thread.run_sync(functools.partial(
+                    process, dest, cfg, force=force, rerun_from=rerun_from, digest=digest))
                 jobs.set_status(digest, "done")
             except Exception as exc:  # noqa: BLE001
                 jobs.set_status(digest, "error", str(exc))

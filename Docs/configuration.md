@@ -62,6 +62,14 @@ they're deliberately **not** fingerprinted.
 Run it with `uvicorn fusion_ocr.api:app`. The same contract whether it runs on a desktop
 now or in a VPC later.
 
+**Auth (required, fail-closed).** Set `FUSION_OCR_API_TOKEN` in the environment — the API
+**refuses to start without it**. Every request must carry `Authorization: Bearer <token>`
+or it's **401** (constant-time compare). The token is env-only — never put it in
+`config.toml`. The watcher and CLI need no token; they don't go through HTTP.
+
+**Concurrency.** `POST /jobs` runs the (synchronous) pipeline off the event loop, so a long
+job doesn't block other requests such as `GET /jobs` status polls.
+
 | Method & path | Body / params | Returns |
 | --- | --- | --- |
 | `POST /jobs` | multipart `pdf`; query `force`, `rerun_from` | `{sha256, status}` |
@@ -77,15 +85,17 @@ returns HTTP 400 with a `detail` message for an unknown setting, a read-only set
 out-of-range / wrong-type value. Examples:
 
 ```bash
+auth="authorization: Bearer $FUSION_OCR_API_TOKEN"
+
 # see everything (api_key comes back masked)
-curl -s localhost:8000/config | jq '.settings[] | {path, value, settable}'
+curl -s -H "$auth" localhost:8000/config | jq '.settings[] | {path, value, settable}'
 
 # tune the fusion gate on the running service
-curl -s -X PATCH localhost:8000/config \
+curl -s -X PATCH localhost:8000/config -H "$auth" \
   -H 'content-type: application/json' \
   -d '{"fuse_min_sim": 0.45, "fuse_det_conf_trust": 0.85}'
 
 # the footgun is refused
-curl -s -X PATCH localhost:8000/config -d '{"airgap": false}'
+curl -s -X PATCH localhost:8000/config -H "$auth" -d '{"airgap": false}'
 # -> 400 {"detail": "'airgap' is read-only (surfaced but not configurable)"}
 ```

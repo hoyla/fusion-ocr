@@ -98,7 +98,8 @@ def test_config_endpoints_roundtrip(tmp_path):
 
     cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out",
                             airgap=False)            # injected -> no socket seal
-    client = TestClient(create_app(cfg))
+    client = TestClient(create_app(cfg, token="t"),
+                        headers={"Authorization": "Bearer t"})
 
     got = client.get("/config").json()["settings"]
     paths = {e["path"] for e in got}

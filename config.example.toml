@@ -38,7 +38,11 @@ fuse_det_conf_trust = 0.80
 # drop folder doesn't accumulate and get re-hashed on every scan. Loop only; --once never moves.
 move_processed = true
 # API ingest guard: reject an upload larger than this many MB with 413, before it's hashed.
+# Default 50 leaves headroom for large image-heavy / many-page PDFs while refusing absurd
+# uploads that would exhaust memory/disk; lower it if you only expect small scans.
 max_upload_mb = 50
+# NB: the API bearer token is read from the FUSION_OCR_API_TOKEN environment variable, never
+# from this file, and the API refuses to start without it (fail closed).
 
 [vlm]
 # DEFAULT generalist reader. Ollama / MLX / vLLM all speak this OpenAI-compatible API,

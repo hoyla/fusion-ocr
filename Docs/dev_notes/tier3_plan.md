@@ -56,6 +56,10 @@ stage (e.g. ocr_det) produces byte-identical boxes before/after the migration.
 
 ## 2. Offload `process()` off the event loop
 
+**✅ Done** — `submit` runs the synchronous pipeline via `anyio.to_thread.run_sync`, so a long
+job no longer blocks other requests. JobStore concurrency is covered by the WAL + atomic
+upsert; the raster cache has a lock.
+
 **Problem.** `api.py:50-52` — `async def submit` calls the **synchronous** `process()`
 inline. The whole pipeline (seconds–minutes of CPU + blocking I/O) runs on the event loop,
 so one upload blocks every other request, including `GET /jobs` status polls.
@@ -98,7 +102,12 @@ with **413** past the limit. Sniff the PDF magic (`%PDF-`) before hashing; **415
 
 ## 4. API auth — static bearer token
 
-**Decision (Luke, 2026-06-28): static bearer token.**
+**✅ Done** — `FUSION_OCR_API_TOKEN` (env only), checked by an app-level FastAPI dependency on
+every route (constant-time compare → 401). **Fail closed:** `create_app` raises if no token
+is set, so an unauthenticated API can never be served. `create_app(cfg, token=...)` injects
+one for tests.
+
+**Decision (Luke, 2026-06-28): static bearer token; fail closed when the token is unset.**
 
 **Problem.** Every endpoint is open, including `PATCH /config` (which can repoint the reader
 endpoint and tune the pipeline).

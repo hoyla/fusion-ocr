@@ -96,9 +96,11 @@ extra, `uvicorn fusion_ocr.api:app`) is the stable contract callers use:
 | `GET /config` | surface every setting (secrets masked) + its constraints |
 | `PATCH /config` `{path: value}` | configure the allowlisted settings in-process |
 
-Security/identity fields (`airgap`, `in_dir`, `out_dir`, `routes`) are surfaced but
-**read-only** — the API can't unseal the airgap tier or repoint paths. A tuning change
-re-keys the resume cache, so the next job reprocesses rather than reusing a stale result.
+The API is bearer-token auth'd and **fails closed**: set `FUSION_OCR_API_TOKEN` (it refuses
+to start without one) and send `Authorization: Bearer …`. Security/identity fields
+(`airgap`, `in_dir`, `out_dir`, `routes`) are surfaced but **read-only** — the API can't
+unseal the airgap tier or repoint paths. A tuning change re-keys the resume cache, so the
+next job reprocesses rather than reusing a stale result.
 **Full settings table and endpoint details: [Docs/configuration.md](Docs/configuration.md).**
 
 ## Layout
