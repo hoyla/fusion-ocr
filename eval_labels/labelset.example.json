@@ -1,0 +1,40 @@
+{
+  "description": "Hand-labelled eval set: human transcripts of hard pages (degraded scans, handwriting) that carry no born-digital ground truth. Copy this file to labelset.json, then fill in the matching .txt transcripts. `page` is a 0-BASED index; `pdf` resolves from the dir you run the eval in; `transcript` resolves beside this manifest. See Docs/eval-labelling.md.",
+  "labels": [
+    {
+      "id": "mandelson-note-handwritten",
+      "pdf": "samples/TestPDFs_01/mandelson docs/HA_Volume_II_part_I.pdf",
+      "page": 183,
+      "transcript": "mandelson-note-handwritten.txt",
+      "note": "The headline value case: handwritten Mandelson->Lammy note. Source text layer ~3 chars; tesseract recovers almost nothing."
+    },
+    {
+      "id": "mandelson-email-scan",
+      "pdf": "samples/TestPDFs_01/mandelson docs/HA_Volume_II_part_I.pdf",
+      "page": 182,
+      "transcript": "mandelson-email-scan.txt",
+      "note": "Printed cover email captured as a scan (no text layer) — a printed-text-on-scan recognition floor."
+    },
+    {
+      "id": "thai-scan",
+      "pdf": "samples/TestPDFs_01/thai forms, tables, etc/scan-469100916779010-2-1-E10091230312899.pdf",
+      "page": 0,
+      "transcript": "thai-scan.txt",
+      "note": "Degraded Thai scan — exercises the Thai recogniser + Typhoon reader. Transcribe in Thai (Unicode, NFC)."
+    },
+    {
+      "id": "rotated-goldfinch",
+      "pdf": "samples/TestPDFs_01/rotations/Goldfinch Comedy NLP.pdf",
+      "page": 0,
+      "transcript": "rotated-goldfinch.txt",
+      "note": "Rotated page — exercises rotation-aware reading order. Verify which page is the rotated one and adjust `page` if needed."
+    },
+    {
+      "id": "redacted-efta",
+      "pdf": "samples/TestPDFs_01/redacted/EFTA02731477.pdf",
+      "page": 0,
+      "transcript": "redacted-efta.txt",
+      "note": "Redacted scan (1 page). Mark blacked-out spans as [REDACTED] in the transcript so recall isn't penalised for unreadable ink."
+    }
+  ]
+}

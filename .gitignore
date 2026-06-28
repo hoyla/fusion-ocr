@@ -11,6 +11,11 @@
 # Per-project secrets (FUSION_OCR_API_TOKEN) — never committed.
 /.env
 
+# Hand-labelled eval — the live manifest + transcripts quote source material (repo is
+# public), so they stay local. labelset.example.json is the committed template.
+/eval_labels/labelset.json
+/eval_labels/*.txt
+
 # Python
 __pycache__/
 *.py[cod]
