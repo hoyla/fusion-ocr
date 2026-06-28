@@ -25,7 +25,10 @@ Everything lives in [`eval_labels/`](../eval_labels/). The manifest
 file waiting for its transcript. **Your job is to fill in those `.txt` files.**
 
 1. **Open the page.** For each entry in `eval_labels/labelset.json`, open the `pdf` at the
-   given `page` (a **0-based** index — `page: 0` is the first page) in any PDF viewer.
+   given `page` (a **0-based** index — `page: 0` is the first page) in any PDF viewer. A
+   document that runs over several pages (a 2-page letter, a multi-page form) uses `pages`
+   instead — e.g. `"pages": [183, 184]` — and its transcript covers the whole span in
+   reading order.
 
 2. **Type what you see** into the matching transcript file (e.g.
    `eval_labels/mandelson-note-handwritten.txt`). The rules that keep the score honest:

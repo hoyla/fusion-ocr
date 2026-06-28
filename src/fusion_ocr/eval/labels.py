@@ -15,10 +15,14 @@ Manifest (`eval_labels/labelset.json`):
     {"labels": [
         {"id": "mandelson-note-handwritten",
          "pdf": "samples/.../HA_Volume_II_part_I.pdf",   # relative to where you run the eval
-         "page": 183,                                     # 0-BASED page index
+         "pages": [183, 184],                             # 0-BASED; or "page": 183 for one page
          "transcript": "mandelson-note-handwritten.txt",  # relative to the manifest's folder
          "note": "free-text reminder of what this page is"}
     ]}
+
+A document that spans pages (a 2-page letter, a multi-page form) is one label with a
+`pages` list; the transcript covers the whole span and the recovered text is concatenated
+across those pages in order before scoring.
 
 The transcript file holds the correct reading of the page. An empty transcript means
 "not labelled yet" and is reported as TODO rather than scored, so the scaffold runs (and
@@ -41,7 +45,7 @@ from .metrics import normalize, score
 class Label:
     id: str
     pdf: Path
-    page: int          # 0-based page index
+    pages: list[int]   # 0-based page indices — a label can span pages (e.g. a 2-page letter)
     transcript: Path   # resolved absolute path to the .txt
     note: str = ""
 
@@ -53,30 +57,34 @@ class Label:
 def load_labelset(manifest_path) -> list[Label]:
     """Parse a labelset manifest. `pdf` paths are kept relative (resolved against the cwd
     you run the eval from, like the born-digital CLI); `transcript` paths resolve against
-    the manifest's own folder so the label files travel with it."""
+    the manifest's own folder so the label files travel with it. A label is one page
+    (`"page": 3`) or several (`"pages": [3, 4]`) when one document spans pages — the
+    transcript then covers the whole span, in reading order."""
     manifest_path = Path(manifest_path)
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     base = manifest_path.parent
     labels = []
     for e in data.get("labels", []):
+        pages = e["pages"] if "pages" in e else [e["page"]]
         labels.append(Label(
             id=e["id"],
             pdf=Path(e["pdf"]),
-            page=int(e["page"]),
+            pages=[int(p) for p in pages],
             transcript=(base / e["transcript"]).resolve(),
             note=e.get("note", ""),
         ))
     return labels
 
 
-def _extract_page(src, page_index: int, dst) -> None:
-    """Copy one page into a fresh 1-page PDF, preserving its content as-is (no flattening),
-    so the pipeline sees exactly what production would — a real scan stays a scan, and any
+def _extract_pages(src, page_indices: list[int], dst) -> None:
+    """Copy the given pages into a fresh PDF, preserving content as-is (no flattening), so
+    the pipeline sees exactly what production would — a real scan stays a scan, and any
     mixed digital/scan content composes normally."""
     import fitz
     with fitz.open(src) as d:
         out = fitz.open()
-        out.insert_pdf(d, from_page=page_index, to_page=page_index)
+        for pi in page_indices:
+            out.insert_pdf(d, from_page=pi, to_page=pi)
         out.save(str(dst))
         out.close()
 
@@ -93,13 +101,13 @@ def evaluate_labelset(manifest_path, cfg: Config, tmp_root=None) -> list[dict]:
     results: list[dict] = []
     for lab in labels:
         ref = lab.reference()
-        base = {"id": lab.id, "pdf": str(lab.pdf), "page": lab.page}
+        base = {"id": lab.id, "pdf": str(lab.pdf), "pages": lab.pages}
         if not normalize(ref):
             results.append({**base, "status": "unlabelled"})
             continue
         page_pdf = tmp_root / f"{lab.id}.pdf"
-        _extract_page(lab.pdf, lab.page, page_pdf)
+        _extract_pages(lab.pdf, lab.pages, page_pdf)
         doc = process(page_pdf, eval_cfg)
-        hyp = recovered_text(doc.pages[0]) if doc.pages else ""
+        hyp = "\n".join(recovered_text(p) for p in doc.pages)   # concat across the span
         results.append({**base, "status": "scored", **score(ref, hyp)})
     return results

@@ -1,12 +1,12 @@
 {
-  "description": "Hand-labelled eval set: human transcripts of hard pages (degraded scans, handwriting) that carry no born-digital ground truth. Copy this file to labelset.json, then fill in the matching .txt transcripts. `page` is a 0-BASED index; `pdf` resolves from the dir you run the eval in; `transcript` resolves beside this manifest. See Docs/eval-labelling.md.",
+  "description": "Hand-labelled eval set: human transcripts of hard pages (degraded scans, handwriting) that carry no born-digital ground truth. Copy this file to labelset.json, then fill in the matching .txt transcripts. Page indices are 0-BASED: use `page` for one page, or `pages` for a document that spans several (the transcript then covers the whole span, in reading order). `pdf` resolves from the dir you run the eval in; `transcript` resolves beside this manifest. See Docs/eval-labelling.md.",
   "labels": [
     {
       "id": "mandelson-note-handwritten",
       "pdf": "samples/TestPDFs_01/mandelson docs/HA_Volume_II_part_I.pdf",
-      "page": 183,
+      "pages": [183, 184],
       "transcript": "mandelson-note-handwritten.txt",
-      "note": "The headline value case: handwritten Mandelson->Lammy note. Source text layer ~3 chars; tesseract recovers almost nothing."
+      "note": "The headline value case: 2-page handwritten Mandelson->Lammy letter. Source text layer ~3 chars; tesseract recovers almost nothing."
     },
     {
       "id": "mandelson-email-scan",

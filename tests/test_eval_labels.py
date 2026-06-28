@@ -26,10 +26,18 @@ def test_load_labelset_resolves_transcript_beside_manifest(tmp_path):
     ])
     [lab] = load_labelset(manifest)
     assert lab.id == "a"
-    assert lab.page == 3
+    assert lab.pages == [3]                           # single `page` -> one-element span
     assert lab.pdf == Path("samples/x.pdf")          # kept relative (resolved at run time)
     assert lab.transcript == (tmp_path / "a.txt").resolve()   # resolved beside the manifest
     assert lab.note == "hi"
+
+
+def test_load_labelset_multipage_span(tmp_path):
+    manifest = _write_manifest(tmp_path, [
+        {"id": "letter", "pdf": "samples/x.pdf", "pages": [183, 184], "transcript": "l.txt"},
+    ])
+    [lab] = load_labelset(manifest)
+    assert lab.pages == [183, 184]
 
 
 def test_empty_transcript_is_reported_unlabelled_without_running_pipeline(tmp_path, monkeypatch):
@@ -54,7 +62,7 @@ def test_scored_entry_compares_transcript_to_recovered_text(tmp_path, monkeypatc
         {"id": "a", "pdf": "samples/x.pdf", "page": 0, "transcript": "a.txt"},
     ])
 
-    monkeypatch.setattr(labels_mod, "_extract_page", lambda *a, **k: None)   # skip real PDF I/O
+    monkeypatch.setattr(labels_mod, "_extract_pages", lambda *a, **k: None)   # skip real PDF I/O
 
     class _Doc:
         pages = [object()]
