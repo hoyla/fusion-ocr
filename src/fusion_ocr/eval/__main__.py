@@ -57,6 +57,11 @@ def main() -> None:
     ap.add_argument("--labels", default=None,
                     help="hand-labelled manifest (e.g. eval_labels/labelset.json) — scores "
                          "against human transcripts instead of a born-digital text layer")
+    ap.add_argument("--dataset", choices=["sroie", "funsd"], default=None,
+                    help="score a sample of a 3rd-party benchmark (images via the ingest "
+                         "adapter) against its annotations")
+    ap.add_argument("--limit", type=int, default=20, help="dataset: items to sample")
+    ap.add_argument("--split", default="test", help="dataset: train | val | test")
     ap.add_argument("--pages", default=None,
                     help="comma-separated page indices (born-digital mode; default: all)")
     ap.add_argument("--dpi", type=int, default=200)
@@ -69,8 +74,8 @@ def main() -> None:
                          "--apple-vision). No reader server needed.")
     args = ap.parse_args()
 
-    if not args.labels and not args.pdfs:
-        ap.error("give born-digital PDFs, or --labels for the hand-labelled set")
+    if not args.labels and not args.pdfs and not args.dataset:
+        ap.error("give born-digital PDFs, --labels, or --dataset")
 
     cfg = config_mod.load(args.config)
     if args.apple_vision:
@@ -89,6 +94,18 @@ def main() -> None:
         for r in results:
             r["tag"] = r["id"][:24]
         _print_scorecard(results, label_col="label")
+        return
+
+    if args.dataset:
+        from .datasets import evaluate_dataset
+        results = evaluate_dataset(args.dataset, cfg, split=args.split,
+                                   limit=args.limit, no_vlm=args.no_vlm)
+        if not results:
+            print(f"no scorable items in {args.dataset}/{args.split}")
+            return
+        for r in results:
+            r["tag"] = r["id"][:24]
+        _print_scorecard(results, label_col=args.dataset)
         return
 
     from .harness import evaluate
