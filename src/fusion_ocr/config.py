@@ -66,6 +66,11 @@ class Config:
     move_processed: bool = True
     # API ingest guard: reject an upload larger than this (MB) with 413, before it's hashed.
     max_upload_mb: float = 50.0
+    # HTTP bind address for `fusion-ocr-serve`. 127.0.0.1 = localhost only; set "0.0.0.0"
+    # (or a specific LAN IP) to reach the API from other machines. Use an IP literal under
+    # airgap — a hostname would need a DNS lookup, which the seal refuses.
+    api_host: str = "127.0.0.1"
+    api_port: int = 8000
     vlm: VLMConfig = None  # type: ignore[assignment]
     # per-script routing overrides: {script: {paddle_lang, vlm_model, vlm_base_url}}
     routes: dict = None  # type: ignore[assignment]
@@ -98,6 +103,8 @@ def load(path: str | Path = "config.toml") -> Config:
         fuse_det_conf_trust=run.get("fuse_det_conf_trust", 0.80),
         move_processed=run.get("move_processed", True),
         max_upload_mb=run.get("max_upload_mb", 50.0),
+        api_host=run.get("api_host", "127.0.0.1"),
+        api_port=run.get("api_port", 8000),
         vlm=VLMConfig(
             base_url=vlm.get("base_url", "http://localhost:8080/v1"),
             model=vlm.get("model", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),
@@ -127,6 +134,8 @@ def to_toml_dict(cfg: Config) -> dict:
             "fuse_det_conf_trust": cfg.fuse_det_conf_trust,
             "move_processed": cfg.move_processed,
             "max_upload_mb": cfg.max_upload_mb,
+            "api_host": cfg.api_host,
+            "api_port": cfg.api_port,
         },
         "vlm": {
             "base_url": cfg.vlm.base_url,

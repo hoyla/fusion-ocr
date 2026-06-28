@@ -29,6 +29,8 @@ and this table are generated from. `GET /config` returns every row below (secret
 | `fuse_det_conf_trust` | `0.80` | `0.0`–`1.0` | The other half of the gate: only *refuse* a dissimilar line when the detector was at least this confident. This is what protects the handwriting path — garbled `det_text` at low confidence never overrides the VLM read, which there is the truth. |
 | `move_processed` | `true` | bool | Watcher moves a handled file to `in/processed/<sha>.pdf` (success) or `in/failed/<sha>.pdf` (error), so the drop folder doesn't accumulate and re-hash on every scan. **Loop only** — `--once` never moves, so a manual re-run doesn't disturb the folder. |
 | `max_upload_mb` | `50` | `≥ 1.0` | `POST /jobs` rejects an upload larger than this with **413**, streamed and checked *before* the body is hashed or processed (a non-PDF body is **415**). |
+| `api_host` | `"127.0.0.1"` | **read-only** | Bind address for `fusion-ocr-serve` (startup-only — a live server isn't rebound). Localhost by default; set `"0.0.0.0"` or a specific LAN IP to expose it on the network. Use an IP literal under airgap (a hostname needs DNS, which the seal refuses). |
+| `api_port` | `8000` | **read-only** | HTTP port for `fusion-ocr-serve` (startup-only). |
 
 `[vlm]` section — the reader endpoint (the runtime is a free variable):
 
@@ -59,8 +61,9 @@ they're deliberately **not** fingerprinted.
 
 ## The job + config API (`api` extra)
 
-Run it with `uvicorn fusion_ocr.api:app`. The same contract whether it runs on a desktop
-now or in a VPC later.
+Run it with **`fusion-ocr-serve`** (reads `api_host`/`api_port` from config), or directly
+with `uvicorn fusion_ocr.api:app --host … --port …`. The same contract whether it runs on a
+desktop now or in a VPC later.
 
 **Auth (required, fail-closed).** Set `FUSION_OCR_API_TOKEN` in the environment — the API
 **refuses to start without it**. Every request must carry `Authorization: Bearer <token>`
@@ -106,3 +109,32 @@ curl -s -X PATCH localhost:8000/config -H "$auth" \
 curl -s -X PATCH localhost:8000/config -H "$auth" -d '{"airgap": false}'
 # -> 400 {"detail": "'airgap' is read-only (surfaced but not configurable)"}
 ```
+
+## Run it on your local network
+
+By default the API binds to localhost. To reach it from other machines on your LAN:
+
+1. **Bind to the network.** Set `api_host = "0.0.0.0"` (all interfaces) or a specific LAN IP
+   in `config.toml`. Under airgap use an IP literal, not a hostname.
+2. **Set the token.** `export FUSION_OCR_API_TOKEN=…` — the API won't start without it, and
+   every request needs `Authorization: Bearer <token>`. This is what makes LAN exposure safe.
+3. **Serve.** `fusion-ocr-serve` (or `uvicorn fusion_ocr.api:app --host 0.0.0.0 --port 8000`).
+
+Then from another machine:
+
+```bash
+curl -s -H "authorization: Bearer $FUSION_OCR_API_TOKEN" \
+  -F pdf=@scan.pdf http://<server-lan-ip>:8000/jobs
+```
+
+**Airgap interaction.** Serving *inbound* on the LAN works under airgap — the seal only
+refuses *outbound* connections, so the server can still accept requests. But a reader on a
+**different machine** (e.g. a GPU box running vLLM) is an outbound call: that needs
+`airgap = false` and `vlm.base_url` pointed at the other host's **IP** (a hostname would need
+DNS, which the seal refuses). Keep airgap on only when the reader is loopback on the same box.
+
+**Security.** Plain HTTP is **cleartext on the wire** — the token, the PDFs, and the results
+are unencrypted. That's acceptable on a trusted network between your own machines; for
+confidential material crossing anything less trusted, put `fusion-ocr-serve` behind a reverse
+proxy that terminates TLS (Caddy/nginx). The app contract is unchanged — only the address
+your clients hit moves to the proxy.

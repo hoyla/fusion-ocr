@@ -22,6 +22,7 @@ dev = ["pytest>=8,<10"]
 
 [project.scripts]
 fusion-ocr = "fusion_ocr.watcher:main"
+fusion-ocr-serve = "fusion_ocr.api:main"   # run the HTTP job API (extra: api)
 
 [build-system]
 requires = ["setuptools>=68"]

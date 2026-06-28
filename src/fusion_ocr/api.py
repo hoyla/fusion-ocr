@@ -152,6 +152,18 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
     return app
 
 
+def main() -> None:
+    """`fusion-ocr-serve` — run the job API over HTTP. Host/port come from config
+    (`api_host`/`api_port`); the app is built lazily, so the airgap seal and the
+    FUSION_OCR_API_TOKEN fail-closed check happen as the worker imports it."""
+    import uvicorn
+
+    cfg = config_mod.load()
+    where = "localhost only" if cfg.api_host in ("127.0.0.1", "localhost") else "LAN-reachable"
+    print(f"[serve] http://{cfg.api_host}:{cfg.api_port}  ({where}; bearer token required)")
+    uvicorn.run("fusion_ocr.api:app", host=cfg.api_host, port=cfg.api_port)
+
+
 def __getattr__(name: str):
     # Lazy: importing this module stays side-effect-free (no config load, airgap socket
     # patch, or sqlite creation) until a server actually asks for `app`. `uvicorn

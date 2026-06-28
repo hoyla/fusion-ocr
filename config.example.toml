@@ -43,6 +43,11 @@ move_processed = true
 max_upload_mb = 50
 # NB: the API bearer token is read from the FUSION_OCR_API_TOKEN environment variable, never
 # from this file, and the API refuses to start without it (fail closed).
+# HTTP server bind address for `fusion-ocr-serve`. 127.0.0.1 = localhost only; set "0.0.0.0"
+# (or a specific LAN IP) to reach the API from other machines on your network. Use an IP
+# literal under airgap — a hostname would need a DNS lookup, which the seal refuses.
+api_host = "127.0.0.1"
+api_port = 8000
 
 [vlm]
 # DEFAULT generalist reader. Ollama / MLX / vLLM all speak this OpenAI-compatible API,

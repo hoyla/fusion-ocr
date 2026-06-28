@@ -87,7 +87,7 @@ the same API, so swapping local → transcription-GPU is just a `base_url` chang
 
 Configure via `config.toml` (copy from `config.example.toml`), or change the
 output-affecting tuning knobs on a **running** service over HTTP. The job API (the `api`
-extra, `uvicorn fusion_ocr.api:app`) is the stable contract callers use:
+extra; run it with **`fusion-ocr-serve`**) is the stable contract callers use:
 
 | Method & path | Purpose |
 | --- | --- |
@@ -101,8 +101,10 @@ The API is bearer-token auth'd and **fails closed**: set `FUSION_OCR_API_TOKEN` 
 to start without one) and send `Authorization: Bearer …`. Security/identity fields
 (`airgap`, `in_dir`, `out_dir`, `routes`) are surfaced but **read-only** — the API can't
 unseal the airgap tier or repoint paths. A tuning change re-keys the resume cache, so the
-next job reprocesses rather than reusing a stale result.
-**Full settings table and endpoint details: [Docs/configuration.md](Docs/configuration.md).**
+next job reprocesses rather than reusing a stale result. To reach it from other machines on
+your LAN, set `api_host = "0.0.0.0"` and serve — see
+**[Docs/configuration.md](Docs/configuration.md)** for the full settings table, endpoint
+details, and the local-network setup (airgap + TLS notes).
 
 ## Layout
 
