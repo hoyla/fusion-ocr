@@ -10,13 +10,22 @@ the big remediations is in the review/plan notes — this is the index, not a du
 - Deterministic geometry + VLM reading, fused with the **ink-gate**; provenance retained
   (`det_text` / `vlm_text` / `source` / `read_by` / `superseded`).
 - **Headline proof:** the handwritten Mandelson→Lammy note — 6 source chars → ~3,185
-  searchable chars, fully local.
+  searchable chars, fully local. Now *measured*: **0.95 word recall** vs a hand transcript of
+  the 2-page letter, where the deterministic engines (PaddleOCR / Apple Vision) manage ≈0.45.
 - Two-axis routing ([routing.md](../routing.md)): Apple Vision cheap tier, Typhoon Thai
   specialist, Qwen3-VL generalist via MLX.
 - Layout PP-DocLayoutV2 (learned reading order); classified SLANeXt scanned tables;
   born-digital PyMuPDF `find_tables`.
 - Searchable bbox overlay (Unicode font), per-language markdown, provenance segment index.
 - Eval harness (born-digital text layer = ground truth): **~95% recall / ~96% precision**.
+- Hand-labelled eval ([eval-labelling.md](../eval-labelling.md)) for scans / handwriting,
+  where there is no born-digital truth: human transcripts, multi-page spans, and `--no-vlm`
+  to isolate the deterministic engine. First baseline (n=4 hard pages, identical labels):
+  **VLM 0.92 recall / 0.17 CER**; PaddleOCR alone 0.82 / 0.34; Apple Vision alone 0.77 / 0.43.
+  So **PaddleOCR is the deterministic spine and out-recognises Apple Vision** (Apple Vision is
+  the fast on-device tier, not a stronger reader), and the VLM lifts handwriting recall from
+  ~0.45 to ~0.95. (n is tiny — directional, not significant; the labelled set is the way to
+  grow it.)
 
 ## Reviews & hardening
 - **Review 01** ([review_01_260627.md](review_01_260627.md)): recipe-fingerprint resume,
