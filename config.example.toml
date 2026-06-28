@@ -69,6 +69,11 @@ api_key  = "not-needed-locally"
 # escalate_below     = 0.6
 # escalation_model   = "mlx-community/Qwen3-VL-30B-A3B-Instruct-4bit"   # bigger MoE
 # escalation_base_url = "http://localhost:8080/v1"
+#
+# Client hardening (defaults shown):
+# max_tokens   = 4096   # cap reader output so a pathological page can't run to the timeout (0 = uncapped)
+# max_retries  = 2      # retry transient 5xx / transport errors with backoff (AirgapError is never retried)
+# jpeg_quality = 85     # page images are sent as JPEG (smaller on the wire than PNG); 1-100, lossy
 
 # Per-script tool routing — THE TOOLKIT (see Docs/routing.md). PaddleOCR is always the
 # geometry engine; paddle_lang picks its recogniser. vlm_model/vlm_base_url override

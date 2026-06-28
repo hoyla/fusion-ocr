@@ -32,6 +32,18 @@ class VLMConfig:
     escalate_below: float = 0.0
     escalation_model: str = ""
     escalation_base_url: str = ""
+    # Cap the reader's output so a pathological page can't generate up to the request timeout
+    # (latency/cost on a shared GPU). 0 disables the cap. Output-affecting -> fingerprinted.
+    max_tokens: int = 4096
+    # Transient-failure resilience: retry a 5xx / transport error this many times with
+    # exponential backoff before giving up (then fusion falls back to det_text). 0 = no retry.
+    # An AirgapError is NEVER retried — a sealed tier must fail loud, not spin. Not fingerprinted
+    # (retrying doesn't change the output, only whether a flaky call eventually succeeds).
+    max_retries: int = 2
+    # Page images go to the reader as JPEG, not PNG: a 150-DPI page is multi-MB and base64 adds
+    # ~33%, which matters every page on the remote-reader / in-VPC path. Quality 1-100; lossy,
+    # so it's output-affecting -> fingerprinted.
+    jpeg_quality: int = 85
 
 
 @dataclass
@@ -117,6 +129,9 @@ def load(path: str | Path = "config.toml") -> Config:
             escalate_below=vlm.get("escalate_below", 0.0),
             escalation_model=vlm.get("escalation_model", ""),
             escalation_base_url=vlm.get("escalation_base_url", ""),
+            max_tokens=vlm.get("max_tokens", 4096),
+            max_retries=vlm.get("max_retries", 2),
+            jpeg_quality=vlm.get("jpeg_quality", 85),
         ),
         routes=raw.get("routing", {}),
     )
@@ -150,6 +165,9 @@ def to_toml_dict(cfg: Config) -> dict:
             "escalate_below": cfg.vlm.escalate_below,
             "escalation_model": cfg.vlm.escalation_model,
             "escalation_base_url": cfg.vlm.escalation_base_url,
+            "max_tokens": cfg.vlm.max_tokens,
+            "max_retries": cfg.vlm.max_retries,
+            "jpeg_quality": cfg.vlm.jpeg_quality,
         },
         "routing": cfg.routes or {},
     }

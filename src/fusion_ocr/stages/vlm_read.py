@@ -37,7 +37,8 @@ class VlmRead:
         key = (base_url, model)
         if key not in self._clients:
             self._clients[key] = OpenAICompatVLM(
-                base_url=base_url, model=model, api_key=cfg.vlm.api_key
+                base_url=base_url, model=model, api_key=cfg.vlm.api_key,
+                max_tokens=cfg.vlm.max_tokens, max_retries=cfg.vlm.max_retries,
             )
         return self._clients[key]
 
@@ -62,11 +63,11 @@ class VlmRead:
                 route = resolve(page.script or "latin", cfg)
                 model = route.vlm_model or cfg.vlm.model
                 base_url = route.vlm_base_url or cfg.vlm.base_url
-                png = raster.page_png(pdf, page.index, self.dpi)
+                img = raster.page_jpeg(pdf, page.index, self.dpi, quality=cfg.vlm.jpeg_quality)
                 det_chars = sum(len(s.det_text or "") for s in page.segments
                                 if s.source == "paddle")
 
-                reading = self._read(png, model, base_url, cfg)
+                reading = self._read(img, model, base_url, cfg)
 
                 # Confidence-gated escalation: if the primary read looks like a refusal
                 # or the page's deterministic confidence is low, re-read with a stronger
@@ -76,7 +77,7 @@ class VlmRead:
                         _looks_like_refusal(reading, det_chars)
                         or _low_confidence(page, cfg.vlm.escalate_below)):
                     esc_reading = self._read(
-                        png, esc, cfg.vlm.escalation_base_url or base_url, cfg)
+                        img, esc, cfg.vlm.escalation_base_url or base_url, cfg)
                     if not _looks_like_refusal(esc_reading, det_chars):
                         reading, model = esc_reading, esc
 
@@ -88,10 +89,10 @@ class VlmRead:
                     page.read_model = model
         return doc
 
-    def _read(self, png, model, base_url, cfg) -> str:
+    def _read(self, img, model, base_url, cfg) -> str:
         client = self._client or self._client_for(base_url, model, cfg)
         try:
-            return client.read(png, select_prompt(model)) or ""
+            return client.read(img, select_prompt(model)) or ""
         except AirgapError:
             raise  # misconfigured sensitive tier (remote endpoint): fail loud, not det_text
         except Exception:

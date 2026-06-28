@@ -43,7 +43,8 @@ class TableRead:
         key = (base_url, model)
         if key not in self._clients:
             self._clients[key] = OpenAICompatVLM(
-                base_url=base_url, model=model, api_key=cfg.vlm.api_key
+                base_url=base_url, model=model, api_key=cfg.vlm.api_key,
+                max_tokens=cfg.vlm.max_tokens, max_retries=cfg.vlm.max_retries,
             )
         return self._clients[key]
 
@@ -74,18 +75,19 @@ class TableRead:
                     clip = fitz.Rect(*region.box.bbox)
                     if clip.is_empty or clip.width < 8 or clip.height < 8:
                         continue
-                    png = raster.page_png(pdf, page.index, self.dpi,
-                                          clip=tuple(region.box.bbox))
-                    text = self._read(png, model, base_url, cfg)
+                    img = raster.page_jpeg(pdf, page.index, self.dpi,
+                                           clip=tuple(region.box.bbox),
+                                           quality=cfg.vlm.jpeg_quality)
+                    text = self._read(img, model, base_url, cfg)
                     if text:
                         region.table_vlm = text
                         region.table_read_by = model
         return doc
 
-    def _read(self, png, model, base_url, cfg) -> str:
+    def _read(self, img, model, base_url, cfg) -> str:
         client = self._client or self._client_for(base_url, model, cfg)
         try:
-            return (client.read(png, select_table_prompt(model)) or "").strip()
+            return (client.read(img, select_table_prompt(model)) or "").strip()
         except AirgapError:
             raise  # misconfigured sensitive tier: fail loud, not silent grid fallback
         except Exception:
