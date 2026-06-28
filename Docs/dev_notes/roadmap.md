@@ -23,6 +23,12 @@ real, not before.
 
 ## Next
 
+- **VLM client hardening** ([review_01](review_01_260627.md)): a `max_tokens` cap (a
+  pathological page can otherwise generate until the 600s timeout — latency/cost on a shared
+  GPU); retry/backoff on a transient 5xx (today a 503 becomes a silent empty read →
+  `det_text` fallback); reuse one `httpx.Client` (keep-alive) instead of one per page; and
+  **JPEG** rather than PNG base64 (a 150-DPI page is multi-MB, +33% for base64 — matters on
+  the remote-reader / in-VPC path).
 - **Tables:** multi-level-header semantics for `find_tables`; cross-validate `find_tables` vs
   the vision grid; cleaner per-cell content on scanned tables.
 - **Reading order:** a hand-labelled set to actually measure order (CER is reading-order-noisy
@@ -33,7 +39,15 @@ real, not before.
   sealed (airgap) tier stays poll-only by construction — the process can't dial out — so this
   is a tier-gated enhancement, never the default.
 
-## Later — scale-triggered (don't build until load is real)
+## Later — beyond MVP
+
+Capability beyond the MVP target:
+
+- **Rotated-page tables** — the table-structure and focused table-read stages currently skip
+  rotated pages ([review_02](review_02_2602627.md) #8). Add support when rotated scans turn
+  up in the corpus.
+
+Scale-triggered — don't build until the load is real (principle 6, *look before infra*):
 
 - **Distributed queue adapter** (ElasticMQ / SQS, on-estate) implementing the `JobStore`
   method surface — when workers span machines or need shared durable state.
@@ -43,5 +57,5 @@ real, not before.
   (the atomic claim already makes this safe).
 - **API at scale:** rate limits beyond the upload cap; richer observability / metrics.
 
-_Trigger conditions are stated so we don't over-build: the seams (`JobStore`, `storage.py`,
-the OpenAI-compatible reader endpoint) keep these swaps config-deep, not rewrites._
+_The seams (`JobStore`, `storage.py`, the OpenAI-compatible reader endpoint) keep the
+scale-triggered swaps config-deep, not rewrites._

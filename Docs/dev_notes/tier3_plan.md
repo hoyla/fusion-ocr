@@ -1,5 +1,11 @@
 # Tier-3 plan — harden + scale before exposing the service
 
+> **Status: COMPLETE.** All five items shipped (see the ✅ markers below). This is a finished
+> plan kept as a record — the canonical live status is **[done.md](done.md)** /
+> **[roadmap.md](roadmap.md)**. Note: item #2's "a real background queue is a later step" was
+> subsequently built — the async job queue (see done.md), which supersedes the in-thread
+> offload described here.
+
 The review's **Tier-3** items: not bugs in the output, but the things to settle *before the
 job API is exposed or the throughput goes up*. Grounded in the code as it stands (commit
 `cbd74ef`); file:line references are where each problem actually lives. Tiers 1–2 and the
