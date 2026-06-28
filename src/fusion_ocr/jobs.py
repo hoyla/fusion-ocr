@@ -1,6 +1,12 @@
-"""SQLite-backed job table. Idempotent by content hash: dropping the same PDF twice
-is a no-op (the existing job/artifacts are reused). Tiny on purpose — a dozen docs a
-day needs nothing more; the same contract scales to a real queue later."""
+"""SQLite-backed job table — and the QUEUE BOUNDARY of the system. Producers enqueue
+(`upsert_queued`), a worker claims atomically (`claim`: queued -> running) and completes
+(`set_status`), consumers read (`get` / `list`). Idempotent by content hash: dropping the
+same PDF twice is a no-op (the existing job/artifacts are reused).
+
+Tiny on purpose — a dozen docs a day needs nothing more. But this method surface IS the
+contract a future distributed queue would implement: an SQS / ElasticMQ adapter (on-estate,
+airgap-compatible) is a drop-in here, not a rewrite. Keep all queue access going through
+these methods so that swap stays cheap."""
 
 from __future__ import annotations
 
@@ -51,6 +57,19 @@ class JobStore:
             )
             return cur.rowcount == 1
 
+    def claim(self, sha256: str, reprocess: bool = False) -> bool:
+        """Atomically take a job for processing: queued -> running, in one statement, so
+        concurrent workers can't both claim it (rowcount is 1 for the winner, 0 otherwise).
+        Returns True if THIS caller claimed it. With reprocess=True, also re-claims a done /
+        error job (for --force / --rerun-from), but never steals one already running."""
+        cond = "status != 'running'" if reprocess else "status = 'queued'"
+        with self._conn() as c:
+            cur = c.execute(
+                f"UPDATE jobs SET status='running', updated_at=? WHERE sha256=? AND {cond}",
+                (time.time(), sha256),
+            )
+            return cur.rowcount == 1
+
     def set_status(self, sha256: str, status: str, error: str | None = None) -> None:
         with self._conn() as c:
             c.execute(
@@ -58,8 +77,12 @@ class JobStore:
                 (status, error, time.time(), sha256),
             )
 
-    def all(self) -> list[sqlite3.Row]:
+    def list(self, status: str | None = None) -> list[sqlite3.Row]:
+        """All jobs, newest first — optionally filtered by status. Backs the 'out' feed
+        (e.g. GET /jobs?status=done) so a consumer can pull completed work."""
         with self._conn() as c:
-            return c.execute(
-                "SELECT * FROM jobs ORDER BY created_at DESC"
-            ).fetchall()
+            if status:
+                return c.execute(
+                    "SELECT * FROM jobs WHERE status=? ORDER BY created_at DESC", (status,)
+                ).fetchall()
+            return c.execute("SELECT * FROM jobs ORDER BY created_at DESC").fetchall()

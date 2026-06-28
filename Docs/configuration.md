@@ -71,13 +71,17 @@ desktop now or in a VPC later.
 or it's **401** (constant-time compare). The token is env-only — never put it in
 `config.toml`. The watcher and CLI need no token; they don't go through HTTP.
 
-**Concurrency.** `POST /jobs` runs the (synchronous) pipeline off the event loop, so a long
-job doesn't block other requests such as `GET /jobs` status polls.
+**Async by queue.** `POST /jobs` writes the upload to `in/`, registers it `queued`, and
+returns `202` immediately — it does **not** process inline. A worker (the `fusion-ocr`
+watcher) drains the queue; clients poll `GET /jobs/{sha256}` for the result. So a deployment
+runs the API (`fusion-ocr-serve`) **and** at least one worker (`fusion-ocr`). `JobStore` is
+the queue boundary; the atomic claim makes multiple workers safe.
 
 | Method & path | Body / params | Returns |
 | --- | --- | --- |
-| `POST /jobs` | multipart `pdf`; query `force`, `rerun_from` | `{sha256, status}` |
-| `GET /jobs/{sha256}` | — | `{sha256, status, error, artifacts}` |
+| `POST /jobs` | multipart `pdf` | **202** `{sha256, status: "queued"}` — enqueue; a worker drains it |
+| `GET /jobs` | `?status=` | `{jobs: [{sha256, status, error}, …]}` — queue / completed feed |
+| `GET /jobs/{sha256}` | — | `{sha256, status, error, artifacts}` (poll until `done`) |
 | `GET /config` | — | `{settings: [{path, value, settable, kind, min?, max?, choices?, help?}, …]}` |
 | `PATCH /config` | `{path: value, …}` | `{path: value, …}` (new values, secrets masked) |
 | `POST /config/save` | — | `{saved: <path>}` |

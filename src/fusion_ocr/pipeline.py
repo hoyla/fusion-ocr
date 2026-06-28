@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from . import storage
 from .config import Config
 from .models import Document
 from .stages.fusion import Fusion
@@ -117,7 +118,7 @@ def process(
     # from the digest the job status was recorded under if the source path is overwritten
     # between the caller's hash and here. Falls back to hashing for direct callers.
     digest = digest or sha256_of(pdf_path)
-    work = cfg.out_dir / digest
+    work = storage.job_dir(cfg, digest)
     work.mkdir(parents=True, exist_ok=True)
     recipe = recipe_fingerprint(cfg, pipeline)
 

@@ -46,6 +46,20 @@ def test_settled_file_processed_with_passed_digest(tmp_path, monkeypatch):
     assert ran == [sha256_of(pdf)]                                 # passed through, not re-hashed
 
 
+def test_worker_drains_api_enqueued_job(tmp_path, monkeypatch):
+    # Simulate POST /jobs: the file is in in/ and already registered 'queued' (not new to
+    # the folder). The status-driven worker must CLAIM and process it, not skip it as "seen".
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out")
+    pdf = _drop(tmp_path / "in")
+    jobs = JobStore(tmp_path / "jobs.sqlite")
+    jobs.upsert_queued(sha256_of(pdf), str(pdf))               # pre-registered, like the API
+    ran: list = []
+    monkeypatch.setattr(watcher_mod, "process", _stub_process(ran))
+    assert watcher_mod.scan_once(cfg, jobs, min_settle=0.0) == 1
+    assert ran == [sha256_of(pdf)]
+    assert jobs.get(sha256_of(pdf))["status"] == "done"
+
+
 def test_processed_file_is_moved_and_not_rescanned(tmp_path, monkeypatch):
     cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out")
     pdf = _drop(tmp_path / "in")

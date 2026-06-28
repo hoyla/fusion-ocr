@@ -1,9 +1,14 @@
-"""Drop-folder entrypoint — the simplest way to run the MVP.
+"""Drop-folder entrypoint — and the QUEUE WORKER.
 
-  $ python -m fusion_ocr.watcher          # watch in/, process new PDFs
-  $ python -m fusion_ocr.watcher --once    # process whatever's there now, then exit
+  $ python -m fusion_ocr.watcher          # watch in/, drain the queue
+  $ python -m fusion_ocr.watcher --once    # process whatever's queued now, then exit
 
 Drop a PDF into in/, artifacts appear in out/<sha256>/. Idempotent by content hash.
+
+This loop is the worker that drains the JobStore queue: it claims QUEUED jobs (atomically)
+and processes them. Jobs reach the queue two ways — a file dropped in in/, or POST /jobs on
+the API (which writes the file here and registers it queued without processing). So in a
+deployment you run this alongside `fusion-ocr-serve`: the API enqueues, this worker drains.
 """
 
 from __future__ import annotations
@@ -45,10 +50,13 @@ def scan_once(cfg: config_mod.Config, jobs: JobStore,
         if now - pdf.stat().st_mtime < min_settle:
             continue
         digest = sha256_of(pdf)
-        newly = jobs.upsert_queued(digest, str(pdf))
-        if not newly and not reprocess:
-            continue  # already seen — idempotent (unless an explicit reprocess is asked)
-        jobs.set_status(digest, "running")
+        jobs.upsert_queued(digest, str(pdf))      # ensure registered (no-op if already)
+        # Status-driven worker: atomically claim a QUEUED job. This drains both folder drops
+        # and API-enqueued uploads (POST /jobs registers them queued + leaves the file here),
+        # and the atomic claim makes running several workers safe. Skip if not claimable
+        # (already running/done/error, unless an explicit reprocess is asked).
+        if not jobs.claim(digest, reprocess=reprocess):
+            continue
         try:
             doc = process(pdf, cfg, force=force, rerun_from=rerun_from, digest=digest)
             jobs.set_status(digest, "done")

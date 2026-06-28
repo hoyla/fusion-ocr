@@ -91,11 +91,17 @@ extra; run it with **`fusion-ocr-serve`**) is the stable contract callers use:
 
 | Method & path | Purpose |
 | --- | --- |
-| `POST /jobs` (multipart `pdf`) | submit a PDF → `{sha256, status}` |
-| `GET /jobs/{sha256}` | job status + artifact list |
+| `POST /jobs` (multipart `pdf`) | enqueue a PDF → `202 {sha256, status: "queued"}` |
+| `GET /jobs` `[?status=]` | queue / completed-job feed |
+| `GET /jobs/{sha256}` | job status + artifact list (poll until `done`) |
 | `GET /config` | surface every setting (secrets masked) + its constraints |
 | `PATCH /config` `{path: value}` | configure the allowlisted settings in-process |
 | `POST /config/save` | persist the current config to disk (explicit, opt-in) |
+
+Submit is asynchronous: `POST /jobs` enqueues and returns immediately. Run the API
+(`fusion-ocr-serve`) alongside a worker (`fusion-ocr`, the watcher) that drains the queue;
+clients poll `GET /jobs/{sha256}`. `JobStore` is the queue boundary and artifacts are
+content-addressed (`storage.py`), so a distributed queue / object store can drop in later.
 
 The API is bearer-token auth'd and **fails closed**: set `FUSION_OCR_API_TOKEN` (it refuses
 to start without one) and send `Authorization: Bearer …`. Security/identity fields
@@ -116,8 +122,9 @@ src/fusion_ocr/
   config.py          config + airgap guard
   settings.py        settings registry — what's surfaceable vs runtime-configurable
   raster.py          page-raster cache — render a page once, share across stages
-  jobs.py            SQLite job table (idempotent by content hash)
-  watcher.py         drop-folder entrypoint
+  jobs.py            SQLite job queue (enqueue / atomic claim / status)
+  storage.py         content-addressed artifact location (object-store swap point)
+  watcher.py         drop-folder entrypoint + the queue worker
   api.py             HTTP job + config API (stable contract for callers)
   stages/            triage · layout · language · ocr_det · vlm_read · fusion · render
   vlm/               client protocol + OpenAI-compatible impl + prompts

@@ -68,14 +68,51 @@ def test_upload_rejects_oversized(tmp_path):
     assert not list((tmp_path / "in").glob("*.pdf"))      # partial file cleaned up
 
 
-def test_upload_accepts_pdf(tmp_path, monkeypatch):
-    import fusion_ocr.api as api_mod
-    from fusion_ocr.models import Document
-    monkeypatch.setattr(api_mod, "process",
-                        lambda *a, **k: Document(source_path="x", sha256=k.get("digest", "x")))
+def test_upload_enqueues_and_returns_202(tmp_path):
     client, _ = _client(tmp_path)
     r = _post_pdf(client, b"%PDF-1.4\nhello\n%%EOF")
-    assert r.status_code == 200 and r.json()["status"] == "done"
+    assert r.status_code == 202
+    body = r.json()
+    assert body["status"] == "queued" and len(body["sha256"]) == 64
+    # the upload is parked in in/ for the worker; submit did NOT process it inline
+    assert list((tmp_path / "in").glob("*.pdf"))
+
+
+def test_jobs_feed_reflects_queue(tmp_path):
+    client, _ = _client(tmp_path)
+    sha = _post_pdf(client, b"%PDF-1.4\nhello\n%%EOF").json()["sha256"]
+    listed = client.get("/jobs").json()["jobs"]
+    assert any(j["sha256"] == sha and j["status"] == "queued" for j in listed)
+    assert client.get("/jobs", params={"status": "done"}).json()["jobs"] == []   # none done yet
+    one = client.get(f"/jobs/{sha}").json()
+    assert one["status"] == "queued" and one["artifacts"] == []
+
+
+def test_enqueue_then_worker_drains_end_to_end(tmp_path, monkeypatch):
+    # The full async contract: API enqueues -> worker (sharing the same in/out) drains ->
+    # GET reflects done + artifacts. Proves the API and watcher meet on one queue.
+    from pathlib import Path
+
+    from fusion_ocr import config as config_mod
+    from fusion_ocr import storage
+    from fusion_ocr import watcher as watcher_mod
+    from fusion_ocr.jobs import JobStore
+    from fusion_ocr.models import Document
+
+    client, cfg = _client(tmp_path)
+    sha = _post_pdf(client, b"%PDF-1.4\nhello\n%%EOF").json()["sha256"]
+
+    def _fake_process(pdf, c, **k):           # worker stub: drop an artifact under out/<sha>/
+        d = storage.job_dir(c, k["digest"])
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "document.md").write_text("ok")
+        return Document(source_path=str(pdf), sha256=k["digest"])
+
+    monkeypatch.setattr(watcher_mod, "process", _fake_process)
+    jobs = JobStore(Path(cfg.out_dir) / "jobs.sqlite")            # same DB the API wrote to
+    assert watcher_mod.scan_once(cfg, jobs, min_settle=0.0) == 1
+    done = client.get(f"/jobs/{sha}").json()
+    assert done["status"] == "done" and "document.md" in done["artifacts"]
 
 
 # ---- bearer-token auth (fail closed) --------------------------------------
@@ -100,28 +137,6 @@ def test_requests_require_the_bearer_token(tmp_path):
     assert client.get("/config", headers={"Authorization": "Bearer nope"}).status_code == 401
     ok = client.get("/config", headers={"Authorization": "Bearer secret"})
     assert ok.status_code == 200
-
-
-# ---- #2: process() runs off the event loop --------------------------------
-
-def test_submit_offloads_process_off_the_loop(tmp_path, monkeypatch):
-    import anyio
-
-    import fusion_ocr.api as api_mod
-    from fusion_ocr.models import Document
-    used = {}
-    real = anyio.to_thread.run_sync
-
-    async def _spy(func, *a, **k):
-        used["offloaded"] = True
-        return await real(func, *a, **k)
-
-    monkeypatch.setattr(anyio.to_thread, "run_sync", _spy)
-    monkeypatch.setattr(api_mod, "process",
-                        lambda *a, **k: Document(source_path="x", sha256=k.get("digest", "x")))
-    client, _ = _client(tmp_path)
-    assert _post_pdf(client, b"%PDF-1.4\nhi\n%%EOF").status_code == 200
-    assert used.get("offloaded") is True       # process() went through run_sync, not inline
 
 
 # ---- POST /config/save: explicit, opt-in persistence ----------------------

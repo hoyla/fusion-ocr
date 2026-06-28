@@ -2,12 +2,15 @@
 identical whether the service runs on this desktop or later in a VPC, so moving it
 is invisible to callers.
 
-  POST  /jobs            (multipart pdf)  -> {sha256, status}
-  GET   /jobs/{sha256}                    -> {status, artifacts}
-  GET   /config                           -> {settings: [...]}   (every setting, surfaced)
-  PATCH /config          {path: value}    -> {path: value}       (configure the allowlist)
+  POST  /jobs            (multipart pdf)  -> 202 {sha256, status}   (enqueue; worker drains)
+  GET   /jobs            [?status=done]   -> {jobs: [...]}          (queue / 'out' feed)
+  GET   /jobs/{sha256}                    -> {status, error, artifacts}
+  GET   /config                           -> {settings: [...]}      (every setting, surfaced)
+  PATCH /config          {path: value}    -> {path: value}          (configure the allowlist)
+  POST  /config/save                      -> {saved: <path>}        (persist to disk, opt-in)
 
-Run: uvicorn fusion_ocr.api:app
+POST /jobs only ENQUEUES — run a worker (`fusion-ocr` watcher) to drain the queue; clients
+poll GET /jobs/{sha256}. Run: `fusion-ocr-serve` (the API) alongside `fusion-ocr` (the worker).
 """
 
 # NB: no `from __future__ import annotations` here. The route handlers are closures
@@ -15,15 +18,15 @@ Run: uvicorn fusion_ocr.api:app
 # FastAPI with an unresolvable ForwardRef (it resolves against module globals). Eager
 # annotations bind UploadFile to the real class at def-time. (str | None still evaluates.)
 
-import functools
 import os
 import secrets
 from pathlib import Path
 
 from . import config as config_mod
 from . import settings as settings_mod
+from . import storage
 from .jobs import JobStore
-from .pipeline import process, sha256_of
+from .pipeline import sha256_of
 
 
 def _safe_name(filename: str | None) -> str:
@@ -68,7 +71,6 @@ async def _save_upload(pdf, dest: Path, max_mb: float, http_exc) -> None:
 
 
 def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api extra only when serving
-    import anyio
     from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
 
     if cfg is None:                      # injectable for tests (skips the airgap seal)
@@ -95,36 +97,34 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
     # app-level dependency -> every route requires the bearer token
     app = FastAPI(title="fusion-ocr", dependencies=[Depends(_require_auth)])
 
-    @app.post("/jobs")
-    async def submit(pdf: UploadFile, force: bool = False, rerun_from: str | None = None):
+    @app.post("/jobs", status_code=202)
+    async def submit(pdf: UploadFile):
+        # Enqueue only: stream the upload into in/, register it queued, return immediately.
+        # A worker (`fusion-ocr` watcher) drains the queue; the client polls GET /jobs/{sha}.
+        # The request no longer blocks for the (slow) OCR run.
         dest = in_dir / _safe_name(pdf.filename)
         await _save_upload(pdf, dest, cfg.max_upload_mb, HTTPException)
         digest = sha256_of(dest)
-        newly = jobs.upsert_queued(digest, str(dest))
-        if newly or force or rerun_from:     # explicit reprocess overrides the seen-check
-            jobs.set_status(digest, "running")
-            try:
-                # process() is synchronous and slow (CPU + blocking I/O) — run it off the
-                # event loop so one upload doesn't block other requests (e.g. status polls).
-                await anyio.to_thread.run_sync(functools.partial(
-                    process, dest, cfg, force=force, rerun_from=rerun_from, digest=digest))
-                jobs.set_status(digest, "done")
-            except Exception as exc:  # noqa: BLE001
-                jobs.set_status(digest, "error", str(exc))
+        jobs.upsert_queued(digest, str(dest))
         row = jobs.get(digest)
-        return {"sha256": digest, "status": row["status"] if row else "unknown"}
+        return {"sha256": digest, "status": row["status"] if row else "queued"}
+
+    @app.get("/jobs")
+    def list_jobs(status: str | None = None):
+        # The 'out' feed: queue visibility / pull completed work (?status=done). Poll-based —
+        # the only push-free option that also works on the sealed (airgap) tier.
+        return {"jobs": [{"sha256": r["sha256"], "status": r["status"], "error": r["error"]}
+                         for r in jobs.list(status)]}
 
     @app.get("/jobs/{sha256}")
-    def status(sha256: str):
+    def job_status(sha256: str):
         if not _is_sha256(sha256):           # the path component feeds a filesystem path
             return {"sha256": sha256, "status": "unknown"}
         row = jobs.get(sha256)
         if not row:
             return {"sha256": sha256, "status": "unknown"}
-        work = Path(cfg.out_dir) / sha256
-        artifacts = [p.name for p in work.iterdir()] if work.exists() else []
         return {"sha256": sha256, "status": row["status"],
-                "error": row["error"], "artifacts": artifacts}
+                "error": row["error"], "artifacts": storage.artifacts(cfg, sha256)}
 
     @app.get("/config")
     def get_config():

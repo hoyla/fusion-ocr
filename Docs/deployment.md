@@ -5,15 +5,20 @@ put it behind a reverse proxy that terminates TLS, so the token and the document
 encrypted. This is the groundwork; sample configs are in [`deploy/`](../deploy).
 
 ```
-client ──HTTPS──▶ nginx :443  ──HTTP──▶ fusion-ocr-serve  127.0.0.1:8000
-                 (TLS, certs)          (localhost only, bearer-token auth)
-                                        │
-                                        └─▶ reader (VLM) — loopback, or another host if airgap=false
+client ──HTTPS──▶ nginx :443 ──HTTP──▶ fusion-ocr-serve 127.0.0.1:8000   (API: enqueue + status)
+                 (TLS, certs)          (localhost, bearer auth)   │
+                                                                   ▼ shared in/, out/, jobs.sqlite
+                                        fusion-ocr (watcher)  ─────┘   (WORKER: drains the queue)
+                                                                   │
+                                                                   └─▶ reader (VLM) — loopback, or another host if airgap=false
 ```
 
-The backend stays on **localhost**; only nginx is exposed on the network. nginx terminates
-TLS and forwards requests (with the `Authorization` header intact) to the app, which still
-enforces the token.
+Two processes share the estate: **`fusion-ocr-serve`** (the API — enqueues uploads and
+serves status) and **`fusion-ocr`** (the watcher — the worker that drains the queue and runs
+the pipeline). The backend stays on **localhost**; only nginx is exposed. nginx terminates
+TLS and forwards requests (with the `Authorization` header intact) to the API, which still
+enforces the token. `POST /jobs` returns `202 queued` immediately; clients poll
+`GET /jobs/{sha256}` (or pull `GET /jobs?status=done`) for the result.
 
 ## 1. Backend config (`config.toml`)
 
@@ -50,21 +55,30 @@ Copy [`deploy/nginx.fusion-ocr.conf`](../deploy/nginx.fusion-ocr.conf), fill the
 **Two settings that bite if you skip them:**
 - `client_max_body_size` must be **≥ `max_upload_mb`** or nginx 413s the upload before the app
   can apply its own (more informative) limit.
-- `proxy_read_timeout` / `proxy_send_timeout` must cover your **worst-case job time**.
-  `POST /jobs` holds the connection until the OCR finishes (seconds to minutes on a big or
-  handwritten PDF); the nginx default of 60s will 504. The sample uses 600s.
+- `proxy_*_timeout` only needs to cover the **upload**, not the OCR run — `POST /jobs`
+  enqueues and returns `202` immediately. The sample uses modest values; bump `proxy_send`
+  only for very large PDFs over slow links.
 
-> **Long jobs.** Because submit is synchronous, a slow PDF ties up a connection for its whole
-> run. That's fine at MVP volume. If it becomes a problem, the cleaner shape is to have
-> `POST /jobs` return `202 queued` immediately and have clients poll `GET /jobs/{sha256}`
-> (which already exists) — a background-worker change to revisit when throughput grows.
+> **The queue.** Submit is asynchronous: the API writes the upload to `in/`, registers it
+> `queued`, and returns. The worker (`fusion-ocr`) claims queued jobs atomically and runs
+> them, so you can run more than one worker without double-processing. `JobStore` (SQLite)
+> *is* the queue; its method surface is the contract a distributed queue (ElasticMQ / SQS,
+> on-estate) would implement later — and artifacts are content-addressed via `storage.py`,
+> the swap point for an object store (Garage / S3). Neither is needed at current volume.
 
-## 4. Run as a service (Linux)
+## 4. Run as services (Linux)
 
-Install [`deploy/fusion-ocr.service`](../deploy/fusion-ocr.service), drop the token into
-`/etc/fusion-ocr/fusion-ocr.env` (root-owned, `chmod 600`), then
-`systemctl enable --now fusion-ocr`. On macOS use launchd / `brew services`; in a container,
-run `fusion-ocr-serve` as the entrypoint with the token injected as an env var.
+You run **two** units — the API and the worker:
+- [`deploy/fusion-ocr.service`](../deploy/fusion-ocr.service) — the API (`fusion-ocr-serve`).
+- [`deploy/fusion-ocr-worker.service`](../deploy/fusion-ocr-worker.service) — the worker (`fusion-ocr`).
+
+Drop the token into `/etc/fusion-ocr/fusion-ocr.env` (root-owned, `chmod 600`), then
+`systemctl enable --now fusion-ocr fusion-ocr-worker`. They share `in/`, `out/`, and
+`out/jobs.sqlite`. On macOS use launchd / `brew services`; in a container, run one process
+per container (API and worker) against shared volumes.
+
+> Run at least one worker, or uploads sit in the queue as `queued` forever. The atomic claim
+> means you can scale to several workers later without double-processing.
 
 ## Simpler alternative: Caddy (automatic TLS)
 
