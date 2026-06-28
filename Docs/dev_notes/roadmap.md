@@ -72,6 +72,26 @@ as Giant's built-in processor, so reuse its approach for parity.
 > Attach points for the adapter are already marked in the code: the API format gate
 > (`api._save_upload`) and the watcher glob (`watcher.scan_once`) — both accept PDF only today.
 
+**Test corpus already on hand for this work** (`samples/file_tests_3rdparty_01/`, gitignored —
+~4.3k labelled images, 5.3 GB): a consolidated public OCR benchmark, four sources in a uniform
+`category/{train,val,test}/{images,annotations}` layout, each image paired with per-line
+**text + box** annotations. Once images can be ingested (the adapter above, or a lighter
+eval-only image path) this becomes a recognition + geometry eval far larger than hand-labelling.
+What's usable, and the traps:
+
+- **SROIE** (`invoice/`, 973 receipts) and **FUNSD** (`form/`, 199 scanned forms) — genuine human
+  GT, in-domain document images. **Use these first.** Ignore their key-value / entity / linking
+  labels (that's downstream analysis, not this tool — principle 1); only the text+box GT applies.
+- **IAM** (`document/`, 1539 handwriting pages) — the headline-case prize, BUT the bundled json
+  annotations carry a per-line `confidence`: they're an OCR engine's *output*, not human
+  transcriptions, so scoring our OCR against them is **circular**. Source IAM's original
+  transcriptions before using it as ground truth.
+- **Total-Text** (`real_life/`, ~1554) — scene text (photos / signage), arguably **out of the
+  document domain**; likely set aside.
+
+Each source needs a small annotation→eval-reference loader (FUNSD/SROIE json, Total-Text txt;
+pixel coords). Fuller analysis in the `dataset-3rdparty-ocr-benchmark` session memory.
+
 Scale-triggered — don't build until the load is real (principle 6, *look before infra*):
 
 - **Distributed queue adapter** (ElasticMQ / SQS, on-estate) implementing the `JobStore`
