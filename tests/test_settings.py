@@ -90,6 +90,16 @@ def test_tunable_change_rekeys_recipe_fingerprint():
     assert recipe_fingerprint(tuned, pipe) != before
 
 
+def test_config_save_round_trips(tmp_path):
+    pytest.importorskip("tomli_w", reason="needs the api extra")
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out", airgap=False)
+    settings_mod.apply(cfg, {"fuse_min_sim": 0.5, "vlm.base_url": "http://localhost:9001/v1"})
+    back = config_mod.load(config_mod.save(cfg, tmp_path / "config.toml"))
+    assert back.fuse_min_sim == 0.5
+    assert back.vlm.base_url == "http://localhost:9001/v1"
+    assert back.airgap is False                          # read-only fields persist too
+
+
 def test_config_endpoints_roundtrip(tmp_path):
     pytest.importorskip("fastapi", reason="needs the api extra")
     from fastapi.testclient import TestClient

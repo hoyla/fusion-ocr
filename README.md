@@ -95,6 +95,7 @@ extra, `uvicorn fusion_ocr.api:app`) is the stable contract callers use:
 | `GET /jobs/{sha256}` | job status + artifact list |
 | `GET /config` | surface every setting (secrets masked) + its constraints |
 | `PATCH /config` `{path: value}` | configure the allowlisted settings in-process |
+| `POST /config/save` | persist the current config to disk (explicit, opt-in) |
 
 The API is bearer-token auth'd and **fails closed**: set `FUSION_OCR_API_TOKEN` (it refuses
 to start without one) and send `Authorization: Bearer …`. Security/identity fields

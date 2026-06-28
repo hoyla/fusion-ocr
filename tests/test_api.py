@@ -122,3 +122,23 @@ def test_submit_offloads_process_off_the_loop(tmp_path, monkeypatch):
     client, _ = _client(tmp_path)
     assert _post_pdf(client, b"%PDF-1.4\nhi\n%%EOF").status_code == 200
     assert used.get("offloaded") is True       # process() went through run_sync, not inline
+
+
+# ---- POST /config/save: explicit, opt-in persistence ----------------------
+
+def test_config_save_persists_runtime_changes(tmp_path):
+    pytest.importorskip("tomli_w", reason="needs the api extra")
+    from fastapi.testclient import TestClient
+
+    from fusion_ocr import config as config_mod
+    from fusion_ocr.api import create_app
+    cfg_path = tmp_path / "config.toml"
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out", airgap=False)
+    client = TestClient(create_app(cfg, token="t", config_path=cfg_path),
+                        headers={"Authorization": "Bearer t"})
+
+    client.patch("/config", json={"fuse_min_sim": 0.5})  # in-process only so far
+    assert not cfg_path.exists()                          # PATCH alone never persisted
+    r = client.post("/config/save")
+    assert r.status_code == 200 and r.json()["saved"] == str(cfg_path)
+    assert config_mod.load(cfg_path).fuse_min_sim == 0.5  # now on disk

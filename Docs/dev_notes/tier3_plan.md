@@ -159,9 +159,10 @@ isn't surprised.
 3. **#2 offload + #4 auth** — the "before we expose it" pair; land together when exposure is
    actually on the table.
 
-## Open decision (not blocking)
+## Resolved decision
 
-- **Should `PATCH /config` persist to `config.toml`** once auth is in place? Currently
-  deliberately **in-process only** (a restart re-reads the file). Leaning keep-in-process +
-  add an explicit `POST /config/save` later if persistence is wanted — so a transient tuning
-  experiment can't quietly become the on-disk default. Revisit when implementing #4.
+- **Should `PATCH /config` persist to `config.toml`?** **✅ Resolved (2026-06-28).** `PATCH`
+  stays in-process only; added an explicit, opt-in **`POST /config/save`** that writes the
+  current config (incl. runtime tuning) to disk via `config.save` (tomli-w) — so a transient
+  experiment can't silently become the on-disk default. The saved file is generated (no
+  comments); `config.example.toml` remains the documented reference.

@@ -67,12 +67,12 @@ async def _save_upload(pdf, dest: Path, max_mb: float, http_exc) -> None:
         raise
 
 
-def create_app(cfg=None, token=None):  # lazy so the api extra isn't needed unless serving
+def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api extra only when serving
     import anyio
     from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
 
     if cfg is None:                      # injectable for tests (skips the airgap seal)
-        cfg = config_mod.load()
+        cfg = config_mod.load(config_path)
         if cfg.airgap:
             config_mod.enforce_airgap()
     if token is None:
@@ -141,6 +141,13 @@ def create_app(cfg=None, token=None):  # lazy so the api extra isn't needed unle
             return settings_mod.apply(cfg, updates)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/config/save")
+    def save_config():
+        # Promote the current in-process config (including any PATCH /config tuning) to
+        # disk. Explicit and opt-in: PATCH alone never persists, so a transient experiment
+        # can't silently become the on-disk default. Writes a generated file (no comments).
+        return {"saved": config_mod.save(cfg, config_path)}
 
     return app
 

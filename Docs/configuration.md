@@ -76,9 +76,16 @@ job doesn't block other requests such as `GET /jobs` status polls.
 | `GET /jobs/{sha256}` | — | `{sha256, status, error, artifacts}` |
 | `GET /config` | — | `{settings: [{path, value, settable, kind, min?, max?, choices?, help?}, …]}` |
 | `PATCH /config` | `{path: value, …}` | `{path: value, …}` (new values, secrets masked) |
+| `POST /config/save` | — | `{saved: <path>}` |
 
 `POST /jobs` streams the upload to disk in chunks (never the whole body in memory), rejecting
 a non-PDF with **415** and one over `max_upload_mb` with **413** before it's hashed.
+
+`PATCH /config` changes are **in-process only** — a restart re-reads `config.toml`. To make
+the current config (including any runtime tuning) the on-disk default, call `POST
+/config/save` explicitly; this opt-in step means a transient experiment can't silently
+become permanent. It writes a **generated** TOML file (hand-written comments are not
+preserved — `config.example.toml` stays the documented reference).
 
 `PATCH /config` validates the **whole** body before applying anything (all-or-nothing) and
 returns HTTP 400 with a `detail` message for an unknown setting, a read-only setting, or an

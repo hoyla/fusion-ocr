@@ -110,6 +110,48 @@ def load(path: str | Path = "config.toml") -> Config:
     )
 
 
+def to_toml_dict(cfg: Config) -> dict:
+    """The Config as the [run] / [vlm] / [routing] mapping load() consumes — so a dump
+    round-trips. Paths are stringified for TOML."""
+    return {
+        "run": {
+            "in_dir": str(cfg.in_dir),
+            "out_dir": str(cfg.out_dir),
+            "airgap": cfg.airgap,
+            "granularity": cfg.granularity,
+            "overlay_font": cfg.overlay_font,
+            "prefer_apple_vision": cfg.prefer_apple_vision,
+            "apple_vision_skip_vlm": cfg.apple_vision_skip_vlm,
+            "table_vlm_read": cfg.table_vlm_read,
+            "fuse_min_sim": cfg.fuse_min_sim,
+            "fuse_det_conf_trust": cfg.fuse_det_conf_trust,
+            "move_processed": cfg.move_processed,
+            "max_upload_mb": cfg.max_upload_mb,
+        },
+        "vlm": {
+            "base_url": cfg.vlm.base_url,
+            "model": cfg.vlm.model,
+            "api_key": cfg.vlm.api_key,
+            "escalate_below": cfg.vlm.escalate_below,
+            "escalation_model": cfg.vlm.escalation_model,
+            "escalation_base_url": cfg.vlm.escalation_base_url,
+        },
+        "routing": cfg.routes or {},
+    }
+
+
+def save(cfg: Config, path: str | Path = "config.toml") -> str:
+    """Write the current config to `path` as TOML (round-trips through load()). This is a
+    GENERATED file — hand-written comments in an existing config.toml are not preserved;
+    config.example.toml stays the documented reference. Returns the path written."""
+    import tomli_w  # only needed by the explicit save path (POST /config/save)
+
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(tomli_w.dumps(to_toml_dict(cfg)))
+    return str(p)
+
+
 class AirgapError(OSError):
     """Raised when the airgap guard refuses an outbound connection or DNS lookup.
 
