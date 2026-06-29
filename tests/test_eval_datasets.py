@@ -46,6 +46,21 @@ def test_iter_pairs_matches_images_to_annotations_by_stem(tmp_path):
     assert pairs[0][1] == "A"
 
 
+def test_iter_pairs_matches_annotation_in_a_different_split(tmp_path):
+    # FUNSD packaging: images and annotations were split independently, so an image in `test`
+    # has its annotation in `train`. Pairing is by stem across all splits.
+    cat = tmp_path / "form"
+    (cat / "test" / "images").mkdir(parents=True)
+    (cat / "train" / "annotations").mkdir(parents=True)
+    (cat / "test" / "images" / "doc1.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (cat / "train" / "annotations" / "doc1.json").write_text(
+        json.dumps({"form": [{"text": "HELLO"}]}))
+
+    pairs = datasets.iter_pairs("funsd", split="test", root=tmp_path)
+    assert [p[0].stem for p in pairs] == ["doc1"]      # found despite the cross-split layout
+    assert pairs[0][1] == "HELLO"
+
+
 def test_iter_pairs_unknown_source_raises(tmp_path):
     with pytest.raises(ValueError):
         datasets.iter_pairs("iam", root=tmp_path)      # IAM intentionally not a gold source
