@@ -15,11 +15,11 @@ is scene text, out of the document domain.
 Note: FUNSD annotation order isn't strict visual reading order, so on forms trust the
 order-INSENSITIVE word recall / precision over CER/WER (the usual caveat).
 
-CAVEAT (this packaging): in samples/file_tests_3rdparty_01 the FUNSD `form/` images and
-annotations have DESYNCHRONISED filenames — zero stem overlap, and the JSON doesn't name
-its image — so they can't be paired here and `iter_pairs("funsd")` yields nothing (it refuses
-to mispair rather than score image A against form B). SROIE pairs correctly (98/98 by stem).
-Use FUNSD only after re-pairing from the original dataset. `funsd_reference` itself is correct.
+PACKAGING NOTE: in samples/file_tests_3rdparty_01 the FUNSD `form/` train/test/val folders
+were split INDEPENDENTLY for images vs annotations, so an image and its annotation usually sit
+in *different* split folders (within one split folder the names don't line up). Pairing is by
+stem ACROSS all splits (see _annotation_index), which resolves it — 200/203 FUNSD stems match.
+SROIE's splits are aligned, so the cross-split lookup is a harmless no-op for it.
 """
 
 from __future__ import annotations
@@ -53,18 +53,28 @@ _SOURCES = {
 }
 
 
+def _annotation_index(category: Path) -> dict:
+    """stem -> annotation path, indexed across ALL splits. Some packagings split images and
+    annotations INDEPENDENTLY into train/test/val, so an image's annotation can sit in a
+    different split folder (FUNSD here); a global stem index pairs them correctly regardless.
+    SROIE's splits happen to be aligned, so this is a no-op for it."""
+    return {a.stem: a for a in category.glob("*/annotations/*.json")}
+
+
 def iter_pairs(source: str, split: str = "test", root=_ROOT, limit=None):
-    """(image_path, reference_text) pairs for a dataset source/split, paired by file stem."""
+    """(image_path, reference_text) pairs for a dataset source/split. Images come from the
+    chosen split; each is paired with its annotation BY STEM, looked up across all splits (so
+    an independently-split packaging still pairs correctly)."""
     if source not in _SOURCES:
         raise ValueError(f"unknown source {source!r}; known: {sorted(_SOURCES)}")
     subdir, ref_fn = _SOURCES[source]
-    base = Path(root) / subdir / split
-    images = {p.stem: p for p in sorted((base / "images").glob("*")) if p.is_file()}
-    anns = {p.stem: p for p in (base / "annotations").glob("*.json")}
+    category = Path(root) / subdir
+    anns = _annotation_index(category)
     pairs = []
-    for stem in sorted(images):
-        if stem in anns:
-            pairs.append((images[stem], ref_fn(anns[stem])))
+    for img in sorted(p for p in (category / split / "images").glob("*") if p.is_file()):
+        ann = anns.get(img.stem)
+        if ann is not None:
+            pairs.append((img, ref_fn(ann)))
             if limit and len(pairs) >= limit:
                 break
     return pairs
