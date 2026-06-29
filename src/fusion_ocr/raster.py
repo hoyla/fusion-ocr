@@ -67,8 +67,21 @@ def page_pixmap(pdf, page_index: int, dpi: int, clip=None):
 
 
 def page_png(pdf, page_index: int, dpi: int, clip=None) -> bytes:
-    """PNG bytes for the page (or a clipped region) — the shape the VLM client / probe want."""
+    """PNG bytes for the page (or a clipped region) — lossless; used where exactness matters."""
     return page_pixmap(pdf, page_index, dpi, clip=clip).tobytes("png")
+
+
+def page_jpeg(pdf, page_index: int, dpi: int, clip=None, quality: int = 85) -> bytes:
+    """JPEG bytes for the page (or a clipped region) — the shape the VLM client wants. JPEG
+    over PNG keeps the base64 payload small (a 150-DPI page is multi-MB; base64 adds ~33%),
+    which matters on the wire every page on the remote-reader / in-VPC path. JPEG can't carry
+    an alpha channel, so an alpha pixmap is flattened to RGB first."""
+    import fitz
+
+    pix = page_pixmap(pdf, page_index, dpi, clip=clip)
+    if pix.alpha:
+        pix = fitz.Pixmap(fitz.csRGB, pix)   # drop alpha; JPEG is opaque
+    return pix.tobytes("jpeg", jpg_quality=quality)
 
 
 def page_ndarray(pdf, page_index: int, dpi: int):

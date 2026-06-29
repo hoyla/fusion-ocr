@@ -1,0 +1,51 @@
+"""3rd-party benchmark loaders: reference extraction (SROIE / FUNSD) and stem pairing.
+These are pure JSON/path logic — no images, models, or the real (gitignored) dataset."""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from fusion_ocr.eval import datasets
+
+
+def test_sroie_reference_joins_ocr_box_text_in_order(tmp_path):
+    ann = tmp_path / "X1.json"
+    ann.write_text(json.dumps({
+        "file_id": "X1",
+        "entities": {"total": "RM9.00"},          # ignored: KV is downstream scope
+        "ocr_boxes": [{"points": [], "text": "ACME STORE"},
+                      {"points": [], "text": "TOTAL RM9.00"}],
+    }))
+    assert datasets.sroie_reference(ann) == "ACME STORE\nTOTAL RM9.00"
+
+
+def test_funsd_reference_joins_form_text_and_skips_empty(tmp_path):
+    ann = tmp_path / "f1.json"
+    ann.write_text(json.dumps({
+        "form": [{"text": "Date:", "label": "question"},
+                 {"text": "", "label": "other"},        # empty -> skipped
+                 {"text": "12/2024", "label": "answer"}],
+    }))
+    assert datasets.funsd_reference(ann) == "Date:\n12/2024"
+
+
+def test_iter_pairs_matches_images_to_annotations_by_stem(tmp_path):
+    base = tmp_path / "invoice" / "test"
+    (base / "images").mkdir(parents=True)
+    (base / "annotations").mkdir(parents=True)
+    for stem in ("a", "b", "c"):
+        (base / "images" / f"{stem}.jpg").write_bytes(b"\xff\xd8\xff")
+        (base / "annotations" / f"{stem}.json").write_text(
+            json.dumps({"ocr_boxes": [{"text": stem.upper()}]}))
+    (base / "images" / "orphan.jpg").write_bytes(b"\xff\xd8\xff")   # no annotation -> dropped
+
+    pairs = datasets.iter_pairs("sroie", split="test", root=tmp_path, limit=2)
+    assert [p[0].stem for p in pairs] == ["a", "b"]    # sorted, limit honoured, orphan dropped
+    assert pairs[0][1] == "A"
+
+
+def test_iter_pairs_unknown_source_raises(tmp_path):
+    with pytest.raises(ValueError):
+        datasets.iter_pairs("iam", root=tmp_path)      # IAM intentionally not a gold source

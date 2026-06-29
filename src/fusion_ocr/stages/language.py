@@ -67,19 +67,20 @@ class Language:
             for page in pages:
                 if page.index >= pdf.page_count:
                     continue
-                png = raster.page_png(pdf, page.index, self.dpi)
-                page.script = _probe_script(client, png) or ""
+                img = raster.page_jpeg(pdf, page.index, self.dpi, quality=cfg.vlm.jpeg_quality)
+                page.script = _probe_script(client, img) or ""
 
     @staticmethod
     def _default_client(cfg):
         from ..vlm.openai_compat import OpenAICompatVLM
         return OpenAICompatVLM(base_url=cfg.vlm.base_url, model=cfg.vlm.model,
-                               api_key=cfg.vlm.api_key)
+                               api_key=cfg.vlm.api_key, max_tokens=cfg.vlm.max_tokens,
+                               max_retries=cfg.vlm.max_retries)
 
 
-def _probe_script(client, png: bytes) -> str:
+def _probe_script(client, img: bytes) -> str:
     try:
-        ans = (client.read(png, _SCRIPT_PROBE) or "").strip().lower()
+        ans = (client.read(img, _SCRIPT_PROBE) or "").strip().lower()
     except AirgapError:
         raise  # sealed tier pointed at a remote endpoint: fail loud, like vlm_read
     except Exception:

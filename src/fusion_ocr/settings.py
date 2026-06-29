@@ -71,6 +71,12 @@ SETTINGS: tuple[Setting, ...] = (
             help="re-read a page with escalation_model when mean confidence < this (0 = off)"),
     Setting("vlm.escalation_model", "str", settable=True),
     Setting("vlm.escalation_base_url", "str", settable=True),
+    Setting("vlm.max_tokens", "int", settable=True, lo=0,
+            help="cap on reader output tokens (0 = uncapped); output-affecting"),
+    Setting("vlm.max_retries", "int", settable=True, lo=0,
+            help="retries on transient 5xx / transport errors (AirgapError is never retried)"),
+    Setting("vlm.jpeg_quality", "int", settable=True, lo=1, hi=100,
+            help="JPEG quality (1-100) for page images sent to the reader; output-affecting"),
     Setting("routes", "dict", settable=False,
             help="per-script routing overrides; edit in config.toml"),
 )
@@ -117,6 +123,17 @@ def _coerce(s: Setting, value):
         if (s.lo is not None and fv < s.lo) or (s.hi is not None and fv > s.hi):
             raise ValueError(f"{s.path} must be in [{s.lo}, {s.hi}]")
         return fv
+    if s.kind == "int":
+        if isinstance(value, bool):   # bool is an int subclass — reject true/false here
+            raise ValueError(f"{s.path} must be an integer")
+        try:
+            iv = int(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"{s.path} must be an integer")
+        if (s.lo is not None and iv < s.lo) or (s.hi is not None and iv > s.hi):
+            raise ValueError(f"{s.path} must be in [{int(s.lo) if s.lo is not None else s.lo}, "
+                             f"{int(s.hi) if s.hi is not None else s.hi}]")
+        return iv
     # str
     if not isinstance(value, str):
         raise ValueError(f"{s.path} must be a string")
