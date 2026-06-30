@@ -40,6 +40,38 @@ def test_load_labelset_multipage_span(tmp_path):
     assert lab.pages == [183, 184]
 
 
+def test_load_labelset_render_flag_defaults_false_and_parses(tmp_path):
+    manifest = _write_manifest(tmp_path, [
+        {"id": "scan", "pdf": "samples/x.pdf", "page": 0, "transcript": "s.txt"},
+        {"id": "born", "pdf": "samples/y.pdf", "page": 1, "transcript": "b.txt", "render": True},
+    ])
+    scan, born = load_labelset(manifest)
+    assert scan.render is False        # absent -> default
+    assert born.render is True
+
+
+def test_render_label_forces_image_only_path_not_extract(tmp_path, monkeypatch):
+    """A render:true label must render the page to an image-only PDF (force OCR), never the
+    as-is _extract_pages copy (which would keep the born-digital text layer and skip OCR)."""
+    (tmp_path / "a.txt").write_text("hello world", encoding="utf-8")
+    manifest = _write_manifest(tmp_path, [
+        {"id": "a", "pdf": "samples/x.pdf", "page": 4, "transcript": "a.txt", "render": True},
+    ])
+    called = {"render": False, "extract": False}
+    monkeypatch.setattr(labels_mod, "_render_pages_image_only",
+                        lambda *a, **k: called.__setitem__("render", True))
+    monkeypatch.setattr(labels_mod, "_extract_pages",
+                        lambda *a, **k: called.__setitem__("extract", True))
+    monkeypatch.setattr(labels_mod, "recovered_text", lambda page: "hello world")
+    monkeypatch.setattr(labels_mod, "_pdf_text", lambda p: "")
+    import fusion_ocr.pipeline as pipeline_mod
+    monkeypatch.setattr(pipeline_mod, "process", lambda *a, **k: _doc([_Page()]))
+
+    [res] = evaluate_labelset(manifest, config_mod.Config(), tmp_root=tmp_path / "tmp")
+    assert called == {"render": True, "extract": False}
+    assert res["status"] == "scored"
+
+
 def test_empty_transcript_is_reported_unlabelled_without_running_pipeline(tmp_path, monkeypatch):
     (tmp_path / "a.txt").write_text("   \n", encoding="utf-8")   # whitespace only = not done
     manifest = _write_manifest(tmp_path, [
