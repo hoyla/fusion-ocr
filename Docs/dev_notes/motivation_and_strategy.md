@@ -52,8 +52,10 @@ So we deliberately bet on *immature* tech (VLMs are non-deterministic and can ha
 for the hard reading, *because* the mature tech fails there — and then we spend the rest of
 the engineering making that bet **trustworthy**:
 
-- **Fusion** aligns the VLM's reading onto the deterministic boxes (Needleman–Wunsch over
-  the recogniser's text), so a searched word lands on the right box.
+- **Fusion** distributes the VLM's reading onto the deterministic boxes at the **word level**
+  (a fuzzy alignment that survives garbled handwriting — spreading a long prose line across the
+  visual lines it spans — with a line-level fallback), so a searched word lands on the right
+  line. The clean reading itself is never lost: `document.md` is the ungated reading view.
 - **The ink-gate** is the anti-hallucination backstop: VLM text with no underlying detected
   ink is dropped. The deterministic side is the gate; the VLM cannot invent geography.
 - **Provenance is retained, never overwritten** — `det_text` and `vlm_text` are both kept

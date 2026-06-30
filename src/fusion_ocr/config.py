@@ -65,12 +65,12 @@ class Config:
     # OCR/Apple Vision handle poorly. Geometry still comes from the deterministic grid;
     # this supplies clean cell content. Born-digital tables are left to the text layer.
     table_vlm_read: bool = True
-    # Fusion anti-misalignment gate (see stages/fusion.py). Needleman-Wunsch always pairs
-    # a detected cluster with *some* VLM line rather than gapping both, so a confident OCR
-    # cluster can be handed a dissimilar line (a reading off-by-one). When the aligned line
-    # resembles the ink below fuse_min_sim AND the detector was at least fuse_det_conf_trust
-    # sure, that's misalignment not correction -> keep det_text. Gating on confidence is
-    # what protects the handwriting path (garbled det_text at low conf, VLM is the truth).
+    # Fusion anti-misalignment gate (see stages/fusion.py). Fusion distributes the VLM reading
+    # onto the line-boxes, but a confident OCR cluster can still be handed a VLM share that
+    # barely matches it. When the assigned text resembles the ink below fuse_min_sim AND the
+    # detector was at least fuse_det_conf_trust sure, that's misalignment not correction ->
+    # keep det_text. Gating on confidence is what protects the handwriting path (garbled
+    # det_text at low conf, where the VLM is the truth, is never penalised).
     fuse_min_sim: float = 0.34
     fuse_det_conf_trust: float = 0.80
     # Drop-folder watcher: move a file out of in_dir once handled — processed/ on success,
