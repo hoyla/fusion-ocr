@@ -30,6 +30,28 @@ real, not before.
   multi-column *prose* on a *scanned* page (FUNSD is forms; born-digital multi-column prose is
   already testable via the content-stream harness) — that still wants a hand-labelled page. See
   [handover_reading_order.md](handover_reading_order.md).
+- **Revisit reading order with hand-labelled multi-column *prose*.** The FUNSD oracle covers
+  complex scanned *forms*; the open case is **scanned running text in multiple columns**, where
+  reading order genuinely changes meaning and the geometric proxy could plausibly disagree with
+  both the human and the pipeline. Hand-label a handful of such pages (true reading order →
+  `eval_labels/`, per [eval-labelling.md](../eval-labelling.md)) and read the recall-vs-CER split.
+  **Selection principle:** prioritise pages where a naive top-to-bottom sort *breaks* — spanning
+  headlines, columns interrupted by captions/footnotes, sidebars/callouts (Z-order traps) — not
+  clean two-column, where every sensible method already agrees and there's no signal to gain.
+  Must be **scanned** (no text layer); born-digital multi-column is already testable via the
+  content-stream harness. Good document types (source non-sensitive / public examples, since the
+  transcripts are gitignored but quote the page):
+  - **Newspaper pages / press clippings** — the canonical stressor (multiple text columns,
+    headlines spanning columns, jump/continuation lines, pull-quotes); also realistic journalism
+    source material (cuttings in FOI / leak sets).
+  - **Two-column academic / journal papers (scanned)** — dense columns with figure/table captions
+    and footnotes interrupting the flow, the classic caption-vs-column ordering trap.
+  - **Government gazettes / official journals (scanned)** — two-/three-column statutory text;
+    public-interest-relevant and freely available.
+  - **Newsletters / magazine spreads** — irregular column widths, sidebars and callout boxes that
+    a top-to-bottom sort splices into the main column mid-sentence.
+  - **Reports with a marginal sidebar** — a main column plus a margin column (key facts / quotes)
+    that must not be interleaved into the body.
 
 (The Qwen3.5-VL re-test is **done** — switched the default reader to
 `mlx-community/Qwen3.5-9B-MLX-4bit`; see [done.md](done.md).)
