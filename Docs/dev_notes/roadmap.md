@@ -26,6 +26,15 @@ real, not before.
 
 - **Tables:** multi-level-header semantics for `find_tables`; cross-validate `find_tables` vs
   the vision grid; cleaner per-cell content on scanned tables.
+- **Document the output artifacts** (repo docs) — add a table (e.g. `Docs/outputs.md`)
+  describing every file in `out/<sha256>/`: the per-stage resume snapshots
+  `doc.00-triage.json` … `doc.09-render.json` (INTERIM — each stage's `Document` state, the
+  resume cache, each building on the previous), `doc.json` (final `Document` state, == the last
+  snapshot), the three DELIVERABLES — `document.md` (reading view), `overlay.pdf` (searchable
+  text layer), `segment_index.json` (id↔box↔text provenance) — and `source.pdf` (the derived
+  PDF, image inputs only). State the stage order, what builds on what, and interim-vs-final.
+  Pairs with the opaque-`out/`-folder gap: folders are content-hash named, so a
+  `sha → original filename` manifest would help a human tell which job is which.
 - **Thai ground truth for the eval** — *parked from near-term:* needs a Thai reader. The Thai
   scan was dropped from the labelled set for this reason; pick it up when a reader is available.
 - **Thai overlay search reliability** — *parked from near-term:* combining vowels / tone marks,
