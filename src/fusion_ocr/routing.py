@@ -21,7 +21,7 @@ class Route:
     paddle_lang: str = "en"
     vlm_model: str | None = None       # None -> use cfg.vlm.model (generalist)
     vlm_base_url: str | None = None     # None -> use cfg.vlm.base_url
-    engine: str = "paddle"              # deterministic engine: "paddle" | "apple_vision"
+    engine: str = "paddle"              # deterministic engine: "paddle" | "apple_vision" | "rapidocr"
 
 
 # script -> default route. vlm_model stays None (generalist) until a specialist is
@@ -98,11 +98,17 @@ def resolve(script: str, cfg=None) -> Route:
 
 
 def _auto_engine(script: str, cfg) -> str | None:
-    """Prefer Apple Vision (fast, on-device) when enabled and the script is supported
-    on this machine; else None (keep the route's default engine)."""
-    if cfg is None or not getattr(cfg, "prefer_apple_vision", False):
+    """Pick a non-default deterministic engine when its opt-in flag is set and it's usable
+    on this machine; else None (keep the route's default engine). RapidOCR is checked first,
+    so an explicit `--rapidocr` / `prefer_rapidocr` benchmark wins over Apple Vision."""
+    if cfg is None:
         return None
-    from .engines import apple_vision
-    if script in apple_vision.VISION_LANGS and apple_vision.available():
-        return "apple_vision"
+    if getattr(cfg, "prefer_rapidocr", False):
+        from .engines import rapid
+        if script in rapid.RAPID_LANGS and rapid.available():
+            return "rapidocr"
+    if getattr(cfg, "prefer_apple_vision", False):
+        from .engines import apple_vision
+        if script in apple_vision.VISION_LANGS and apple_vision.available():
+            return "apple_vision"
     return None

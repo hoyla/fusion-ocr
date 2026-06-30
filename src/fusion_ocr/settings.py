@@ -48,6 +48,8 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("prefer_apple_vision", "bool", settable=True),
     Setting("apple_vision_skip_vlm", "float", settable=True, lo=0.0, hi=1.0,
             help="skip the VLM read when mean Apple Vision confidence >= this"),
+    Setting("prefer_rapidocr", "bool", settable=True,
+            help="use RapidOCR (ONNX) as the deterministic engine — perf A/B, needs the rapid extra"),
     Setting("table_vlm_read", "bool", settable=True,
             help="route scanned table regions to a focused VLM read"),
     Setting("move_processed", "bool", settable=True,

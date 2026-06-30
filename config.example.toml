@@ -19,6 +19,10 @@ overlay_font = ""
 # pages (handwriting/degraded) still fall through / escalate to the VLM.
 prefer_apple_vision = false
 apple_vision_skip_vlm = 0.92
+# Use RapidOCR (ONNX Runtime) as the deterministic engine instead of PaddleOCR — a perf A/B
+# option (Docs/dev_notes/rapidocr_eval_plan.md). Inert unless true AND the `rapid` extra is
+# installed (`pip install -e .[rapid]`); the engine inference is currently a stub.
+prefer_rapidocr = false
 # Route detected table regions on SCANNED pages to a focused VLM table read (crop the
 # region + table prompt), regardless of the page-level read — tables are structure that
 # line-OCR / Apple Vision read poorly. Geometry still comes from the deterministic

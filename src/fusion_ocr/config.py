@@ -60,6 +60,10 @@ class Config:
     # still escalate to the VLM.
     prefer_apple_vision: bool = False
     apple_vision_skip_vlm: float = 0.92
+    # RapidOCR (ONNX Runtime) as the deterministic engine instead of PaddleOCR — an A/B
+    # option for the perf eval (Docs/dev_notes/rapidocr_eval_plan.md), inert unless set AND
+    # the `rapid` extra is installed. Same routing seam as Apple Vision.
+    prefer_rapidocr: bool = False
     # Route detected table regions on scanned pages to a focused VLM table read (crop +
     # table prompt), regardless of the page-level read — tables are structure that line-
     # OCR/Apple Vision handle poorly. Geometry still comes from the deterministic grid;
@@ -115,6 +119,7 @@ def load(path: str | Path = "config.toml") -> Config:
         overlay_font=run.get("overlay_font", ""),
         prefer_apple_vision=run.get("prefer_apple_vision", False),
         apple_vision_skip_vlm=run.get("apple_vision_skip_vlm", 0.92),
+        prefer_rapidocr=run.get("prefer_rapidocr", False),
         table_vlm_read=run.get("table_vlm_read", True),
         fuse_min_sim=run.get("fuse_min_sim", 0.34),
         fuse_det_conf_trust=run.get("fuse_det_conf_trust", 0.80),
@@ -150,6 +155,7 @@ def to_toml_dict(cfg: Config) -> dict:
             "overlay_font": cfg.overlay_font,
             "prefer_apple_vision": cfg.prefer_apple_vision,
             "apple_vision_skip_vlm": cfg.apple_vision_skip_vlm,
+            "prefer_rapidocr": cfg.prefer_rapidocr,
             "table_vlm_read": cfg.table_vlm_read,
             "fuse_min_sim": cfg.fuse_min_sim,
             "fuse_det_conf_trust": cfg.fuse_det_conf_trust,

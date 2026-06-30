@@ -47,3 +47,26 @@ def test_resolve_config_override():
 def test_default_routes_cover_expected_scripts():
     for s in ("latin", "thai", "cyrillic", "arabic", "cjk"):
         assert s in DEFAULT_ROUTES
+
+
+def test_rapidocr_engine_seam(monkeypatch):
+    # Default: PaddleOCR, regardless of whether rapid is importable.
+    assert resolve("latin", cfg=None).engine == "paddle"
+    assert resolve("latin", SimpleNamespace(prefer_rapidocr=False)).engine == "paddle"
+
+    # prefer_rapidocr routes to "rapidocr" only when the engine reports available; if the extra
+    # isn't installed it stays on PaddleOCR (a silent no-op, not a crash).
+    from fusion_ocr.engines import rapid
+    monkeypatch.setattr(rapid, "available", lambda: True)
+    assert resolve("latin", SimpleNamespace(prefer_rapidocr=True)).engine == "rapidocr"
+    monkeypatch.setattr(rapid, "available", lambda: False)
+    assert resolve("latin", SimpleNamespace(prefer_rapidocr=True)).engine == "paddle"
+
+
+def test_rapidocr_recognize_is_a_clear_stub():
+    # Wired but not implemented — calling it must fail loudly, not silently return nothing.
+    import pytest
+
+    from fusion_ocr.engines import rapid
+    with pytest.raises(NotImplementedError):
+        rapid.recognize(object(), "latin")
