@@ -34,7 +34,7 @@
       "pdf": "samples/TestPDFs_01/redacted/EFTA02731477.pdf",
       "page": 0,
       "transcript": "redacted-efta.txt",
-      "note": "Redacted scan (1 page). Mark blacked-out spans as [REDACTED] in the transcript so recall isn't penalised for unreadable ink."
+      "note": "Redacted email (1 page) — MIXED content: it carries a partial text layer AND gets OCR'd. The exact text layer beats the OCR (it already covers the page), so no overlay is added and search hits aren't doubled; the scorecard shows searchability `via txt` (the source text layer), not an OCR overlay. Mark blacked-out spans as [REDACTED] in the transcript so recall isn't penalised for unreadable ink."
     }
   ]
 }

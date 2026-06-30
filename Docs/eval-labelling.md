@@ -75,9 +75,27 @@ file waiting for its transcript. **Your job is to fill in those `.txt` files.**
 | `prec` | fraction of the pipeline's words that are real — `1 − prec` is the **hallucination** rate |
 | `CER` / `WER` | character/word error including reading order — trust most on single-column prose |
 | `refchars` | size of your transcript (how much the page weighs in the aggregate) |
+| `sCER` / `sRcl` | the same CER and recall, but for the **searchable** text — what `find()` hits in the *output PDF*, not the reading view |
+| `via` | where that searchable text lives: `ovl` = the OCR overlay, `txt` = the source PDF's own text layer, `MISS` = nothing findable |
 
 Recall/precision isolate recognition; CER/WER fold in order too. A high recall with a high
 CER means "read correctly but mis-ordered", not "misread".
+
+**Reading view vs searchable text.** The left columns score `document.md` (the clean
+reading — what we *recovered*). The `s*` columns score what a reader's find/search actually
+hits in the output PDF: `overlay.pdf` when one was built (it carries the source text layer
+*plus* the OCR overlay), otherwise the source PDF itself, whose text layer is still
+searchable. The `via` column says which:
+
+- `ovl` — an OCR overlay carries it. This is the case the fusion fix is about. Usually it
+  matches the reading, but where fusion can't confidently anchor a line to a detected box
+  (rotated dense print, badly garbled handwriting) the overlay degrades *honestly* and
+  `sRcl` drops below `recall`. **That gap is the number to watch** — the cost of not
+  smearing the reading onto guessed positions.
+- `txt` — no overlay was added because the page's own text layer already carries the
+  content (a born-digital page, or a mixed scan whose exact text layer beat the OCR). Adding
+  an overlay would double search hits, so we don't; `sRcl` here is the text layer's recall.
+- `MISS` — an OCR page that produced no searchable text at all. A genuine hole; `sRcl` is 0.
 
 ## Adding more pages later
 
