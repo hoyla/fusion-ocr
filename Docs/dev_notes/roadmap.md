@@ -18,13 +18,18 @@ real, not before.
   **non-Thai** hard pages (handwriting, degraded scans, the rotations / redactions in test set 1).
   Thai ground truth is parked under Next (no Thai reader); the big-corpus alternative is the
   3rd-party SROIE/FUNSD set (now wired — see *Later → Input formats*).
-- **Reading order: actually measure it.** *(Promoted from Next — same workstream as the
-  labelled set above.)* The hand-labelled transcripts (in true visual reading order) are now
-  that oracle — CER against them folds in reading order, unlike the born-digital text layer
-  (content-stream order) — and the searchability eval already scores against them. What remains
-  is scoring multi-column / complex layouts against the labelled set as it grows. **Pickup
-  note:** [handover_reading_order.md](handover_reading_order.md) (first step is labelling
-  multi-column scanned pages, not code).
+- **Reading order: actually measure it.** *(Largely addressed for scanned forms — 2026-06-30.)*
+  Two oracles now fold reading order into CER: the hand-labelled transcripts (true visual order),
+  and — the unlock for scale — **FUNSD's per-line boxes reconstructed into reading order**
+  (`eval/datasets.py` `_reading_order`; `--dataset funsd`), giving ~200 complex scanned forms
+  without hand-labelling. First numbers (n=16, stable vs n=6): reordering to reading order
+  roughly **halves** the deterministic CER (0.44→0.25) and the VLM lands at reading-order CER
+  **0.15** (recall 0.84) — so the learned order head and the VLM both put complex forms into
+  near-correct reading order, the residual being recognition not order. Method + numbers + caveats in
+  [reading_order_measurement.md](reading_order_measurement.md). **Remaining gap:** newspaper-style
+  multi-column *prose* on a *scanned* page (FUNSD is forms; born-digital multi-column prose is
+  already testable via the content-stream harness) — that still wants a hand-labelled page. See
+  [handover_reading_order.md](handover_reading_order.md).
 
 (The Qwen3.5-VL re-test is **done** — switched the default reader to
 `mlx-community/Qwen3.5-9B-MLX-4bit`; see [done.md](done.md).)
