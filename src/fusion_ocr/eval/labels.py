@@ -76,6 +76,18 @@ def load_labelset(manifest_path) -> list[Label]:
     return labels
 
 
+def _pdf_text(pdf_path) -> str:
+    """All searchable text embedded in a PDF, pages joined — i.e. what a reader's
+    find/search would actually hit (used for both overlay.pdf and the source PDF). ''
+    if the file is absent (so a missing overlay scores as empty rather than raising)."""
+    import fitz
+    p = Path(pdf_path)
+    if not p.exists():
+        return ""
+    with fitz.open(str(p)) as d:
+        return " ".join(pg.get_text() for pg in d)
+
+
 def _extract_pages(src, page_indices: list[int], dst) -> None:
     """Copy the given pages into a fresh PDF, preserving content as-is (no flattening), so
     the pipeline sees exactly what production would — a real scan stays a scan, and any
@@ -93,7 +105,18 @@ def evaluate_labelset(manifest_path, cfg: Config, tmp_root=None, no_vlm: bool = 
     """Score every labelled page in a manifest. Each result carries `status`: "scored"
     (with the metric fields from score()) or "unlabelled" (transcript still empty).
     ``no_vlm=True`` runs the deterministic engine only (no reader) — the recovered text is
-    pure PaddleOCR / Apple Vision recognition."""
+    pure PaddleOCR / Apple Vision recognition.
+
+    Each scored result also carries a nested ``searchable`` score and ``searchable_via``:
+    the text a reader's find/search would actually hit in the OUTPUT PDF, measured against
+    the same human transcript. That's ``overlay.pdf`` when one was built (it carries the
+    source text layer *plus* the OCR overlay), otherwise the source PDF itself — whose text
+    layer is still searchable (born-digital pages, and mixed pages whose exact text layer
+    already covers the content, so no overlay is added and search hits aren't doubled).
+    ``searchable_via`` records which: ``"overlay"``, ``"text_layer"``, or ``"none"`` (nothing
+    searchable — a genuine miss). The reading view (``document.md``) and the searchable text
+    diverge where fusion can't anchor a line to a box; the gap is text we recovered but a
+    reader can't find."""
     from ..pipeline import deterministic_pipeline, process
 
     labels = load_labelset(manifest_path)
@@ -112,5 +135,18 @@ def evaluate_labelset(manifest_path, cfg: Config, tmp_root=None, no_vlm: bool = 
         _extract_pages(lab.pdf, lab.pages, page_pdf)
         doc = process(page_pdf, eval_cfg, pipeline=pipeline)
         hyp = "\n".join(recovered_text(p) for p in doc.pages)   # concat across the span
-        results.append({**base, "status": "scored", **score(ref, hyp)})
+        res = {**base, "status": "scored", **score(ref, hyp)}
+
+        # Searchability: score the text find() would hit in the OUTPUT PDF, not just the
+        # reading view. That's overlay.pdf when one was built (it's the source PDF + the OCR
+        # overlay), otherwise the source PDF itself — whose text layer stays searchable for
+        # born-digital pages and for mixed pages whose exact text layer already covers the
+        # content (the OCR is superseded, so no overlay is added and search hits aren't
+        # doubled). The gap to the reading score is text recovered but not findable.
+        overlay_pdf = doc.artifacts.get("overlay_pdf")
+        searchable = _pdf_text(overlay_pdf) if overlay_pdf else _pdf_text(page_pdf)
+        res["searchable_via"] = ("overlay" if overlay_pdf else "text_layer") \
+            if normalize(searchable) else "none"
+        res["searchable"] = score(ref, searchable)
+        results.append(res)
     return results
