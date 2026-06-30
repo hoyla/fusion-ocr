@@ -68,6 +68,18 @@ real, not before.
 
 ## Next
 
+- **Replace the VLM script-probe with a cheaper detector (perf).** The `language` stage IDs the
+  dominant script to route the recogniser/reader; for no-text-layer scans it fires a whole 9B-VLM
+  image inference per page to do it (the documented "first cut" — [routing.md](../routing.md) flags
+  *"a fast langid VLM probe, **or a script classifier**"*). Per-stage profiling (2026-06-30) now
+  shows that probe is **~14% of total runtime** — a heavyweight model answering "Latin or CJK?".
+  Quick win already shipped (probe 120→72 DPI, ~halves it; see [done.md](done.md)); the proper fix
+  is a cheaper detector: **ANE Apple Vision on a crop**, a tiny script classifier, or a
+  **known-corpus-script config** to skip the probe when the operator knows the estate's language
+  (e.g. all-English). Deterministic/auditable + near-eliminates the cost. (Profiling found
+  `ocr_det` PaddleOCR-on-CPU ~40% and `vlm_read` MLX ~38% are the other big costs; PaddleOCR can't
+  use the ANE — PaddlePaddle has no Metal backend — so its lever is image size / oneDNN, not a
+  device switch.)
 - **Tables:** multi-level-header semantics for `find_tables`; cross-validate `find_tables` vs
   the vision grid; cleaner per-cell content on scanned tables. **Test-coverage gap (2026-06-30):**
   the scanned-table → focused-VLM-table-read path is currently UNTESTED — in test set 1 the

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -162,7 +163,9 @@ def process(
 
     doc.recipe = recipe
     for i in range(start, len(pipeline)):
+        t0 = time.perf_counter()
         doc = pipeline[i].run(doc, cfg)
+        doc.stage_seconds[pipeline[i].name] = round(time.perf_counter() - t0, 3)
         doc.stage_completed = pipeline[i].name
         doc.recipe = recipe
         _snapshot(work, i, names[i]).write_text(doc.to_json())

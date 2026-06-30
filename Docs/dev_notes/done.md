@@ -87,6 +87,17 @@ the big remediations is in the review/plan notes — this is the index, not a du
   the corpus lacked. First proof (Segro 2023 AR p66, 4-column landscape): VLM CER 0.020 / recall
   0.991, deterministic 0.029 / 0.988 — both read the columns in correct order. See
   [eval-labelling.md](../eval-labelling.md).
+- **Per-stage timing + first profiling** — `process()` records wall-clock per stage into
+  `Document.stage_seconds` (in `doc.json`), so "where did the time go?" is answerable from the
+  output. Profiling (5 representative OCR-Quality pages) found the cost split: **`ocr_det`
+  PaddleOCR-on-CPU ~40%, `vlm_read` MLX ~38%, `language` VLM script-probe ~14%**, rest ~8%.
+  Quality-safe speedups applied: `ocr_det` 200→**150 DPI** (recognition within ~0.01 word recall,
+  and now shares the 150-DPI raster cache instead of a separate render) and the `language` probe
+  120→**72 DPI** (script ID unchanged, ~halves the stage; max_tokens was *not* the cost — measured
+  no difference, it's vision-token prefill). Bigger structural fix (cheaper script detector) is in
+  the roadmap. PaddleOCR is CPU-only — PaddlePaddle has no Metal/ANE backend, so it can't move to
+  the Neural Engine; the VLM already runs on MLX, and Apple Vision is the (lower-recognition) ANE
+  tier.
 
 ## Config & API
 - Settings registry (`settings.py`) → `GET` / `PATCH /config`; secrets masked;
