@@ -73,6 +73,13 @@ the big remediations is in the review/plan notes — this is the index, not a du
   SROIE/FUNSD ground truth through the ingest path. First run (Qwen3-VL recall/CER): SROIE
   0.62/0.32, FUNSD 0.78/0.39; PaddleOCR leads on clean forms — the VLM's lift scales with
   difficulty (big on handwriting, small on clean print).
+- **Reading-order measurement on scanned forms** — FUNSD's per-line boxes reconstructed into
+  reading order (`_reading_order`) turn ~200 complex scanned forms into a reading-order oracle
+  with no hand-labelling, fixing the loader's old "annotation order isn't reading order" caveat
+  (FUNSD CER is now reading-order CER). First numbers (n=16): reordering halves the
+  deterministic CER (0.44→0.25); VLM reading-order CER 0.15 at recall 0.84 — the learned order
+  head and the VLM both order complex forms near-correctly. Method, numbers, caveats:
+  [reading_order_measurement.md](reading_order_measurement.md).
 
 ## Config & API
 - Settings registry (`settings.py`) → `GET` / `PATCH /config`; secrets masked;

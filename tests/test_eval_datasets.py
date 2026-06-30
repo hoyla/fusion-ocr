@@ -22,6 +22,7 @@ def test_sroie_reference_joins_ocr_box_text_in_order(tmp_path):
 
 
 def test_funsd_reference_joins_form_text_and_skips_empty(tmp_path):
+    # No boxes -> can't order geometrically, falls back to annotation order (lossless).
     ann = tmp_path / "f1.json"
     ann.write_text(json.dumps({
         "form": [{"text": "Date:", "label": "question"},
@@ -29,6 +30,24 @@ def test_funsd_reference_joins_form_text_and_skips_empty(tmp_path):
                  {"text": "12/2024", "label": "answer"}],
     }))
     assert datasets.funsd_reference(ann) == "Date:\n12/2024"
+
+
+def test_funsd_reference_reconstructs_reading_order_from_boxes(tmp_path):
+    # Boxes given in scrambled annotation order; reference must come out in reading order:
+    # top-to-bottom, and within a row left-to-right (the side-by-side label/value pair).
+    # box = [x0, y0, x1, y1].
+    ann = tmp_path / "f2.json"
+    ann.write_text(json.dumps({
+        "form": [
+            {"text": "Value", "box": [300, 100, 360, 116]},   # row 1, right
+            {"text": "Footer", "box": [80, 400, 140, 416]},   # row 3
+            {"text": "Label:", "box": [80, 102, 140, 118]},   # row 1, left (y within a band)
+            {"text": "Middle", "box": [80, 250, 160, 266]},   # row 2
+        ],
+    }))
+    assert datasets.funsd_reference(ann) == "Label:\nValue\nMiddle\nFooter"
+    # Annotation-order helper preserves the raw (scrambled) order for comparison.
+    assert datasets.funsd_reference_annotation_order(ann) == "Value\nFooter\nLabel:\nMiddle"
 
 
 def test_iter_pairs_matches_images_to_annotations_by_stem(tmp_path):
