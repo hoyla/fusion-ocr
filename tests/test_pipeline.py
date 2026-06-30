@@ -74,3 +74,8 @@ def test_end_to_end_emits_artifacts(tmp_path):
     assert (tmp_path / "out" / doc.sha256 / "segment_index.json").exists()
     assert (tmp_path / "out" / doc.sha256 / "doc.json").exists()
     assert doc.pages and doc.pages[0].has_text_layer is True
+
+    # per-stage timing recorded for every stage that ran, and survives the JSON round-trip
+    assert [s.name for s in DEFAULT_PIPELINE] == list(doc.stage_seconds)
+    assert all(v >= 0 for v in doc.stage_seconds.values())
+    assert Document.from_json(doc.to_json()).stage_seconds == doc.stage_seconds

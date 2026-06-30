@@ -26,7 +26,11 @@ from .. import raster
 from ..config import Config
 from ..models import Box, Document, Segment
 
-_DEFAULT_DPI = 200
+# 150 DPI: matches the layout/vlm_read render so the raster cache is shared (was a separate
+# 200-DPI render), and measured recognition-equivalent to 200 on this corpus (word recall
+# within ~0.01) while cutting the CPU PaddleOCR detection cost. Detection scales with page
+# pixels; recognition is per-line, so the saving is on detection.
+_DEFAULT_DPI = 150
 _log = logging.getLogger(__name__)
 
 

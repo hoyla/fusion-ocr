@@ -18,7 +18,12 @@ from ..config import AirgapError, Config
 from ..models import Document
 from ..routing import detect_script
 
-_PROBE_DPI = 120
+# 72 DPI: the probe only needs to NAME the dominant script, not read it — measured to return
+# the same script as 120 DPI (Latin/CJK) while roughly halving the VLM prefill cost (the probe's
+# cost is vision-token prefill, scaling with image size, not the one-word generation). Replacing
+# the VLM probe with a cheaper detector (ANE Apple Vision / a script classifier) is the
+# documented follow-up (routing.md), now that profiling shows the probe is ~14% of runtime.
+_PROBE_DPI = 72
 _SCRIPT_PROBE = (
     "What is the dominant script of the main printed text in this image? "
     "Answer with EXACTLY ONE word from: Latin, Thai, Cyrillic, Arabic, CJK, Devanagari."

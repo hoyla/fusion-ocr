@@ -109,6 +109,10 @@ class Document:
     # produced this doc. Resume only reuses a snapshot whose recipe matches the current
     # one, so changing a prompt/model/route reprocesses instead of silently reusing.
     recipe: str = ""
+    # wall-clock seconds spent in each stage that actually ran this invocation (stage name
+    # -> seconds). Populated by the pipeline; lets "where did the time go?" be answered from
+    # the output, not just ad-hoc profiling. Stages reused from a resume snapshot aren't here.
+    stage_seconds: dict[str, float] = field(default_factory=dict)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, ensure_ascii=False)
