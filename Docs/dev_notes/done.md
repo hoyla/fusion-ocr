@@ -9,6 +9,12 @@ the big remediations is in the review/plan notes — this is the index, not a du
   render. `Document`-in/out, recipe-fingerprinted resume, per-stage snapshots.
 - Deterministic geometry + VLM reading, fused with the **ink-gate**; provenance retained
   (`det_text` / `vlm_text` / `source` / `read_by` / `superseded`).
+- **Word-level fusion** (`_word_distribute`): the VLM reading is distributed onto the line-boxes
+  by fuzzy word alignment, so a long prose line spreads across the visual lines it spans — the
+  fix that made handwriting actually *searchable* (line-level alignment left the body as garbled
+  det_text). Degrades honestly: too few anchors → line-level NW fallback; no edge-smearing;
+  confidence gate still protects printed det_text. The clean reading is never lost — `document.md`
+  is the ungated `vlm_reading` (with the exact text layer preserved in the gated overlay/index).
 - **Headline proof:** the handwritten Mandelson→Lammy note — 6 source chars → ~3,185
   searchable chars, fully local. Now *measured* old-vs-new against a hand transcript of the
   2-page letter (word recall): **tesseract ~0.10 → deterministic engines (PaddleOCR / Apple
@@ -75,3 +81,8 @@ the big remediations is in the review/plan notes — this is the index, not a du
 - **Async job queue:** `POST /jobs` enqueues (202); the watcher is the status-driven worker
   (atomic claim); `GET /jobs` feed. `JobStore` (queue) and `storage.py` (content-addressed
   artifacts) are the swap seams for a distributed queue / object store — see roadmap.
+- **Worker log buffering fix:** the watcher line-buffers stdout (+ `PYTHONUNBUFFERED=1` in the
+  units) so its `[watch]`/`[done]` progress reaches a redirected log live, not block-buffered.
+- **Live-loop validated end-to-end** (2026-06-30): API + worker + MLX up, a real document pushed
+  through `POST /jobs` → queue → worker → `GET /jobs/{sha}` → artifacts, under airgap, auth
+  enforced. The deployed path (not just `process()`/`--once`) is proven.

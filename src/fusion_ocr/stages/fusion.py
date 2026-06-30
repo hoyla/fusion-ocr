@@ -9,15 +9,21 @@ Brings the deterministic geometry and the VLM reading together:
 2. LINE FUSION for OCR pages with a VLM reading:
    * cluster PaddleOCR's (often over-segmented) boxes into visual lines and merge
      each cluster to one box — this is the geometry;
-   * sequence-align (Needleman-Wunsch, scored by fuzzy similarity against the boxes'
-     garbage det_text) the VLM reading's lines onto those merged line-boxes — this is
-     the semantics. One VLM line per box, so no duplication and highlights land on
-     the right line.
+   * distribute the VLM reading onto those line-boxes at the WORD level
+     (`_word_distribute`) — this is the semantics. Even garbled handwriting keeps roughly
+     the right words in roughly the right places, so fuzzy word alignment spreads a long
+     prose line across the several visual lines it spans — which line-level alignment
+     could not (the VLM returns prose; the detector finds many short lines, so one VLM
+     line can't cover them all). It degrades honestly: too few anchors (a reading-order
+     mismatch / wholesale recognition failure) falls back to the line-level Needleman-
+     Wunsch baseline (`_nw_align`); unanchored edge clusters get nothing rather than
+     smeared words; and a confidence gate keeps confident printed det_text when the VLM
+     share barely resembles it.
 
-`det_text` / `vlm_text` are always kept beside best_text for provenance. Multi-column
-clustering is y-band based for now; true column separation arrives with the
-PP-StructureV3 layout stage (the VLM reading is already column-aware, so the markdown
-view is unaffected).
+`det_text` / `vlm_text` are always kept beside best_text for provenance. The clean, ungated
+reading is `document.md` (the page's vlm_reading); the overlay + segment_index are the
+box-anchored, gated record. Region-aware clustering keeps columns apart using the layout
+stage's PP-DocLayoutV2 reading order; the VLM reading is already column-aware too.
 """
 
 from __future__ import annotations
