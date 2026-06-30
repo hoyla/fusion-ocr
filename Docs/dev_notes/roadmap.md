@@ -22,7 +22,9 @@ real, not before.
   labelled set above.)* The hand-labelled transcripts (in true visual reading order) are now
   that oracle — CER against them folds in reading order, unlike the born-digital text layer
   (content-stream order) — and the searchability eval already scores against them. What remains
-  is scoring multi-column / complex layouts against the labelled set as it grows.
+  is scoring multi-column / complex layouts against the labelled set as it grows. **Pickup
+  note:** [handover_reading_order.md](handover_reading_order.md) (first step is labelling
+  multi-column scanned pages, not code).
 
 (The Qwen3.5-VL re-test is **done** — switched the default reader to
 `mlx-community/Qwen3.5-9B-MLX-4bit`; see [done.md](done.md).)
