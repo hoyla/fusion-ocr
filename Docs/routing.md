@@ -227,9 +227,13 @@ is present.
       the cleaner content path. (Rejected: naive word-splitting — see Docs note.)
 - [x] Confidence-gated escalation (low PaddleOCR conf / refusal → stronger model)
 - [x] Image-only script detection (one-word VLM probe for no-text-layer pages)
-- [x] Reading order via XY-cut (multi-column / header+columns / tables; rotation-aware,
-      computed in displayed space) — the same approach PP-StructureV3 uses, applied to
-      our regions: deterministic + explainable, not a black-box model.
+- [x] Reading order from **PP-DocLayoutV2's learned per-region `order` head** — this replaced
+      a bespoke XY-cut implementation. *Why it changed:* build-vs-adopt (PaddleOCR already ships
+      a reading-order head, so the hand-rolled XY-cut was deleted — see
+      [principles.md](principles.md)), and the earlier "must be deterministic + explainable, not
+      a black-box" rationale was deliberately overturned: reading order is **not** a provenance
+      claim, so a learned model is fine — determinism is reserved for the geometry / defensibility
+      backbone, not sequencing.
 - [ ] Table-class routing (route table regions to a table-aware reader)
 - [ ] Within-region line order on rotated pages (region order is correct; lines within
       a rotated region still sort by base-space y/x — minor)
