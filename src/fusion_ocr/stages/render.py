@@ -1,9 +1,10 @@
-"""Stage 7 — Render outputs.
+"""Stage 09 — Render outputs (the final pipeline stage).
 
-Emits three artifacts into out/<sha256>/:
+Emits the three deliverables into out/<sha256>/ (see Docs/outputs.md):
   * overlay.pdf      — invisible text layer positioned by Segment boxes (PyMuPDF,
                        render mode 3). Searchable + highlightable.
-  * <lang>.md        — structured per-language reading (tables intact).
+  * document.md      — structured reading view, tables intact (one file, with
+                       per-language sections; the ungated VLM reading).
   * segment_index.json — the id <-> box <-> text map that powers "show me this line
                        in situ" and is the provenance record.
 
