@@ -17,14 +17,15 @@ from pathlib import Path
 
 @dataclass
 class VLMConfig:
-    # Default generalist reader = Qwen3-VL-8B-Instruct served by mlx-vlm (MLX is far
-    # faster than Ollama/llama.cpp on Apple Silicon). Start the server with:
+    # Default generalist reader = Qwen3.5-9B (MLX) served by mlx-vlm (MLX is far faster than
+    # Ollama/llama.cpp on Apple Silicon). Start the server with:
     #   python -m mlx_vlm.server --port 8080
-    # Specialists (e.g. Typhoon for Thai) are routed to their own endpoints — see
-    # routing.py / [routing.<script>]. If the server is down the call fails and fusion
-    # falls back to PaddleOCR det_text.
+    # Chosen over Qwen3-VL-8B by the 2026-06-30 re-test (marginally better overall, clearly
+    # better on handwriting; trusted apache-2.0 build). Specialists (e.g. Typhoon for Thai) are
+    # routed to their own endpoints — see routing.py / [routing.<script>]. If the server is
+    # down the call fails and fusion falls back to PaddleOCR det_text.
     base_url: str = "http://localhost:8080/v1"
-    model: str = "mlx-community/Qwen3-VL-8B-Instruct-4bit"
+    model: str = "mlx-community/Qwen3.5-9B-MLX-4bit"
     api_key: str = "not-needed-locally"
     # Confidence-gated escalation: when set, a page whose mean PaddleOCR confidence is
     # below `escalate_below` (or whose primary read looks like a refusal) is re-read by
@@ -124,7 +125,7 @@ def load(path: str | Path = "config.toml") -> Config:
         forwarded_allow_ips=run.get("forwarded_allow_ips", "127.0.0.1"),
         vlm=VLMConfig(
             base_url=vlm.get("base_url", "http://localhost:8080/v1"),
-            model=vlm.get("model", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),
+            model=vlm.get("model", "mlx-community/Qwen3.5-9B-MLX-4bit"),
             api_key=vlm.get("api_key", "not-needed-locally"),
             escalate_below=vlm.get("escalate_below", 0.0),
             escalation_model=vlm.get("escalation_model", ""),

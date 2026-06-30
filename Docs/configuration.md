@@ -37,7 +37,7 @@ and this table are generated from. `GET /config` returns every row below (secret
 
 | Setting | Default | Configurable | What it does |
 | --- | --- | --- | --- |
-| `vlm.model` | `mlx-community/Qwen3-VL-8B-Instruct-4bit` | str | Default generalist reader model name passed to the OpenAI-compatible endpoint. |
+| `vlm.model` | `mlx-community/Qwen3.5-9B-MLX-4bit` | str | Default generalist reader model name passed to the OpenAI-compatible endpoint. |
 | `vlm.base_url` | `http://localhost:8080/v1` | str | Reader endpoint. Ollama / MLX / in-VPC vLLM all speak this API, so moving local → GPU is a `base_url` change. (Under airgap it must be loopback, or the seal refuses it.) |
 | `vlm.api_key` | `not-needed-locally` | str (**masked**) | API key for the endpoint. Surfaced as `***` by `GET /config`. |
 | `vlm.escalate_below` | `0.0` | `0.0`–`1.0` | Confidence-gated escalation: re-read a page with `escalation_model` when its mean PaddleOCR confidence is below this (or the primary read looks like a refusal). `0.0` disables it. |

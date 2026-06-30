@@ -159,10 +159,11 @@ a runtime artifact, not the model.** Takeaways:
 
 - **MLX is the preferred local runtime on Apple Silicon**; serve readers via
   `python -m mlx_vlm.server` and set `vlm.base_url = http://localhost:8080/v1`.
-- **Qwen3-VL-8B-Instruct (MLX)** is a strong, fast, multilingual generalist — a
-  candidate to replace the Qwen2.5-VL/Ollama default, and a viable Thai reader
-  alongside Typhoon. (Use **Instruct**, not Thinking, for OCR; recommended sampling
-  temp 0.7 / top-p 0.8 / top-k 20, though greedy is fine for transcription.)
+- **Qwen3.5-9B (MLX)** is the default generalist — a strong, fast, multilingual reader,
+  marginally ahead of Qwen3-VL-8B overall and clearly better on handwriting in the
+  2026-06-30 re-test (which is why it's now the default; Qwen3-VL-8B remains a one-line
+  rollback). Use a trusted build (`mlx-community/Qwen3.5-9B-MLX-4bit`) — the Qwen3.5 space
+  has many abliterated/"Heretic" variants; never run a tampered build on confidential material.
 - Qwen3.5-VL exists (text MLX builds published; VL MLX build not yet) — re-test when
   available.
 - Lesson (again): benchmark the *runtime*, not just the model.
