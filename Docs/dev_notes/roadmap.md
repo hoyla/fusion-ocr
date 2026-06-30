@@ -57,6 +57,15 @@ real, not before.
   are now that oracle — CER against them folds in reading order, unlike the born-digital text
   layer — so what remains is scoring multi-column / complex layouts against the labelled set as
   it grows.
+- **Improve fusion anchoring on rotated dense print** — *parked; likely acceptable as-is.* The
+  searchability eval now measures a real gap on rotated small print: the rotated Goldfinch
+  invoice scores **searchable recall 0.65 vs 0.89 reading** — where word-anchoring fails on the
+  rotated footer (bank details, codes), the overlay keeps the garbled `det_text` rather than
+  smearing the reading onto guessed positions (the honest fallback). **Not data loss:** the full
+  clean reading is in `document.md` and `doc.json`, which Giant indexes as separate search views,
+  so a query that misses in the Combined (overlay) view still resolves in the text view and takes
+  the reader there. So this is a search-*precision* refinement, not a defect — revisit only if
+  reporters hit it in real use. (Measured by the searchability eval; see [done.md](done.md).)
 - **Result push for non-airgap tiers:** an optional webhook / callback on completion. The
   sealed (airgap) tier stays poll-only by construction — the process can't dial out — so this
   is a tier-gated enhancement, never the default.
@@ -68,6 +77,13 @@ Capability beyond the MVP target:
 - **Rotated-page tables** — the table-structure and focused table-read stages currently skip
   rotated pages ([review_02](review_02_2602627.md) #8). Add support when rotated scans turn
   up in the corpus.
+- **Collapse Giant's "text" vs "OCR text" views (integration value).** Giant shows four
+  per-document views — original, Combined (PDF + overlay), machine-readable text, OCR text —
+  each separately indexed; the two text views confuse users ("which do I read if Combined is
+  problematic?"). This tool emits a *single* provenanced output that already composes
+  born-digital text and OCR into one artifact (exact text layer kept, OCR only where the page
+  needs it — never doubled), so it could let Giant retire the text/OCR split into one view. A
+  downstream Giant change, noted here as a reason the structured output earns its keep.
 
 Input formats — an **ingest adapter** that normalises any input to a PDF, after which the
 existing pipeline runs unchanged (PDF is the identity case). The original is kept as the
