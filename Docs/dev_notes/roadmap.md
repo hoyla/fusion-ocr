@@ -25,7 +25,11 @@ real, not before.
 ## Next
 
 - **Tables:** multi-level-header semantics for `find_tables`; cross-validate `find_tables` vs
-  the vision grid; cleaner per-cell content on scanned tables.
+  the vision grid; cleaner per-cell content on scanned tables. **Test-coverage gap (2026-06-30):**
+  the scanned-table → focused-VLM-table-read path is currently UNTESTED — in test set 1 the
+  scanned docs (Thai forms) are layout-classified `paragraph`/`header`/`footer`, not `table`, and
+  the `table`-classified docs (sackler) are born-digital (`find_tables`). A genuinely *scanned*
+  data table is missing from the corpus; source one to exercise the path.
 - **Document the output artifacts** (repo docs) — add a table (e.g. `Docs/outputs.md`)
   describing every file in `out/<sha256>/`: the per-stage resume snapshots
   `doc.00-triage.json` … `doc.09-render.json` (INTERIM — each stage's `Document` state, the
