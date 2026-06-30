@@ -37,6 +37,14 @@ the big remediations is in the review/plan notes — this is the index, not a du
   the fast on-device tier, not a stronger reader), and the VLM lifts handwriting recall from
   ~0.45 to ~0.95. (n is tiny — directional, not significant; the labelled set is the way to
   grow it.)
+- **Searchability eval** — the hand-labelled eval also scores what `find()` hits in the *output
+  PDF* (the searchable deliverable), not just the `document.md` reading view: `overlay.pdf` when
+  one was built, else the source PDF's own text layer (`searchable` + `searchable_via` in the
+  result; `sCER`/`sRcl`/`via` columns). This quantifies the word-level fusion fix — searchable
+  recall **equals** the reading on handwriting (0.973) and printed scans (0.984, via the overlay),
+  degrades *honestly* to 0.65 on rotated dense print where anchoring fails, and is carried at 0.86
+  by the source text layer on the mixed redacted page (not a miss). A dependency-free regression
+  guard on the reading-vs-searchable gap.
 
 ## Reviews & hardening
 - **Review 01** ([review_01_260627.md](review_01_260627.md)): recipe-fingerprint resume,
