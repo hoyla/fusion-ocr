@@ -13,6 +13,7 @@ Wants=network-online.target
 Type=simple
 User=fusion-ocr
 WorkingDirectory=/opt/fusion-ocr
+Environment=PYTHONUNBUFFERED=1   # progress/status lines reach the journal live, not block-buffered
 # Same env as the API (airgap pre-pulled models, HF_TOKEN, etc.). The worker does NOT need
 # FUSION_OCR_API_TOKEN — it's not an HTTP service.
 EnvironmentFile=/etc/fusion-ocr/fusion-ocr.env

@@ -93,6 +93,12 @@ def scan_once(cfg: config_mod.Config, jobs: JobStore,
 
 
 def main() -> None:
+    # Line-buffer stdout so the worker's [watch]/[done] progress shows up live in a redirected
+    # log (a file / systemd journal), where stdout is otherwise block-buffered and the status
+    # lines wouldn't appear until the buffer filled — making a busy or stuck worker look idle.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+
     parser = argparse.ArgumentParser(prog="fusion-ocr")
     parser.add_argument("--config", default="config.toml")
     parser.add_argument("--once", action="store_true", help="process then exit")
