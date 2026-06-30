@@ -74,15 +74,15 @@ Readers are OpenAI-compatible endpoints, so each tool runs wherever it's fastest
 the router points per-script at the right one. Default setup on Apple Silicon:
 
 ```bash
-# generalist reader — Qwen3-VL via MLX (~10-40x faster than Ollama on Apple Silicon)
+# generalist reader — Qwen3.5-9B via MLX (~10-40x faster than Ollama on Apple Silicon)
 pip install mlx-vlm
-python -m mlx_vlm.server --port 8080        # serves mlx-community/Qwen3-VL-8B-Instruct-4bit
+python -m mlx_vlm.server --port 8080        # serves mlx-community/Qwen3.5-9B-MLX-4bit
 
 # Thai specialist — Typhoon on Ollama
 ollama pull scb10x/typhoon-ocr1.5-3b
 ```
 
-The router sends Latin/handwriting/etc. → Qwen3-VL/MLX (`:8080`), Thai → Typhoon
+The router sends Latin/handwriting/etc. → Qwen3.5/MLX (`:8080`), Thai → Typhoon
 (`:11434`). One config value moves any reader — Ollama, MLX, or in-VPC vLLM all speak
 the same API, so swapping local → transcription-GPU is just a `base_url` change. See
 [Docs/routing.md](Docs/routing.md).

@@ -18,9 +18,9 @@ real, not before.
   **non-Thai** hard pages (handwriting, degraded scans, the rotations / redactions in test set 1).
   Thai ground truth is parked under Next (no Thai reader); the big-corpus alternative is the
   3rd-party SROIE/FUNSD set (now wired — see *Later → Input formats*).
-- **Qwen3.5-VL re-test** (moved up from Next — trigger met, build downloaded): measure
-  `mlx-community/Qwen3.5-9B-MLX-4bit` vs the current Qwen3-VL-8B on the hand-labelled set; decide
-  whether to switch the default reader. *(In progress.)*
+
+(The Qwen3.5-VL re-test is **done** — switched the default reader to
+`mlx-community/Qwen3.5-9B-MLX-4bit`; see [done.md](done.md).)
 
 ## Next
 

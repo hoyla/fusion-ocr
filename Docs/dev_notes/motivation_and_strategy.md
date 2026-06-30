@@ -67,7 +67,7 @@ with no off-the-shelf equivalent — it is the actual product.
 
 - **A toolkit, routed per region, not a monolith.** Script detection picks the right
   deterministic recogniser and the right reader per region (Apple Vision for fast on-device
-  printed text, PaddleOCR for cross-platform geometry, Qwen3-VL as generalist reader,
+  printed text, PaddleOCR for cross-platform geometry, Qwen3.5-9B as generalist reader,
   Typhoon for Thai). Geometry is always deterministic; only the reader varies. See
   [routing.md](../routing.md).
 - **Searchable bbox overlay** — an OCRmyPDF-style invisible text layer, but correct, so the
