@@ -31,6 +31,9 @@ from ..models import Box, Document, Page, Segment
 _IOU_OVERLAP = 0.5
 _GAP = -0.2  # alignment gap penalty
 _OCR_SOURCES = {"paddle", "vision"}  # deterministic OCR engines (geometry + det_text)
+_MAX_DP_CELLS = 1_500_000  # word-level DP guard; above this fall back to the cheaper line-level
+_ANCHOR_SIM = 0.5          # a det<->VLM word match at least this similar counts as an anchor
+_MIN_ANCHOR_FRAC = 0.3     # too few anchored clusters -> alignment untrustworthy, fall back
 # The anti-misalignment gate thresholds (fuse_min_sim / fuse_det_conf_trust) live on
 # Config — surfaceable and tunable via the settings registry / API.
 
@@ -147,6 +150,76 @@ def _nw_align(cluster_texts: list[str], vlm_lines: list[str]) -> dict[int, int]:
     return mapping
 
 
+def _word_distribute(cluster_texts: list[str], vlm_reading: str) -> list[str] | None:
+    """Spread the VLM reading across the in-order line clusters at the WORD level — one text
+    per cluster, or None if the alignment is too weak to trust (caller falls back to line-level).
+
+    Line-level alignment ([_nw_align]) breaks on handwriting: the VLM returns prose (a few long
+    lines) while the detector finds many short visual lines, so one VLM line can't cover the
+    several clusters it actually spans — the others get gapped and keep their garbled det_text.
+    But even garbled handwriting keeps roughly the right WORDS in roughly the right places
+    (`rturaing`≈`returning`), so we fuzzy-align det words to VLM words and project each VLM word
+    back onto the cluster its aligned det word belongs to. A long sentence then flows across its
+    visual lines instead of collapsing onto the first box.
+
+    Trust guards (so it degrades honestly, never confidently-wrong):
+    - **Anchors.** A det<->VLM word match >= _ANCHOR_SIM is an anchor. If too few clusters are
+      anchored (a different reading order broke the monotonic chain, or recognition failed
+      wholesale), return None — line-level NW is the safer baseline.
+    - **No edge-smearing.** Distribute only WITHIN the outermost anchored clusters; VLM words
+      past them (an entirely undetected region) are dropped here, not smeared onto a boundary
+      box — they remain in the reading view (document.md), just not pinned to a coordinate."""
+    det_tagged = [(ci, w) for ci, t in enumerate(cluster_texts) for w in t.split()]
+    vlm_words = vlm_reading.split()
+    if not det_tagged or not vlm_words:
+        return None
+
+    A = [w for _, w in det_tagged]
+    n, m = len(A), len(vlm_words)
+    dp = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(1, n + 1):
+        dp[i][0] = dp[i - 1][0] + _GAP
+    for j in range(1, m + 1):
+        dp[0][j] = dp[0][j - 1] + _GAP
+    for i in range(1, n + 1):
+        ai, prev, row = A[i - 1], dp[i - 1], dp[i]
+        for j in range(1, m + 1):
+            row[j] = max(prev[j - 1] + _sim(ai, vlm_words[j - 1]),
+                         prev[j] + _GAP, row[j - 1] + _GAP)
+
+    ops: list[tuple] = []   # (cluster_idx | None, vlm_word | None, is_anchor)
+    i, j = n, m
+    while i > 0 or j > 0:
+        s = _sim(A[i - 1], vlm_words[j - 1]) if i > 0 and j > 0 else 0.0
+        if i > 0 and j > 0 and dp[i][j] == dp[i - 1][j - 1] + s:
+            ops.append((det_tagged[i - 1][0], vlm_words[j - 1], s >= _ANCHOR_SIM)); i, j = i - 1, j - 1
+        elif i > 0 and dp[i][j] == dp[i - 1][j] + _GAP:
+            ops.append((det_tagged[i - 1][0], None, False)); i -= 1
+        else:
+            ops.append((None, vlm_words[j - 1], False)); j -= 1
+    ops.reverse()
+
+    per: list[list[str]] = [[] for _ in cluster_texts]
+    anchored = [False] * len(cluster_texts)
+    cur = 0
+    for ci, w, is_anchor in ops:
+        if ci is not None:
+            cur = ci
+            if is_anchor:
+                anchored[ci] = True
+        if w is not None:
+            per[cur].append(w)
+
+    idx = [k for k, a in enumerate(anchored) if a]
+    if len(idx) < max(1, _MIN_ANCHOR_FRAC * len(cluster_texts)):
+        return None   # untrustworthy (reorder / wholesale failure) -> let the caller fall back
+    # Keep only clusters within the anchored span: an unanchored cluster OUTSIDE it (e.g. an
+    # undetected edge line) gets nothing rather than smeared words. (A trailing word the
+    # detector merely missed at the end of an anchored line still lands on that line.)
+    lo, hi = idx[0], idx[-1]
+    return [" ".join(per[ci]) if lo <= ci <= hi else "" for ci in range(len(cluster_texts))]
+
+
 class Fusion:
     name = "fusion"
 
@@ -207,11 +280,23 @@ class Fusion:
         clusters = (_cluster_within_regions(ocr, page.regions)
                     if page.regions else _cluster_lines(ocr))
         cluster_text = [" ".join(s.det_text or "" for s in cl) for cl in clusters]
-        mapping = _nw_align(cluster_text, vlm_lines) if vlm_lines else {}
+
+        # Marry the VLM reading to the line boxes. Word-level distribution spreads a long prose
+        # line across the several visual lines it spans (handwriting — the headline case). It
+        # declines (returns None) when the page is huge, the alignment is untrustworthy (a
+        # reading-order mismatch), or there's no reading — then fall back to the line-level NW
+        # baseline. Either path yields one text per cluster.
+        n_words = sum(len(t.split()) for t in cluster_text) * len(page.vlm_reading.split())
+        assigned = None
+        if vlm_lines and n_words <= _MAX_DP_CELLS:
+            assigned = _word_distribute(cluster_text, page.vlm_reading)
+        if assigned is None:
+            mapping = _nw_align(cluster_text, vlm_lines) if vlm_lines else {}
+            assigned = [vlm_lines[mapping[ci]] if ci in mapping else "" for ci in range(len(clusters))]
 
         fused: list[Segment] = []
         for ci, cl in enumerate(clusters):
-            line = vlm_lines[mapping[ci]] if ci in mapping else ""
+            line = assigned[ci].strip()
             # Anti-misalignment gate: NW always pairs a cluster with *some* line rather
             # than gapping both, so a confident OCR cluster can be handed a dissimilar VLM
             # line (an off-by-one in the reading). Where the detector is sure it read real

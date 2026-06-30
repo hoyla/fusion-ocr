@@ -5,7 +5,7 @@ from __future__ import annotations
 from fusion_ocr import config as config_mod
 from fusion_ocr.models import Box, Document, Page, Region, Segment
 from fusion_ocr.stages.fusion import (
-    Fusion, _cluster_lines, _cluster_within_regions, _nw_align,
+    Fusion, _cluster_lines, _cluster_within_regions, _nw_align, _word_distribute,
 )
 
 
@@ -95,6 +95,40 @@ def _region(kind, x0, y0, x1, y1, order):
     r = Region(box=Box(points=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]), kind=kind)
     r.reading_order = order
     return r
+
+
+def test_word_distribute_spreads_one_reading_across_visual_lines():
+    # The core fix: the VLM returns the body as ONE prose line, but the detector found three
+    # (garbled) visual lines. Word-level distribution must spread the reading across all three,
+    # not collapse it onto the first box (which is what line-level NW did).
+    clusters = ["day in Oxford and I an rturaing",   # garbled OCR of 3 visual lines
+                "f London,  wanted t drop yu",
+                "abnt Lahingtn"]
+    vlm = "day in Oxford and I am returning to London, I wanted to drop you about Washington"
+    out = _word_distribute(clusters, vlm)
+    assert out is not None
+    assert "returning" in out[0] and "Oxford" in out[0]
+    assert "London" in out[1] and "drop you" in out[1]
+    assert "Washington" in out[2]
+
+
+def test_word_distribute_declines_when_nothing_anchors():
+    # No det word resembles any VLM word (a reading-order mismatch, or wholesale recognition
+    # failure) -> return None so the caller falls back to the line-level baseline rather than
+    # confidently mis-distributing.
+    assert _word_distribute(["zzz qqq", "xxx yyy"], "completely different words appear here") is None
+
+
+def test_word_distribute_drops_unanchored_edge_cluster():
+    # A trailing cluster the reading doesn't cover anchors nothing -> it must get NOTHING (it
+    # keeps its det_text downstream), not smeared words from elsewhere. A trailing word merely
+    # missed at the end of an anchored line is different and still lands on that line.
+    clusters = ["Dear David", "today is polling", "qqq zzz unrelated noise"]
+    vlm = "Dear David today is polling"
+    out = _word_distribute(clusters, vlm)
+    assert out is not None
+    assert "Dear David" in out[0] and "polling" in out[1]
+    assert out[2] == ""    # unanchored edge cluster gets nothing, not a smear
 
 
 def test_region_aware_clustering_keeps_columns_apart():

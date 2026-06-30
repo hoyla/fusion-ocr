@@ -138,11 +138,14 @@ def _page_markdown(page: Page) -> str:
 
 
 def _page_markdown_flat(page: Page) -> str:
-    seg_text = [s.best_text for s in page.segments if s.best_text and not s.superseded]
-    has_textlayer = any(s.source == "textlayer" and not s.superseded
-                        for s in page.segments)
-    if has_textlayer and seg_text:          # mixed: verbatim text layer + OCR
-        return "\n".join(seg_text)
-    if page.vlm_reading.strip():             # pure-VLM page: clean continuous reading
+    # Reading VIEW. When a VLM read the page, its clean continuous reading IS the reading aid —
+    # it covers the whole page (including any digital text it saw), and the EXACT text layer is
+    # preserved untouched in the gated artifacts (segment_index / overlay), so nothing is
+    # discarded. Reassembling from segments here would inherit any per-line fusion garble — and
+    # a stray page-number text fragment must not flip a scan onto the "mixed" segment path.
+    if page.vlm_reading.strip():
         return page.vlm_reading.strip()
+    # No VLM reading: born-digital (exact text layer) or a non-VLM OCR tier — the composed
+    # segments (verbatim text layer + OCR of the image areas) are the reading.
+    seg_text = [s.best_text for s in page.segments if s.best_text and not s.superseded]
     return "\n".join(seg_text)
