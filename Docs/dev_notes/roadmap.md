@@ -17,13 +17,10 @@ real, not before.
   born-digital ~95% is only a difficulty floor, so the work now is **breadth**: label more
   **non-Thai** hard pages (handwriting, degraded scans, the rotations / redactions in test set 1).
   Thai ground truth is parked under Next (no Thai reader); the big-corpus alternative is the
-  3rd-party SROIE/FUNSD set under *Later → Input formats*, once images can be ingested.
-- **VLM client hardening** (pulled up from Next — no external dependency, the most actionable
-  robustness work; [review_01](review_01_260627.md)): a `max_tokens` cap (a pathological page can
-  otherwise generate until the 600s timeout — latency/cost on a shared GPU); retry/backoff on a
-  transient 5xx (today a 503 becomes a silent empty read → `det_text` fallback); reuse one
-  `httpx.Client` (keep-alive) instead of one per page; and **JPEG** rather than PNG base64 (a
-  150-DPI page is multi-MB, +33% for base64 — matters on the remote-reader / in-VPC path).
+  3rd-party SROIE/FUNSD set (now wired — see *Later → Input formats*).
+- **Qwen3.5-VL re-test** (moved up from Next — trigger met, build downloaded): measure
+  `mlx-community/Qwen3.5-9B-MLX-4bit` vs the current Qwen3-VL-8B on the hand-labelled set; decide
+  whether to switch the default reader. *(In progress.)*
 
 ## Next
 
@@ -47,12 +44,6 @@ real, not before.
   are now that oracle — CER against them folds in reading order, unlike the born-digital text
   layer — so what remains is scoring multi-column / complex layouts against the labelled set as
   it grows.
-- **Qwen3.5-VL re-test** — trigger now met. An earlier look called it a statistical tie with
-  Qwen3-VL-8B; a trusted MLX **vision** build now exists (`mlx-community/Qwen3.5-9B-MLX-4bit`,
-  apache-2.0, `image-text-to-text`, on HF since 2026-03-02), so a re-test is actionable. Use the
-  `mlx-community` build or self-convert from `Qwen/Qwen3.5-9B` — the Qwen3.5 VLM space has many
-  abliterated / "Heretic" / uncensored MLX-VLM variants; never run a tampered build on
-  confidential material.
 - **Result push for non-airgap tiers:** an optional webhook / callback on completion. The
   sealed (airgap) tier stays poll-only by construction — the process can't dial out — so this
   is a tier-gated enhancement, never the default.

@@ -38,6 +38,20 @@ the big remediations is in the review/plan notes — this is the index, not a du
   `overlay_font` in the fingerprint, language-probe airgap re-raise, confidence-gated fusion
   guard, atomic `upsert` + WAL, watcher settle gate + digest passthrough, Apple Vision
   failure logging.
+- **VLM client hardening** (review_01 follow-ups): `max_tokens` cap, retry + backoff on
+  transient 5xx (an `AirgapError` is never retried — sealed tier fails loud), one keep-alive
+  `httpx.Client` across pages, and JPEG (not PNG) image parts. `max_tokens` / `jpeg_quality`
+  are fingerprinted; all three settings-registered.
+
+## Input formats & benchmarks
+- **Image→PDF ingest** (`ingest.py`): PNG/JPEG/TIFF (incl. multi-page TIFF) normalised to PDF
+  via PyMuPDF at full resolution, then the pipeline runs unchanged (PDF = identity). Original
+  kept canonical; job keyed by the original's hash; derived PDF at `out/<digest>/source.pdf`.
+  Wired into the watcher + API by magic-sniff. (Office formats still out of scope.)
+- **3rd-party benchmark** (`eval/datasets.py`, `--dataset sroie|funsd`): scores the pipeline vs
+  SROIE/FUNSD ground truth through the ingest path. First run (Qwen3-VL recall/CER): SROIE
+  0.62/0.32, FUNSD 0.78/0.39; PaddleOCR leads on clean forms — the VLM's lift scales with
+  difficulty (big on handwriting, small on clean print).
 
 ## Config & API
 - Settings registry (`settings.py`) → `GET` / `PATCH /config`; secrets masked;
