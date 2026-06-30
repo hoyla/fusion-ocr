@@ -10,6 +10,17 @@ A side benefit: because a person transcribes in TRUE visual reading order, these
 also a reading-order oracle — something the born-digital text layer (content-stream order)
 cannot give us, so CER/WER mean here what they can't mean there.
 
+`render` — born-digital page as a multi-column reading-order oracle. Set `"render": true` on a
+label to RENDER its born-digital page(s) to an image-only PDF (text layer dropped) before
+processing, so the pipeline must OCR them — a genuine scan. The point: a born-digital page's
+exact text is known with certainty, so its transcript can be SEEDED from the text layer
+(copy, not type) and the only human step is certifying the reading ORDER. That gives a
+multi-column *scan* with a 100%-certain reading order — the case the corpus otherwise lacks
+(`TestPDFs_01` has no strong scanned multi-column prose). Recognition drops out as a GT
+confound (the reference text is exact); the recall-vs-CER gap is then pure reading-order error.
+NB the content-stream order is NOT automatically reading order — certify it against the page
+(often already correct on clean 2-column prose, scrambled on infographics — pick the former).
+
 Manifest (`eval_labels/labelset.json`):
 
     {"labels": [
@@ -48,6 +59,7 @@ class Label:
     pages: list[int]   # 0-based page indices — a label can span pages (e.g. a 2-page letter)
     transcript: Path   # resolved absolute path to the .txt
     note: str = ""
+    render: bool = False   # render born-digital page(s) to an image-only PDF (force OCR) — see docstring
 
     def reference(self) -> str:
         """The human transcript, or '' if the file is missing/empty (= not yet labelled)."""
@@ -72,6 +84,7 @@ def load_labelset(manifest_path) -> list[Label]:
             pages=[int(p) for p in pages],
             transcript=(base / e["transcript"]).resolve(),
             note=e.get("note", ""),
+            render=bool(e.get("render", False)),
         ))
     return labels
 
@@ -97,6 +110,26 @@ def _extract_pages(src, page_indices: list[int], dst) -> None:
         out = fitz.open()
         for pi in page_indices:
             out.insert_pdf(d, from_page=pi, to_page=pi)
+        out.save(str(dst))
+        out.close()
+
+
+_RENDER_DPI = 200   # matches the born-digital harness's render-to-scan DPI
+
+
+def _render_pages_image_only(src, page_indices: list[int], dst, dpi: int = _RENDER_DPI) -> None:
+    """Render the given pages to rasters and assemble them as an image-only PDF — NO text
+    layer, so the pipeline must OCR them. Turns a born-digital page into a genuine scan, while
+    its exact text (lifted separately into the transcript) stays the reading-order ground
+    truth. The multi-page generalisation of harness.make_image_only_pdf."""
+    import fitz
+    with fitz.open(src) as d:
+        out = fitz.open()
+        for pi in page_indices:
+            pix = d[pi].get_pixmap(dpi=dpi)
+            w, h = pix.width * 72.0 / dpi, pix.height * 72.0 / dpi
+            page = out.new_page(width=w, height=h)
+            page.insert_image(page.rect, pixmap=pix)
         out.save(str(dst))
         out.close()
 
@@ -132,7 +165,10 @@ def evaluate_labelset(manifest_path, cfg: Config, tmp_root=None, no_vlm: bool = 
             results.append({**base, "status": "unlabelled"})
             continue
         page_pdf = tmp_root / f"{lab.id}.pdf"
-        _extract_pages(lab.pdf, lab.pages, page_pdf)
+        if lab.render:
+            _render_pages_image_only(lab.pdf, lab.pages, page_pdf)   # born-digital -> scan
+        else:
+            _extract_pages(lab.pdf, lab.pages, page_pdf)
         doc = process(page_pdf, eval_cfg, pipeline=pipeline)
         hyp = "\n".join(recovered_text(p) for p in doc.pages)   # concat across the span
         res = {**base, "status": "scored", **score(ref, hyp)}

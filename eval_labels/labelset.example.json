@@ -1,6 +1,14 @@
 {
-  "description": "Hand-labelled eval set: human transcripts of hard pages (degraded scans, handwriting) that carry no born-digital ground truth. Copy this file to labelset.json, then fill in the matching .txt transcripts. Page indices are 0-BASED: use `page` for one page, or `pages` for a document that spans several (the transcript then covers the whole span, in reading order). `pdf` resolves from the dir you run the eval in; `transcript` resolves beside this manifest. See Docs/eval-labelling.md.",
+  "description": "Hand-labelled eval set: human transcripts of hard pages (degraded scans, handwriting) that carry no born-digital ground truth. Copy this file to labelset.json, then fill in the matching .txt transcripts. Page indices are 0-BASED: use `page` for one page, or `pages` for a document that spans several (the transcript then covers the whole span, in reading order). `pdf` resolves from the dir you run the eval in; `transcript` resolves beside this manifest. Optional `render: true` renders a BORN-DIGITAL page to an image-only PDF (drops the text layer) so the pipeline OCRs it — turning a known-text multi-column page into a scan with a 100%-certain reading order (seed the transcript from the page's exact text, then certify the order). See Docs/eval-labelling.md.",
   "labels": [
+    {
+      "id": "segro-twocol-prose-EXAMPLE",
+      "pdf": "samples/TestPDFs_02/company_reports/2023_Segro_annual-report_AR.pdf",
+      "page": 66,
+      "transcript": "segro-twocol-prose.txt",
+      "render": true,
+      "note": "BORN-DIGITAL two-column prose rendered to a scan (render:true) — a multi-column reading-order oracle with exact, certain text. Seed the transcript from the page's text layer, then certify left-column-then-right reading order against the rendered image. Reading order shows up as a high recall with a higher CER."
+    },
     {
       "id": "mandelson-note-handwritten",
       "pdf": "samples/TestPDFs_01/mandelson docs/HA_Volume_II_part_I.pdf",

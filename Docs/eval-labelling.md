@@ -97,9 +97,31 @@ searchable. The `via` column says which:
   an overlay would double search hits, so we don't; `sRcl` here is the text layer's recall.
 - `MISS` — an OCR page that produced no searchable text at all. A genuine hole; `sRcl` is 0.
 
+## Multi-column reading order, the cheap way (`render: true`)
+
+Hand-transcribing a dense multi-column page is a lot of typing — and the corpus has no strong
+scanned multi-column *prose* to begin with (`TestPDFs_01`'s multi-column docs are born-digital;
+its scans are single-column / forms / handwriting). There's a shortcut that gives a
+multi-column **scan** with a **100%-certain reading order** and almost no transcription:
+
+1. Pick a **born-digital** multi-column page (e.g. a two-/four-column annual-report narrative in
+   `TestPDFs_02`). Its exact text is known — no recognition guesswork.
+2. Add a label with **`"render": true`**. That renders the page to an image-only PDF (drops the
+   text layer) before processing, so the pipeline must **OCR** it — a genuine scan.
+3. **Seed** the transcript from the page's own text (copy from a viewer / `get_text`), then do
+   the one human step: **certify the reading order** — put the columns in the order you read them
+   (column 1 top-to-bottom, then column 2, …). You're checking order, not typing words.
+
+Because the reference text is exact, recognition drops out as a confound: a high `recall` with a
+higher `CER` is then **pure reading-order error**. Pick pages where order is unambiguous — clean
+multi-column prose, where the content-stream order is often already correct (just confirm it).
+Avoid infographics / designed pages (their content-stream order is scrambled and there's no
+single "right" reading order to certify). Pages with a side-bar or call-out box are a good
+*advanced* target (a Z-order trap), but certify the side-bar's place in the order deliberately.
+
 ## Adding more pages later
 
 Add an entry to `eval_labels/labelset.json` (`id`, `pdf`, `page`, `transcript`, optional
-`note`), create the `.txt`, and transcribe. The live manifest and the transcripts are
-**gitignored** — they quote source material and the repo is public — so they stay on this
-machine; `labelset.example.json` is the committed template that documents the format.
+`note`, optional `render`), create the `.txt`, and transcribe. The live manifest and the
+transcripts are **gitignored** — they quote source material and the repo is public — so they
+stay on this machine; `labelset.example.json` is the committed template that documents the format.
