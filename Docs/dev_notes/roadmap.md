@@ -33,14 +33,24 @@ real, not before.
 - **Revisit reading order with hand-labelled multi-column *prose*.** The FUNSD oracle covers
   complex scanned *forms*; the open case is **scanned running text in multiple columns**, where
   reading order genuinely changes meaning and the geometric proxy could plausibly disagree with
-  both the human and the pipeline. Hand-label a handful of such pages (true reading order →
-  `eval_labels/`, per [eval-labelling.md](../eval-labelling.md)) and read the recall-vs-CER split.
-  **Selection principle:** prioritise pages where a naive top-to-bottom sort *breaks* — spanning
-  headlines, columns interrupted by captions/footnotes, sidebars/callouts (Z-order traps) — not
-  clean two-column, where every sensible method already agrees and there's no signal to gain.
-  Must be **scanned** (no text layer); born-digital multi-column is already testable via the
-  content-stream harness. Good document types (source non-sensitive / public examples, since the
-  transcripts are gitignored but quote the page):
+  both the human and the pipeline.
+  **Cheapest path — the born-digital-render trick (now built + proven, `render: true`):** take a
+  born-digital multi-column page (e.g. a `TestPDFs_02` annual-report narrative), render it to a
+  scan (drops the text layer → the pipeline must OCR it), and use its **exact text** as the
+  ground truth — so the transcript is *seeded* from the text layer and the only human step is
+  certifying the reading order. Recognition drops out as a confound (the reference text is
+  certain), making the recall-vs-CER gap pure reading-order error. First proof (Segro 2023 AR
+  p66, a 4-column landscape page): VLM CER **0.020** / recall 0.991, deterministic CER 0.029 —
+  both read the four columns in correct order, so **clean multi-column prose is handled well**.
+  See [eval-labelling.md](../eval-labelling.md) (the `render` method) and [done.md](done.md).
+  **So the remaining work is the Z-order traps, not clean columns.** Hand-label (or render +
+  certify) a handful of pages where a naive top-to-bottom sort *breaks* — spanning headlines,
+  columns interrupted by captions/footnotes, sidebars/call-outs — and read the recall-vs-CER
+  split. **Selection principle:** prioritise exactly those break cases; skip clean two-/four-
+  column prose (already shown handled — no signal left to gain). The born-digital-render trick
+  applies to any born-digital page with such a layout; otherwise source a genuine **scanned**
+  page. Good document types (source non-sensitive / public examples, since the transcripts are
+  gitignored but quote the page):
   - **Newspaper pages / press clippings** — the canonical stressor (multiple text columns,
     headlines spanning columns, jump/continuation lines, pull-quotes); also realistic journalism
     source material (cuttings in FOI / leak sets).

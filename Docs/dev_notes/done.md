@@ -80,6 +80,13 @@ the big remediations is in the review/plan notes — this is the index, not a du
   deterministic CER (0.44→0.25); VLM reading-order CER 0.15 at recall 0.84 — the learned order
   head and the VLM both order complex forms near-correctly. Method, numbers, caveats:
   [reading_order_measurement.md](reading_order_measurement.md).
+- **Born-digital-rendered reading-order labels** (`render: true`) — a label can render its
+  born-digital page(s) to an image-only PDF (text layer dropped) so the pipeline OCRs them: a
+  multi-column *scan* whose exact text gives a 100%-certain reading order (transcript seeded from
+  the text layer; the human only certifies column order). Covers the multi-column *prose* case
+  the corpus lacked. First proof (Segro 2023 AR p66, 4-column landscape): VLM CER 0.020 / recall
+  0.991, deterministic 0.029 / 0.988 — both read the columns in correct order. See
+  [eval-labelling.md](../eval-labelling.md).
 
 ## Config & API
 - Settings registry (`settings.py`) → `GET` / `PATCH /config`; secrets masked;
