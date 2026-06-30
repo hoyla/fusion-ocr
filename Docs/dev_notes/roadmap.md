@@ -18,6 +18,11 @@ real, not before.
   **non-Thai** hard pages (handwriting, degraded scans, the rotations / redactions in test set 1).
   Thai ground truth is parked under Next (no Thai reader); the big-corpus alternative is the
   3rd-party SROIE/FUNSD set (now wired — see *Later → Input formats*).
+- **Reading order: actually measure it.** *(Promoted from Next — same workstream as the
+  labelled set above.)* The hand-labelled transcripts (in true visual reading order) are now
+  that oracle — CER against them folds in reading order, unlike the born-digital text layer
+  (content-stream order) — and the searchability eval already scores against them. What remains
+  is scoring multi-column / complex layouts against the labelled set as it grows.
 
 (The Qwen3.5-VL re-test is **done** — switched the default reader to
 `mlx-community/Qwen3.5-9B-MLX-4bit`; see [done.md](done.md).)
@@ -30,15 +35,11 @@ real, not before.
   scanned docs (Thai forms) are layout-classified `paragraph`/`header`/`footer`, not `table`, and
   the `table`-classified docs (sackler) are born-digital (`find_tables`). A genuinely *scanned*
   data table is missing from the corpus; source one to exercise the path.
-- **Document the output artifacts** (repo docs) — add a table (e.g. `Docs/outputs.md`)
-  describing every file in `out/<sha256>/`: the per-stage resume snapshots
-  `doc.00-triage.json` … `doc.09-render.json` (INTERIM — each stage's `Document` state, the
-  resume cache, each building on the previous), `doc.json` (final `Document` state, == the last
-  snapshot), the three DELIVERABLES — `document.md` (reading view), `overlay.pdf` (searchable
-  text layer), `segment_index.json` (id↔box↔text provenance) — and `source.pdf` (the derived
-  PDF, image inputs only). State the stage order, what builds on what, and interim-vs-final.
-  Pairs with the opaque-`out/`-folder gap: folders are content-hash named, so a
-  `sha → original filename` manifest would help a human tell which job is which.
+- **`sha → original filename` manifest** — the `out/` folders are content-hash named, so they're
+  opaque to a human ("which job is which?"). The original filename is already recorded inside each
+  job (`doc.json` → `source_path`), but a top-level manifest mapping sha → original would save the
+  lookup. *(Carved out of the now-done output-artifacts doc — see [done.md](done.md) /
+  [outputs.md](../outputs.md).)*
 - **Thai ground truth for the eval** — *parked from near-term:* needs a Thai reader. The Thai
   scan was dropped from the labelled set for this reason; pick it up when a reader is available.
 - **Thai overlay search reliability** — *parked from near-term:* combining vowels / tone marks,
@@ -53,10 +54,6 @@ real, not before.
   than test set 1 holds. The *small* old-vs-new comparison is **done** (Mandelson letter:
   tesseract ~0.10 vs our ~0.95 word recall — see [done.md](done.md)); the corpus-scale version
   waits on a larger reject set.
-- **Reading order:** actually measure it. The hand-labelled transcripts (in true visual order)
-  are now that oracle — CER against them folds in reading order, unlike the born-digital text
-  layer — so what remains is scoring multi-column / complex layouts against the labelled set as
-  it grows.
 - **Improve fusion anchoring on rotated dense print** — *parked; likely acceptable as-is.* The
   searchability eval now measures a real gap on rotated small print: the rotated Goldfinch
   invoice scores **searchable recall 0.65 vs 0.89 reading** — where word-anchoring fails on the

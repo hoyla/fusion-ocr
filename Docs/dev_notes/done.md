@@ -45,6 +45,11 @@ the big remediations is in the review/plan notes — this is the index, not a du
   degrades *honestly* to 0.65 on rotated dense print where anchoring fails, and is carried at 0.86
   by the source text layer on the mixed redacted page (not a miss). A dependency-free regression
   guard on the reading-vs-searchable gap.
+- **Output-artifacts doc** ([outputs.md](../outputs.md)) — documents every file in
+  `out/<sha256>/`: the three deliverables (`document.md` / `overlay.pdf` / `segment_index.json`),
+  `doc.json` (final state), the `doc.NN-<stage>.json` resume snapshots + stage order, and
+  `source.pdf` (image inputs only). Linked from the README; the `sha → original filename` manifest
+  is carved out to the roadmap.
 
 ## Reviews & hardening
 - **Review 01** ([review_01_260627.md](review_01_260627.md)): recipe-fingerprint resume,

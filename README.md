@@ -53,6 +53,11 @@ python -m fusion_ocr.watcher --once   # process anything in in/, then exit
 pytest                                # plumbing tests
 ```
 
+Each job's results land in a content-addressed folder `out/<sha256>/` — the three
+deliverables (`document.md` reading view, `overlay.pdf` searchable layer,
+`segment_index.json` provenance) plus the resumable per-stage state. What every file is:
+**[Docs/outputs.md](Docs/outputs.md)**.
+
 Add capability behind extras as stages are implemented:
 
 ```bash
@@ -97,7 +102,7 @@ extra; run it with **`fusion-ocr-serve`**) is the stable contract callers use:
 | --- | --- |
 | `POST /jobs` (multipart `pdf`) | enqueue a PDF → `202 {sha256, status: "queued"}` |
 | `GET /jobs` `[?status=]` | queue / completed-job feed |
-| `GET /jobs/{sha256}` | job status + artifact list (poll until `done`) |
+| `GET /jobs/{sha256}` | job status + artifact list (poll until `done`; see [Docs/outputs.md](Docs/outputs.md)) |
 | `GET /config` | surface every setting (secrets masked) + its constraints |
 | `PATCH /config` `{path: value}` | configure the allowlisted settings in-process |
 | `POST /config/save` | persist the current config to disk (explicit, opt-in) |
