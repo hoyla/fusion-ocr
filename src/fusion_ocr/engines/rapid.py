@@ -24,10 +24,13 @@ CAVEATS to settle during the eval (why this is det/rec-first, not a wholesale sw
 
 from __future__ import annotations
 
-# script -> RapidOCR/PP-OCR recogniser language key (same script hints the router detects).
-# Filled to match whatever the chosen ONNX port exposes; mirrors PaddleOCR's per-script lang.
+# our script -> RapidOCR `Rec.lang_type` value (the LangRec enum in rapidocr's typings.py).
+# One `rapidocr` package covers all of these — no per-language pip extra; the recogniser is
+# chosen by config and its ONNX model auto-downloads (from ModelScope) on first use. CJK maps
+# to "ch" (LangRec also has "japan"/"korean", but the router collapses those into cjk, matching
+# the PaddleOCR cjk->"ch" default). Verify each still resolves against the installed rapidocr.
 RAPID_LANGS = {
-    "latin": "en",
+    "latin": "latin",
     "thai": "th",
     "cyrillic": "cyrillic",
     "arabic": "arabic",
@@ -37,14 +40,15 @@ RAPID_LANGS = {
 
 
 def available() -> bool:
-    """True if a RapidOCR ONNX runtime is importable. False keeps routing on PaddleOCR, so
-    selecting `--rapidocr` before `pip install -e .[rapid]` is a silent no-op, not a crash."""
+    """True if RapidOCR is importable. False keeps routing on PaddleOCR, so selecting
+    `--rapidocr` before `pip install -e .[rapid]` is a silent no-op, not a crash. Prefers the
+    current unified `rapidocr` (3.x); the legacy `rapidocr_onnxruntime` name is a fallback."""
     try:
-        import rapidocr_onnxruntime  # noqa: F401
+        import rapidocr  # noqa: F401  (current package, 3.x)
         return True
     except ImportError:
         try:
-            import rapidocr  # noqa: F401  (newer package name)
+            import rapidocr_onnxruntime  # noqa: F401  (legacy 1.x, frozen — avoid)
             return True
         except ImportError:
             return False
@@ -54,23 +58,29 @@ def recognize(pil_image, script: str | None = None) -> list[tuple[list, str, flo
     """[(quad_points_px, text, confidence), ...] in pixel coords (top-left origin) — the SAME
     shape PaddleOCR/Apple Vision return, so ocr_det's coordinate handling stays unchanged.
 
-    NOT IMPLEMENTED — this is the one piece tomorrow fills in. Reference implementation:
+    NOT IMPLEMENTED — this is the one piece tomorrow fills in. Reference impl (RapidOCR 3.x;
+    confirm against the installed `rapidocr.__version__`, the API moves between majors):
 
-        from rapidocr_onnxruntime import RapidOCR          # or: from rapidocr import RapidOCR
+        from rapidocr import RapidOCR
         import numpy as np
-        engine = RapidOCR()                                # cache per-process, like _engine_for
-        result, _ = engine(np.asarray(pil_image))          # result: [[box, text, score], ...]
+        lang = RAPID_LANGS.get(script or "latin", "latin")
+        # cache an engine PER language (models load on construction) — like PaddleOCR _engine_for.
+        # Only the RECOGNISER is language-specific; detection (DBNet) is script-agnostic, so leave
+        # Det default. Some langs need a specific PP-OCR version (e.g. Thai -> add
+        # "Rec.ocr_version": "PP-OCRv5") — confirm per language against the installed rapidocr.
+        engine = RapidOCR(params={"Rec.lang_type": lang})
+        result = engine(np.asarray(pil_image))     # RapidOCROutput | None
         out = []
-        for box, text, score in (result or []):
-            if not text:
-                continue
-            # box is 4 [x, y] points already in pixel space (top-left origin) — pass through
-            out.append(([(float(x), float(y)) for x, y in box], text, float(score)))
+        if result is not None and getattr(result, "boxes", None) is not None:
+            # result.boxes: np.ndarray (N, 4, 2) px, top-left origin; .txts / .scores parallel
+            for box, text, score in zip(result.boxes, result.txts, result.scores):
+                if not text:
+                    continue
+                out.append(([(float(x), float(y)) for x, y in box], text, float(score)))
         return out
 
-    To choose the recogniser language, construct RapidOCR with the model files for
-    RAPID_LANGS[script] (the ONNX port's per-language rec model). Confirm box origin/shape
-    against PaddleOCR on a sample before trusting the geometry (see the eval plan).
+    Notes: guard the None/empty return (RapidOCR returns None on a blank page). Verify box
+    origin/shape against PaddleOCR on one page before trusting the geometry (see the eval plan).
     """
     raise NotImplementedError(
         "RapidOCR engine is wired but not implemented — flesh out engines/rapid.recognize() "

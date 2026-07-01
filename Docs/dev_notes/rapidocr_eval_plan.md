@@ -17,9 +17,13 @@ it's *both* faster *and* quality-equal.
 
 ## Make-or-break verification (do FIRST — cheap, decides scope)
 
-1. **det/rec** (DBNet + CRNN/SVTR) — the low-risk, mature part of the ONNX ports. Confirm
-   `rapidocr-onnxruntime` exposes our per-script recognisers (RAPID_LANGS), incl. **CJK** and
-   the non-Latin scripts we route (Thai/Cyrillic/Arabic), or document the gaps.
+1. **det/rec** (DBNet + CRNN/SVTR) — the low-risk, mature part of the ONNX ports. **Language
+   support is confirmed** (RapidOCR model list): the single `rapidocr` package covers all our
+   scripts — `LangRec` has `latin`, `th`, `cyrillic`, `arabic`, `ch` (+ `japan`/`korean`),
+   `devanagari` — so **no per-language pip extra** is needed; the recogniser is chosen by
+   `params={"Rec.lang_type": ...}` and its ONNX model **auto-downloads from ModelScope** on first
+   use (RAPID_LANGS already maps our scripts). Confirm each language actually resolves on the
+   installed version, and note any that need a specific `Rec.ocr_version` (e.g. Thai → PP-OCRv5).
 2. **Layout reading order** — PP-DocLayoutV2 is RT-DETR + a learned **pointer-network reading
    -order head**. A layout ONNX port may convert the *detector* but **not** the order head.
    Our reading-order quality (Segro 4-col CER 0.02; the FUNSD forms) depends on that head, so
@@ -32,9 +36,14 @@ it's *both* faster *and* quality-equal.
 
 ## Flesh-out steps (tomorrow)
 
-1. `pip install -e ".[rapid]"` (adds `rapidocr-onnxruntime` + `onnxruntime`).
-2. Implement `engines/rapid.recognize()` — the reference impl is in that file's docstring;
-   **check box origin/shape against PaddleOCR on one page** before trusting geometry.
+1. `pip install -U -e ".[rapid]"` — the extra pins **`rapidocr>=3.9,<4`** (the *current* unified
+   package; the old `rapidocr-onnxruntime` 1.4.4 is frozen from Jan 2025 — don't use it) plus
+   `onnxruntime`. Run `python -c "import rapidocr; print(rapidocr.__version__)"` and confirm it's
+   the latest 3.x (was 3.9.0, 2026-06-23; check PyPI for newer) — the API can shift between
+   majors, so re-check the result-object shape (`.boxes`/`.txts`/`.scores`) against the docstring.
+2. Implement `engines/rapid.recognize()` — the reference impl (RapidOCR 3.x) is in that file's
+   docstring; **check box origin/shape against PaddleOCR on one page** before trusting geometry,
+   and keep the None/empty-return guard.
 3. (If layout/table move too) add rapid-layout/rapid-table behind the layout/table stages,
    same seam — but only after verification #2/#3 pass.
 
@@ -74,6 +83,11 @@ the reading-order head doesn't port.
 - CoreML/ANE speedup is **conditional** — OCR uses dynamic input shapes and some ops fall back
   to CPU (can even add partition round-trips). The realistic gain may be "leaner CPU ONNX +
   partial ANE", so measure the EP actually helps before claiming Metal acceleration.
+- **Airgap: RapidOCR auto-downloads models from ModelScope on first use** — that's egress the
+  sealed tier can't do. If RapidOCR is adopted, the per-language ONNX models (det + each script's
+  rec) must be **pre-pulled and cached before sealing**, a RapidOCR pre-pull list analogous to the
+  PaddleX one (PP-OCRv5_server_det, per-lang recognisers, PP-DocLayoutV2, SLANeXt…). Point
+  RapidOCR at the local model paths (or prime its cache) so no download is attempted under airgap.
 - The `pymupdf4llm` + RapidOCR integration is **out of scope** — it bypasses our fusion /
   ink-gate / provenance architecture (the anti-hallucination design that is the product).
 - DPIs/engine are not in `recipe_fingerprint`; if RapidOCR is adopted, fold the engine choice
