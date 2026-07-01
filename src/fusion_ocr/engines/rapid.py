@@ -24,10 +24,13 @@ CAVEATS to settle during the eval (why this is det/rec-first, not a wholesale sw
 
 from __future__ import annotations
 
-# script -> RapidOCR/PP-OCR recogniser language key (same script hints the router detects).
-# Filled to match whatever the chosen ONNX port exposes; mirrors PaddleOCR's per-script lang.
+# our script -> RapidOCR `Rec.lang_type` value (the LangRec enum in rapidocr's typings.py).
+# One `rapidocr` package covers all of these — no per-language pip extra; the recogniser is
+# chosen by config and its ONNX model auto-downloads (from ModelScope) on first use. CJK maps
+# to "ch" (LangRec also has "japan"/"korean", but the router collapses those into cjk, matching
+# the PaddleOCR cjk->"ch" default). Verify each still resolves against the installed rapidocr.
 RAPID_LANGS = {
-    "latin": "en",
+    "latin": "latin",
     "thai": "th",
     "cyrillic": "cyrillic",
     "arabic": "arabic",
@@ -60,7 +63,12 @@ def recognize(pil_image, script: str | None = None) -> list[tuple[list, str, flo
 
         from rapidocr import RapidOCR
         import numpy as np
-        engine = RapidOCR()                        # cache per-process (models load here)
+        lang = RAPID_LANGS.get(script or "latin", "latin")
+        # cache an engine PER language (models load on construction) — like PaddleOCR _engine_for.
+        # Only the RECOGNISER is language-specific; detection (DBNet) is script-agnostic, so leave
+        # Det default. Some langs need a specific PP-OCR version (e.g. Thai -> add
+        # "Rec.ocr_version": "PP-OCRv5") — confirm per language against the installed rapidocr.
+        engine = RapidOCR(params={"Rec.lang_type": lang})
         result = engine(np.asarray(pil_image))     # RapidOCROutput | None
         out = []
         if result is not None and getattr(result, "boxes", None) is not None:
@@ -71,8 +79,7 @@ def recognize(pil_image, script: str | None = None) -> list[tuple[list, str, flo
                 out.append(([(float(x), float(y)) for x, y in box], text, float(score)))
         return out
 
-    Notes: guard the None/empty return (RapidOCR returns None on a blank page). To pick the
-    recogniser language, configure RapidOCR with the model for RAPID_LANGS[script]. Verify box
+    Notes: guard the None/empty return (RapidOCR returns None on a blank page). Verify box
     origin/shape against PaddleOCR on one page before trusting the geometry (see the eval plan).
     """
     raise NotImplementedError(
