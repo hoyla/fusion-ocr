@@ -19,10 +19,12 @@ ocr = ["pymupdf>=1.27,<2", "numpy>=2.3,<3", "paddleocr>=3.7,<4", "paddlepaddle>=
 vlm = ["httpx>=0.28,<1", "pillow>=12,<13"]         # OpenAI-compatible client + image handling
 vision = ["ocrmac>=1,<2"]                          # Apple Vision OCR (macOS only, on-device)
 # RapidOCR (ONNX Runtime) — alternative deterministic engine for the perf A/B vs PaddleOCR.
-# det/rec via rapidocr-onnxruntime; layout/table ports (rapid-layout / rapid-table) added when
-# that part of the eval is reached — verify they expose the reading-order head first
-# (Docs/dev_notes/rapidocr_eval_plan.md). NOT installed by default; `pip install -e .[rapid]`.
-rapid = ["rapidocr-onnxruntime>=1.3,<2", "onnxruntime>=1.17"]
+# `rapidocr` is the CURRENT unified package (3.x, onnxruntime/openvino/paddle backends); the old
+# `rapidocr-onnxruntime` (1.4.4, Jan 2025) is legacy/frozen — don't use it. det/rec first; the
+# layout/table ports are added when that part of the eval is reached, after verifying they expose
+# the reading-order head (Docs/dev_notes/rapidocr_eval_plan.md). NOT installed by default:
+# `pip install -e .[rapid]` (add -U to force the newest 3.x, then check `rapidocr.__version__`).
+rapid = ["rapidocr>=3.9,<4", "onnxruntime>=1.17"]
 dev = ["pytest>=8,<10"]
 
 [project.scripts]

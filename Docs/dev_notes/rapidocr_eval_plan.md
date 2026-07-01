@@ -32,9 +32,14 @@ it's *both* faster *and* quality-equal.
 
 ## Flesh-out steps (tomorrow)
 
-1. `pip install -e ".[rapid]"` (adds `rapidocr-onnxruntime` + `onnxruntime`).
-2. Implement `engines/rapid.recognize()` — the reference impl is in that file's docstring;
-   **check box origin/shape against PaddleOCR on one page** before trusting geometry.
+1. `pip install -U -e ".[rapid]"` — the extra pins **`rapidocr>=3.9,<4`** (the *current* unified
+   package; the old `rapidocr-onnxruntime` 1.4.4 is frozen from Jan 2025 — don't use it) plus
+   `onnxruntime`. Run `python -c "import rapidocr; print(rapidocr.__version__)"` and confirm it's
+   the latest 3.x (was 3.9.0, 2026-06-23; check PyPI for newer) — the API can shift between
+   majors, so re-check the result-object shape (`.boxes`/`.txts`/`.scores`) against the docstring.
+2. Implement `engines/rapid.recognize()` — the reference impl (RapidOCR 3.x) is in that file's
+   docstring; **check box origin/shape against PaddleOCR on one page** before trusting geometry,
+   and keep the None/empty-return guard.
 3. (If layout/table move too) add rapid-layout/rapid-table behind the layout/table stages,
    same seam — but only after verification #2/#3 pass.
 
