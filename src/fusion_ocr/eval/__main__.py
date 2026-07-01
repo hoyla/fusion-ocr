@@ -93,6 +93,10 @@ def main() -> None:
     ap.add_argument("--config", default="config.toml")
     ap.add_argument("--apple-vision", action="store_true",
                     help="force the on-device engine (no VLM server needed)")
+    ap.add_argument("--rapidocr", action="store_true",
+                    help="use the RapidOCR (ONNX) deterministic engine instead of PaddleOCR — "
+                         "the perf A/B (needs the rapid extra; see rapidocr_eval_plan.md). "
+                         "Pair with --no-vlm to compare the deterministic engines head-to-head.")
     ap.add_argument("--no-vlm", action="store_true",
                     help="deterministic engine only — drop the VLM stages and score the "
                          "recogniser's own text (PaddleOCR, or Apple Vision with "
@@ -105,9 +109,11 @@ def main() -> None:
     cfg = config_mod.load(args.config)
     if args.apple_vision:
         cfg.prefer_apple_vision = True
+    if args.rapidocr:
+        cfg.prefer_rapidocr = True
 
-    engine = ("Apple Vision" if args.apple_vision else "PaddleOCR") if args.no_vlm \
-        else f"{'Apple Vision' if args.apple_vision else 'PaddleOCR'} + VLM ({cfg.vlm.model})"
+    _eng = "RapidOCR" if args.rapidocr else ("Apple Vision" if args.apple_vision else "PaddleOCR")
+    engine = _eng if args.no_vlm else f"{_eng} + VLM ({cfg.vlm.model})"
     print(f"engine: {engine}")
 
     if args.labels:

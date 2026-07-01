@@ -106,6 +106,8 @@ class OcrDet:
 
                     if route.engine == "apple_vision":
                         lines, source = self._run_vision(img, page.script), "vision"
+                    elif route.engine == "rapidocr":
+                        lines, source = self._run_rapid(img, page.script), "rapid"
                     else:
                         try:
                             engine, mode = self._engine_for(route.paddle_lang)
@@ -159,6 +161,17 @@ class OcrDet:
             _log.warning("Apple Vision failed on a page (script=%s); no boxes for it",
                          script, exc_info=True)
             return []
+
+    def _run_rapid(self, img, script) -> list[tuple[list, str, float]]:
+        """RapidOCR (ONNX) engine — same (quad_px, text, conf) shape. WIRED BUT NOT
+        IMPLEMENTED: engines.rapid.recognize() is a stub that raises NotImplementedError
+        until fleshed out (see Docs/dev_notes/rapidocr_eval_plan.md). Routing only sends a
+        page here when `prefer_rapidocr` is set AND rapid is importable, so the default
+        pipeline never reaches this branch."""
+        from PIL import Image
+
+        from ..engines import rapid
+        return rapid.recognize(Image.fromarray(img), script)
 
     @staticmethod
     def _parse_v2(result) -> list[tuple[list, str, float]]:
