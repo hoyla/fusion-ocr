@@ -10,6 +10,26 @@ real, not before.
 
 ## Now / near-term
 
+- **Run the evidence plan** ([evidence_plan.md](evidence_plan.md)) — the pre-registered
+  measurement campaign from [review 03](review_03_260705.md): full FUNSD/SROIE runs, the
+  box-placement metric (P1), insertion-rate reporting + blank-page probes (P2), noise floor,
+  threshold sensitivity, quant A/B, IAM fix. This subsumes the eval-expansion goals below at
+  larger scale; the hand-labelling work remains complementary (it covers cases the gold sets
+  don't).
+- **Fail loud on reader failure (review 03).** `vlm_read` / `table_read` / `language` catch
+  every exception and return `""` with no logging anywhere in those stages — a dead MLX server
+  or misconfigured model name silently degrades the whole corpus to det_text. Add logging + a
+  per-page `read_failed` provenance flag so a degraded run is visible in the artifacts.
+- **Job-lifecycle document-loss bugs (review 03):** (a) API uploads are keyed by client
+  filename — two same-named uploads with different content overwrite in `in/` and strand the
+  first job `queued` forever; key by digest/UUID. (b) A worker killed between `claim` and
+  `set_status` orphans the job as `running` forever — add a lease/timeout. (c) The watcher's
+  main loop dies if a file vanishes between `iterdir` and `stat`/hash — guard the loop, not
+  just `process()`.
+- **Eval writes recovered text to `/tmp` (review 03).** `harness`/`labels`/`datasets` use
+  `tempfile.mkdtemp` for rendered pages + full text, never cleaned — fine for benchmark data,
+  dangerous the day someone runs `--labels` on a confidential document. Use a run-scoped dir
+  under `eval_out/` (gitignored) with cleanup.
 - **Expand the hand-labelled eval set (non-Thai).** Scaffold + first baseline shipped (see
   [done.md](done.md)): `--labels` manifest with multi-page spans, `--no-vlm` to isolate the
   deterministic engine, guide in [eval-labelling.md](../eval-labelling.md). Four hard pages are
@@ -68,6 +88,52 @@ real, not before.
 
 ## Next
 
+- **Fusion/metrics internals → rapidfuzz (review 03).** The alignment *concept* is ours; the
+  *implementation* hand-rolls Needleman-Wunsch twice with a fresh `difflib.SequenceMatcher`
+  per DP cell (and a backtrace that recomputes similarity). Port the same algorithms to
+  `rapidfuzz` primitives: C speed, and it retires the `_MAX_DP_CELLS` guard whose fallback is
+  a *worse* alignment — a quality win, not just perf. Same for `eval/metrics.edit_ops`
+  (→ `rapidfuzz`/`jiwer`). Guard the port with the placement metric
+  ([evidence_plan.md](evidence_plan.md) stream C) — same numbers before/after.
+- **Pipeline the CPU and VLM tracks (perf, review 03).** Everything is serial today: stages in
+  sequence, pages in a loop, one job at a time. Overlapping the CPU-bound `ocr_det` (~40%)
+  with the GPU/ANE-bound `vlm_read` (~38%) — and/or page-level parallelism — is up to ~2×
+  from scheduling alone, zero quality cost. The biggest perf lever after the engine choice.
+- **Fusion edge: contaminated text layer can reach `best_text` (review 03).** A PUA-
+  contaminated textlayer segment is only superseded if an OCR box overlaps it at IoU ≥ 0.5;
+  PaddleOCR's over-segmentation routinely never reaches that, so the garbage can survive as a
+  primary segment. Supersede on *coverage of the contaminated span* (many-to-one), not
+  pairwise IoU.
+- **Per-region script routing (review 03).** Script is decided per page from any text layer,
+  so a Latin header (Bates stamp, "EXHIBIT 12") over a Thai scanned body routes the page
+  Latin and skips the probe. Decide script per *region* where layout gives regions, or at
+  least probe when the text layer is furniture-only. (Same family as the mixed-content
+  composition already shipped.)
+- **detect_script coverage (review 03):** the hand-rolled Unicode ranges miss Arabic
+  presentation forms (U+FB50–FDFF, U+FE70–FEFF — common in real PDF text layers), CJK
+  extensions, fullwidth forms. Either extend the ranges or adopt the `regex` module's script
+  properties (build-vs-adopt says adopt).
+- **Artifact retrieval over the API (review 03).** `GET /jobs/{sha}` returns artifact *names*
+  only — a remote consumer (Giant) can't fetch `document.md`/`overlay.pdf` without a shared
+  filesystem, which contradicts the "stable contract" framing. Add
+  `GET /jobs/{sha}/artifacts/{name}` (and stop listing internal `doc.NN-*.json` resume
+  snapshots as artifacts).
+- **`PATCH /config` doesn't reach the worker (review 03).** In the two-process deployment it
+  mutates only the API process's config; the worker never sees it. Either propagate (config
+  version in the job row, worker reloads) or re-document the endpoint as save-and-restart.
+- **Airgap: pair the Python seal with an OS-level control (review 03).** The monkeypatch
+  covers `connect`/`connect_ex`/`getaddrinfo` but not `gethostbyname`/UDP — and nothing at
+  the C level (paddle/onnxruntime natives, subprocesses). Document the seal as a tripwire,
+  and ship a sealed-tier recipe (pf rules / network-less user / `sandbox-exec`) in
+  [deployment.md](../deployment.md).
+- **Candidate new tiers from the 2026 survey (review 03)** — evaluate under the existing
+  harness, adopt only on numbers: **PaddleOCR-VL-0.9B** now has an official Apple-Silicon
+  path via mlx-vlm — a cheap *structured* reader that could sit between Apple Vision and the
+  9B generalist (caveat: its reading is un-cross-checked VLM output, so it slots in as a
+  *reader*, never as geometry); and Apple Vision's WWDC25 **`RecognizeDocumentsRequest`**
+  adds paragraph/table/list structure to the fast tier we currently use as flat det/rec —
+  possibly a free structure signal on the ANE. (Engine A/Bs — PP-OCRv6, RapidOCR,
+  PP-DocLayoutV3 — live in [rapidocr_eval_plan.md](rapidocr_eval_plan.md).)
 - **Replace the VLM script-probe with a cheaper detector (perf).** The `language` stage IDs the
   dominant script to route the recogniser/reader; for no-text-layer scans it fires a whole 9B-VLM
   image inference per page to do it (the documented "first cut" — [routing.md](../routing.md) flags
@@ -125,6 +191,20 @@ Capability beyond the MVP target:
 - **Rotated-page tables** — the table-structure and focused table-read stages currently skip
   rotated pages ([review_02](review_02_2602627.md) #8). Add support when rotated scans turn
   up in the corpus.
+- **Ingest robustness (review 03):** encrypted/password PDFs are unhandled (fail confusingly
+  deep in a stage — detect `needs_pass` at ingest and fail with a clear job error); **HEIC**
+  (what an iPhone photo of a document actually is) and WebP aren't sniffed; `image_to_pdf`
+  embeds photos at native pixel size (a 20 MP JPEG → ~420 MB pixmap per raster — add a
+  downscale cap). Also: page-level triage never OCRs a small embedded scan (<40% image, ≥50%
+  text coverage) on a mostly-text page — region-level OCR is the fix, same family as the
+  per-region script item under Next.
+- **Small-bug sweep from review 03** (each minor alone, worth one pass): overlay
+  `granularity="word"` places words at equal-width steps (wrong geometry — fix via per-word
+  boxes or drop the mode); `populate_table_html` only fills literal `<td...></td>` (a
+  `<td> </td>` yields a silently empty table); raster cache keyed on `pdf.name` (empty for
+  in-memory docs — latent collision); `vlm_read`'s refusal length-check counts only
+  `source=="paddle"` chars so it's disabled on Apple-Vision-routed pages; overlay `place()`
+  and several stage helpers swallow all exceptions silently.
 - **Collapse Giant's "text" vs "OCR text" views (integration value).** Giant shows four
   per-document views — original, Combined (PDF + overlay), machine-readable text, OCR text —
   each separately indexed; the two text views confuse users ("which do I read if Combined is

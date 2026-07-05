@@ -66,6 +66,13 @@ Copy [`deploy/nginx.fusion-ocr.conf`](../deploy/nginx.fusion-ocr.conf), fill the
 > on-estate) would implement later — and artifacts are content-addressed via `storage.py`,
 > the swap point for an object store (Garage / S3). Neither is needed at current volume.
 
+> **One machine only (for now).** Multi-worker is safe **on a single machine sharing a local
+> disk** — that is the whole supported surface. Do **not** point two machines at a shared
+> folder: SQLite WAL does not work on network filesystems (SMB/NFS) and risks silent database
+> corruption, and concurrent writers would race on `out/`. A cluster of Macs needs the queue +
+> object-store adapters above; until then, the only component that can live on another machine
+> is the reader (VLM) endpoint. (Review 03.)
+
 ## 4. Run as services (Linux)
 
 You run **two** units — the API and the worker:
@@ -102,3 +109,10 @@ ocr.internal.example {
 - [ ] If the reader (VLM) is on another host, `airgap = false` and `vlm.base_url` is that
       host's **IP** — otherwise keep `airgap = true` with a loopback reader.
 - [ ] Firewall: only 443 (and 80 for the redirect) open to the network.
+- [ ] **Sealed tier: `airgap = true` is a tripwire, not a wall.** The guard is Python-level
+      (it patches `connect`/`connect_ex`/`getaddrinfo`); it does not cover
+      `gethostbyname`/raw UDP, native-code sockets (paddle/onnxruntime internals), or
+      subprocesses. For the most-sensitive tier, pair it with an **OS-level** control — a
+      network-less user account, pf rules blocking outbound for the worker, or
+      `sandbox-exec` — and treat the Python seal as defence-in-depth. (Review 03; an OS-level
+      recipe is on the roadmap.)

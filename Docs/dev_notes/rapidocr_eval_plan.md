@@ -15,6 +15,29 @@ This is **not a migration** — it's a third deterministic engine behind the exi
 seam (`engine = "paddle" | "apple_vision" | "rapidocr"`), adopted **per component** only where
 it's *both* faster *and* quality-equal.
 
+## Null hypothesis first: PP-OCRv6 tiny/small (added 2026-07-05, review 03)
+
+**PP-OCRv6 shipped ~June 2026** (PPLCNetV4 backbone; tiny/small/medium tiers): vendor numbers
+claim +5.1% recognition / +4.6% detection over PP-OCRv5_server, and — the relevant one — a
+**6.1× speedup on Apple M4 for the tiny tier** (0.96s vs 5.82s). If that holds under our eval,
+the speed this plan chases may be available *inside the engine we already trust*, with zero
+port risk (same PaddleOCR API, no ONNX re-validation, no geometry re-check, layout/table
+untouched). So the A/B becomes three-way:
+
+```bash
+# add a PP-OCRv6 tiny/small row alongside the existing two, same harness
+python -m fusion_ocr.eval --labels ... --no-vlm                    # current Paddle models
+python -m fusion_ocr.eval --labels ... --no-vlm  # + PP-OCRv6 tiny/small via model name config
+python -m fusion_ocr.eval --labels ... --no-vlm --rapidocr         # RapidOCR
+```
+
+**Decision update:** RapidOCR is adopted for det/rec only if it beats *PP-OCRv6 on Paddle*,
+not just our current models — the cheaper experiment runs first. Vendor numbers are Baidu's
+own; trust the harness, not the release notes. (Layout note: **PP-DocLayoutV3** also now
+exists — instance segmentation with a *jointly-trained* reading-order head, superseding V2's
+decoupled pointer network. Same "audit the defaults" upgrade path, independent of the engine
+question.)
+
 ## Make-or-break verification (do FIRST — cheap, decides scope)
 
 1. **det/rec** (DBNet + CRNN/SVTR) — the low-risk, mature part of the ONNX ports. Confirm
@@ -74,6 +97,14 @@ the reading-order head doesn't port.
 - CoreML/ANE speedup is **conditional** — OCR uses dynamic input shapes and some ops fall back
   to CPU (can even add partition round-trips). The realistic gain may be "leaner CPU ONNX +
   partial ANE", so measure the EP actually helps before claiming Metal acceleration.
+  *(Corroborated by 2026 practitioner reports — review 03's survey: dynamic-shape graphs force
+  CPU fallback or subgraph splitting on the CoreML EP. Benchmark the CPU EP first; treat
+  CoreML EP as a bonus experiment, not the premise.)*
+- Verification #2/#3 update (review 03 survey): **RapidAI/RapidDoc** ships ONNX conversions of
+  PP-DocLayoutV3/V2 + table models (SLANet_plus/UNITABLE) with XY-cut-based order recovery —
+  so a Paddle-free structure stack *exists*, but it's young (~195 stars, v0.9.x) and whether
+  the learned reading-order head survives conversion (vs falling back to XY-cut — the thing we
+  deleted) is exactly what #2 must verify before layout moves.
 - The `pymupdf4llm` + RapidOCR integration is **out of scope** — it bypasses our fusion /
   ink-gate / provenance architecture (the anti-hallucination design that is the product).
 - DPIs/engine are not in `recipe_fingerprint`; if RapidOCR is adopted, fold the engine choice
