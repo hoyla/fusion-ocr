@@ -112,7 +112,13 @@ regression.*
    speckle, a single stamp, a ruled-but-empty form — through the full pipeline. Count invented
    words in `document.md` and in the overlay. This is the documented failure mode of every
    end-to-end VLM (olmOCR shipped it broken); we claim architecture-level immunity in the
-   overlay — demonstrate it, and quantify the ungated view's exposure.
+   overlay — demonstrate it, and quantify the ungated view's exposure. **Real probes already in
+   hand:** the OCR-Quality 1000-run produced genuine instances — blank-page formula hallucination
+   (idx 924/967/969) and a `[illegible]` repetition loop (idx 654) — use these alongside the
+   synthetic set. **Guard check (post-#21):** the blank/no-ink short-circuit + repetition guard
+   should now drive `document.md` insertion to ~0 on these too (not just the overlay); re-run
+   924/967/969/654 through the pipeline end-to-end and confirm the guards fire in situ (they're
+   unit-tested, not yet verified through the full stage stack).
 3. **Divergence triage** on stream-A outputs: pages where VLM and det strongly disagree but
    both are confident → human-inspect a seeded sample of 20; classify VLM-wrong / det-wrong /
    both. This is the qualitative anchor for the insertion numbers.
@@ -166,14 +172,17 @@ framing below — NOT accuracy. What it produced:
   meaningless for CJK (no word spaces) — it read ~0 on near-perfect Chinese and made the run look
   like a catastrophic Chinese failure (zh 0.35). Character-level showed 0.94–0.99. **Fixed: PR
   #20** (CJK-aware tokenisation). Corrected agreement by the 72B's rated quality: score-1 **0.93**,
-  s2 0.88, s3 0.70, s4 0.35 — monotonic (tracks *reference* quality, as expected). Same class as
-  the flagged "SROIE ~0.6 unexplained" — **re-check SROIE with the fixed metric.**
+  s2 0.88, s3 0.70, s4 0.35 — monotonic (tracks *reference* quality, as expected). This is a
+  *proven example* of the harness-artifact class stream A hypothesises for the SROIE ~0.6 mystery
+  — **but it is NOT the SROIE cause**: SROIE is Latin (word-spaced), so the CJK fix leaves it
+  unchanged. The SROIE diagnosis stays open under stream A (normalisation / matching / reference
+  format), now with the tokenisation class ruled out.
 - **Adjudication of the 15 worst score-1 divergences (Vision):** ~half are the 72B *reference's*
   fault (duplication, repetition loops, "Sure, here is…" preamble, LaTeX-vs-plain format), not
   ours — consistent with the pilot. Verdicts: `eval_out/ocrq_full/adjudication.md`.
-- **Two genuine OUR failure modes, both Vision-confirmed → both now guarded** (`feat/vlm-
-  hallucination-guards`): (a) **blank/near-blank page → hallucinated formula**; (b) **figure-heavy
-  / sparse page → `[illegible]` repetition loop** to the token cap.
+- **Two genuine OUR failure modes, both Vision-confirmed → both now guarded** (PR #21):
+  (a) **blank/near-blank page → hallucinated formula**; (b) **figure-heavy / sparse page →
+  `[illegible]` repetition loop** to the token cap.
 - **P2 (ungated document.md hallucination) — first MEASURED instance, and it lands right.** On
   blank page 924 the deterministic engine found **0 ink** → the **ink-gate dropped the
   hallucination** → the searchable product (overlay/segment_index) is clean; the invented formula
