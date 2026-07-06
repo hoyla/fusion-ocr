@@ -156,10 +156,31 @@ Run the identical config 3× on the labelled set + seeded FUNSD n=30 (temperatur
 manifest. **Every future default change cites it**: a delta inside the floor is not a result.
 If the floor is ~0, say so once and stop paying for repeats.
 
-## Incoming evidence: the Claude-Vision 1000-doc adjudication run (in flight, 2026-07-05)
+## LANDED (2026-07-06): the OCR-Quality 1000-doc run + Claude-Vision adjudication
 
-A 1000-document run scored by Claude Vision is running now (results ~2026-07-06). Slot it in
-with its epistemic status stated up front:
+Completed 1000/1000 (durable: `eval_out/ocrq_full/`). Our reading scored vs the Qwen-72B
+`ocr_text`, then Claude-Vision-adjudicated the worst divergences. Kept to the triage/calibration
+framing below — NOT accuracy. What it produced:
+
+- **A harness bug, not an engine one (the headline).** `word_recall`/`WER` split on whitespace,
+  meaningless for CJK (no word spaces) — it read ~0 on near-perfect Chinese and made the run look
+  like a catastrophic Chinese failure (zh 0.35). Character-level showed 0.94–0.99. **Fixed: PR
+  #20** (CJK-aware tokenisation). Corrected agreement by the 72B's rated quality: score-1 **0.93**,
+  s2 0.88, s3 0.70, s4 0.35 — monotonic (tracks *reference* quality, as expected). Same class as
+  the flagged "SROIE ~0.6 unexplained" — **re-check SROIE with the fixed metric.**
+- **Adjudication of the 15 worst score-1 divergences (Vision):** ~half are the 72B *reference's*
+  fault (duplication, repetition loops, "Sure, here is…" preamble, LaTeX-vs-plain format), not
+  ours — consistent with the pilot. Verdicts: `eval_out/ocrq_full/adjudication.md`.
+- **Two genuine OUR failure modes, both Vision-confirmed → both now guarded** (`feat/vlm-
+  hallucination-guards`): (a) **blank/near-blank page → hallucinated formula**; (b) **figure-heavy
+  / sparse page → `[illegible]` repetition loop** to the token cap.
+- **P2 (ungated document.md hallucination) — first MEASURED instance, and it lands right.** On
+  blank page 924 the deterministic engine found **0 ink** → the **ink-gate dropped the
+  hallucination** → the searchable product (overlay/segment_index) is clean; the invented formula
+  survived only in the ungated `document.md`. The moat works as designed. `insertion_rate` on
+  `document.md` is the metric that flags this class at scale (stream D — compute + report it).
+
+### Epistemic framing (held throughout — applies to any VLM-as-judge signal)
 
 - **What it is:** a cross-family VLM-as-judge signal. Stronger than the Qwen-72B pseudo-GT
   (different model family judging, so not self-agreement) — but still a model's opinion, not

@@ -55,6 +55,15 @@ class VlmRead:
             for page in targets:
                 if page.index >= pdf.page_count:
                     continue
+                # Blank / no-ink short-circuit: if the deterministic engine detected NO text
+                # boxes, the page is (near-)blank. Asking the VLM to read an empty image makes
+                # it HALLUCINATE (measured on OCR-Quality: blank pages -> invented "$$1/√2$$"),
+                # and there'd be no ink to anchor it anyway. Skip: correct output (empty) + a
+                # saved VLM call. Keys on DETECTION not recognition, so handwriting — which the
+                # detector boxes even when it can't read it — still reaches the VLM.
+                if not page.segments:
+                    page.read_model = ""
+                    continue
                 # Cheap tier: if Apple Vision already read the page confidently, its
                 # det_text IS the reading — skip the VLM entirely (fusion uses det_text).
                 if _vision_confident(page, cfg.apple_vision_skip_vlm):
@@ -124,8 +133,9 @@ def _low_confidence(page, threshold: float) -> bool:
 
 
 def _looks_like_refusal(reading: str, det_chars: int) -> bool:
-    """True if the VLM didn't really read the page — empty, a refusal/placeholder, or
-    far shorter than what the deterministic engine found (so det_text is better)."""
+    """True if the VLM didn't really read the page — empty, a refusal/placeholder, far
+    shorter than the deterministic engine found (so det_text is better), or collapsed into a
+    repetition loop. In every case fusion falls back to det_text (and escalation may retry)."""
     r = reading.strip().lower()
     if not r:
         return True
@@ -133,4 +143,20 @@ def _looks_like_refusal(reading: str, det_chars: int) -> bool:
         return True
     if det_chars >= 80 and len(r) < 0.25 * det_chars:
         return True
+    if _is_degenerate_repetition(reading):
+        return True
     return False
+
+
+def _is_degenerate_repetition(reading: str) -> bool:
+    """True if the read collapsed into a repetition loop — one token dominating the output, or
+    a tiny vocabulary over a long output. Measured failure mode: the VLM emitting '[illegible]
+    [illegible] …' to the token cap on a figure-heavy / sparse page. Only long outputs are
+    checked, so ordinary prose (high vocabulary variety) is never flagged."""
+    from collections import Counter
+
+    words = reading.split()
+    if len(words) < 40:
+        return False
+    _, top = Counter(words).most_common(1)[0]
+    return top >= 0.40 * len(words) or len(set(words)) / len(words) < 0.10
