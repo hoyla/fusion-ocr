@@ -35,3 +35,7 @@ dist/
 # locally; tests skip cleanly when they're absent.
 /samples/*
 !samples/.gitkeep
+# Eval outputs are bulky and machine-local — EXCEPT manifests, which the evidence plan
+# requires committed (small text: run metadata + aggregate scores, the durable record).
+/eval_out/*
+!/eval_out/manifests/
