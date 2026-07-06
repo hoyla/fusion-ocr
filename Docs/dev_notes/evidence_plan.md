@@ -115,10 +115,12 @@ regression.*
    overlay — demonstrate it, and quantify the ungated view's exposure. **Real probes already in
    hand:** the OCR-Quality 1000-run produced genuine instances — blank-page formula hallucination
    (idx 924/967/969) and a `[illegible]` repetition loop (idx 654) — use these alongside the
-   synthetic set. **Guard check (post-#21):** the blank/no-ink short-circuit + repetition guard
-   should now drive `document.md` insertion to ~0 on these too (not just the overlay); re-run
-   924/967/969/654 through the pipeline end-to-end and confirm the guards fire in situ (they're
-   unit-tested, not yet verified through the full stage stack).
+   synthetic set. **Guard check (post-#21): DONE 2026-07-06** — all four pages re-run through
+   the full pipeline (fresh out_dir, live reader): blank pages never reach the VLM (0.0s, empty
+   reading, no invented formula in `document.md`); the 654 loop recurred and was discarded, with
+   det_text fallback. Results table in `eval_out/manifests/ocrq_full_2026-07-06.md`. Perf note:
+   the repetition guard is post-hoc (654 still burned ~93s generating before discard) — a
+   max_tokens cap is the refinement if loop pages prove common.
 3. **Divergence triage** on stream-A outputs: pages where VLM and det strongly disagree but
    both are confident → human-inspect a seeded sample of 20; classify VLM-wrong / det-wrong /
    both. This is the qualitative anchor for the insertion numbers.
@@ -164,7 +166,10 @@ If the floor is ~0, say so once and stop paying for repeats.
 
 ## LANDED (2026-07-06): the OCR-Quality 1000-doc run + Claude-Vision adjudication
 
-Completed 1000/1000 (durable: `eval_out/ocrq_full/`). Our reading scored vs the Qwen-72B
+Completed 1000/1000 (durable: `eval_out/ocrq_full/`; **run manifest — the committed record —
+`eval_out/manifests/ocrq_full_2026-07-06.md`**, incl. the post-fix re-score of `results.csv` +
+`hand_label_queue.csv` from the saved transcripts, 601 values corrected, pre-fix CSV archived,
+score-1 agreement independently reconfirmed at 0.934). Our reading scored vs the Qwen-72B
 `ocr_text`, then Claude-Vision-adjudicated the worst divergences. Kept to the triage/calibration
 framing below — NOT accuracy. What it produced:
 
