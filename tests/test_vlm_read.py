@@ -12,8 +12,15 @@ pytest.importorskip("fitz", reason="needs PyMuPDF")
 import fitz  # noqa: E402
 
 from fusion_ocr import config as config_mod  # noqa: E402
-from fusion_ocr.models import Document, Page  # noqa: E402
+from fusion_ocr.models import Box, Document, Page, Segment  # noqa: E402
 from fusion_ocr.stages.vlm_read import VlmRead  # noqa: E402
+
+
+def _ink_seg(text="detected ink", conf=0.9):
+    """A detected text box, so the page isn't treated as blank by the no-ink short-circuit."""
+    return Segment(id="a", page=0,
+                   box=Box(points=[(50, 100), (300, 100), (300, 120), (50, 120)]),
+                   det_text=text, det_conf=conf, source="paddle")
 
 
 class _FakeVLM:
@@ -33,13 +40,43 @@ def test_vlm_read_sets_reading(tmp_path):
     d.save(str(pdf)); d.close()
 
     doc = Document(source_path=str(pdf), sha256="x")
-    doc.pages = [Page(index=0, needs_ocr=True, width=612, height=792)]
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    page.segments = [_ink_seg()]                      # a page with detected ink (not blank)
+    doc.pages = [page]
 
     fake = _FakeVLM("First real line\nSecond real line")
     VlmRead(client=fake).run(doc, config_mod.Config())
 
     assert fake.calls == 1
     assert doc.pages[0].vlm_reading == "First real line\nSecond real line"
+
+
+def test_blank_page_skips_vlm_no_hallucination(tmp_path):
+    # No detected ink -> (near-)blank page. The VLM must NOT be called (it would hallucinate
+    # on an empty image); the reading stays empty.
+    pdf = tmp_path / "blank.pdf"
+    d = fitz.open(); pg = d.new_page()
+    pg.insert_image(pg.rect, pixmap=fitz.open().new_page().get_pixmap(dpi=72))
+    d.save(str(pdf)); d.close()
+
+    doc = Document(source_path=str(pdf), sha256="x")
+    doc.pages = [Page(index=0, needs_ocr=True, width=612, height=792)]   # no segments = blank
+    fake = _FakeVLM("$$\\frac{1}{\\sqrt{2}}$$")        # what it hallucinates if asked
+    VlmRead(client=fake).run(doc, config_mod.Config())
+
+    assert fake.calls == 0
+    assert doc.pages[0].vlm_reading == ""
+
+
+def test_degenerate_repetition_is_discarded():
+    from fusion_ocr.stages.vlm_read import _is_degenerate_repetition, _looks_like_refusal
+    loop = "[illegible] " * 200                         # the measured failure mode
+    assert _is_degenerate_repetition(loop)
+    assert _looks_like_refusal(loop, 0)                  # so fusion falls back to det_text
+    # ordinary varied prose is never flagged, even when long
+    prose = " ".join(f"word{i}" for i in range(200))
+    assert not _is_degenerate_repetition(prose)
+    assert not _is_degenerate_repetition("short repeated repeated")   # too short to judge
 
 
 class _SeqVLM:
@@ -119,6 +156,8 @@ def test_airgap_refusal_fails_loud_not_silent_det_text(tmp_path):
     pg.insert_image(pg.rect, pixmap=fitz.open().new_page().get_pixmap(dpi=72))
     d.save(str(pdf)); d.close()
     doc = Document(source_path=str(pdf), sha256="x")
-    doc.pages = [Page(index=0, needs_ocr=True, width=612, height=792)]
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    page.segments = [_ink_seg()]                      # detected ink, so the VLM is reached
+    doc.pages = [page]
     with pytest.raises(AirgapError):
         VlmRead(client=_AirgapClient()).run(doc, config_mod.Config())

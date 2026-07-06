@@ -98,6 +98,18 @@ the big remediations is in the review/plan notes — this is the index, not a du
   the roadmap. PaddleOCR is CPU-only — PaddlePaddle has no Metal/ANE backend, so it can't move to
   the Neural Engine; the VLM already runs on MLX, and Apple Vision is the (lower-recognition) ANE
   tier.
+- **OCR-Quality 1000-doc run + Claude-Vision adjudication** ([evidence_plan.md](evidence_plan.md)):
+  scored our reading vs the Qwen-72B `ocr_text` over all 1000, then Vision-adjudicated the worst
+  divergences. Findings: a **CJK metric bug** (`word_recall` meaningless without word-spaces —
+  fixed, CJK-aware tokenisation; corrected score-1 agreement 0.93); ~half the worst divergences
+  are the *72B's* fault not ours; and two genuine hallucination failure modes, both quarantined
+  from the searchable product by the ink-gate (a measured P2 confirmation).
+- **VLM hallucination guards** (from that run): (1) **blank/no-ink short-circuit** — if the
+  deterministic engine detected no text boxes, skip the VLM entirely (an empty image makes it
+  hallucinate, e.g. inventing `$$1/√2$$`; keys on *detection* so handwriting still reaches the
+  reader) — also a saved VLM call; (2) **degenerate-repetition guard** — a read that collapses
+  into a loop (`[illegible] [illegible] …` to the token cap) is discarded like a refusal, so
+  fusion falls back to det_text. Both validated on the real 1000-run failure pages.
 
 ## Config & API
 - Settings registry (`settings.py`) → `GET` / `PATCH /config`; secrets masked;
