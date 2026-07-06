@@ -3,8 +3,26 @@
 from __future__ import annotations
 
 from fusion_ocr.eval.metrics import (
-    aggregate, cer, edit_ops, insertion_rate, normalize, score, wer,
+    aggregate, cer, edit_ops, insertion_rate, normalize, score, wer, word_tokens,
 )
+
+
+def test_word_tokens_cjk_are_per_character_latin_unchanged():
+    # Latin: identical to a whitespace split (no CJK chars).
+    assert word_tokens("the cat sat") == ["the", "cat", "sat"]
+    # Chinese has no word spaces -> each char is its own token (not one giant token).
+    assert word_tokens("电化学") == ["电", "化", "学"]
+    # Mixed: CJK per-char, Latin/digits stay whole.
+    assert word_tokens("图2 test") == ["图", "2", "test"]
+
+
+def test_word_recall_is_meaningful_for_cjk():
+    # A near-perfect Chinese transcription (1 char differs) must score HIGH recall — the old
+    # whitespace split scored it ~0 (one giant token that didn't match).
+    ref, hyp = "实验十电化学", "实验十电化x"
+    s = score(ref, hyp)
+    assert s["word_recall"] >= 0.8           # was ~0.0 before the CJK-aware fix
+    assert word_tokens(ref) != [ref]         # not one giant token
 
 
 def test_edit_ops_classifies_operations():

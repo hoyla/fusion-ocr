@@ -7,13 +7,40 @@ automatable proxy for hallucination (the thing a "trustworthy OCR" claim must bo
 
 from __future__ import annotations
 
+import re
 import unicodedata
+
+# CJK / Japanese / Korean characters — scripts written WITHOUT spaces between words. A
+# whitespace split therefore yields one giant "word" per line for them, making word_recall /
+# WER meaningless (they read ~0 even on a near-perfect transcription). We tokenise each such
+# character on its own instead, the standard convention for CJK OCR eval. Ranges: CJK unified
+# + ext-A, compatibility ideographs, Hiragana, Katakana (incl. half-width), Hangul.
+_CJK = re.compile(r"[぀-ヿｦ-ﾟ㐀-䶿一-鿿豈-﫿가-힯]")
 
 
 def normalize(text: str) -> str:
     """NFC + collapse runs of whitespace to single spaces, strip ends. Case preserved
     (case is part of OCR fidelity). Applied to both sides before scoring."""
     return " ".join(unicodedata.normalize("NFC", text).split())
+
+
+def word_tokens(text: str) -> list[str]:
+    """Word tokens for the word-level metrics: whitespace-delimited words for spaced scripts,
+    but each CJK character as its OWN token (CJK has no word spaces). Pure Latin text is
+    unchanged (no CJK chars -> identical to normalize().split()), so this only fixes CJK/JK."""
+    out: list[str] = []
+    for chunk in normalize(text).split():
+        buf = ""
+        for ch in chunk:
+            if _CJK.match(ch):
+                if buf:
+                    out.append(buf); buf = ""
+                out.append(ch)
+            else:
+                buf += ch
+        if buf:
+            out.append(buf)
+    return out
 
 
 def edit_ops(ref: list, hyp: list) -> tuple[int, int, int]:
@@ -65,8 +92,8 @@ def cer(ref_text: str, hyp_text: str) -> float:
 
 
 def wer(ref_text: str, hyp_text: str) -> float:
-    """Word error rate after normalization."""
-    return _rate(normalize(ref_text).split(), normalize(hyp_text).split())["error_rate"]
+    """Word error rate after normalization (CJK-aware tokenisation — see word_tokens)."""
+    return _rate(word_tokens(ref_text), word_tokens(hyp_text))["error_rate"]
 
 
 def insertion_rate(ref_text: str, hyp_text: str) -> float:
@@ -90,7 +117,7 @@ def score(ref_text: str, hyp_text: str) -> dict:
     (1 - precision is the hallucination proxy). A high recall with a high CER means the
     text was recognised but mis-ordered (multi-column), not misread."""
     rn, hn = normalize(ref_text), normalize(hyp_text)
-    ref_w, hyp_w = rn.split(), hn.split()
+    ref_w, hyp_w = word_tokens(ref_text), word_tokens(hyp_text)   # CJK-aware (see word_tokens)
     c = _rate(list(rn), list(hn))
     w = _rate(ref_w, hyp_w)
     ov = _overlap(ref_w, hyp_w)
