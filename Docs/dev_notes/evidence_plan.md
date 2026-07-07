@@ -41,6 +41,15 @@ argument, not a measurement. They are streams C and D below and outrank everythi
 
 ### A. Spend the gold data on disk (cheapest, biggest)
 
+> **DETERMINISTIC PASS DONE (2026-07-07)** — full FUNSD (199) + SROIE (973), both PaddleOCR and
+> Apple Vision. Manifest: `eval_out/manifests/stream_a_deterministic_2026-07-07.md`. Answers:
+> **Q3 SROIE ~0.6 = scoring artifact** (100% uppercase GT; caseless fix shipped; true recall
+> ~0.90 both engines). **Q1 FUNSD n=16 held** (det recall 0.82→0.78, RO-CER 0.25→0.29). **Q2
+> Paddle-beats-Vision is document-type-dependent** — forms yes (0.81 vs 0.75), receipts a tie
+> (Vision +0.01). Roadmap table + memory note updated. **Still queued:** the **VLM rows** (Q1's
+> VLM CER 0.15, and the receipt "VLM CER win" claim — both need caseless re-scoring) and the
+> **150-DPI re-check**.
+
 Full-set runs on the two human-GT corpora already wired into the harness:
 
 ```bash

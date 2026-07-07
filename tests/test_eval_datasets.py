@@ -21,6 +21,13 @@ def test_sroie_reference_joins_ocr_box_text_in_order(tmp_path):
     assert datasets.sroie_reference(ann) == "ACME STORE\nTOTAL RM9.00"
 
 
+def test_sroie_scored_caseless_funsd_is_not():
+    # SROIE's GT is all-uppercase, so it must be scored case-insensitively; FUNSD keeps real
+    # case and must not be. Guards the registry that drives metrics.score(caseless=...).
+    assert "sroie" in datasets._CASELESS_REF
+    assert "funsd" not in datasets._CASELESS_REF
+
+
 def test_funsd_reference_joins_form_text_and_skips_empty(tmp_path):
     # No boxes -> can't order geometrically, falls back to annotation order (lossless).
     ann = tmp_path / "f1.json"

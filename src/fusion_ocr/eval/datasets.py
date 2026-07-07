@@ -46,6 +46,15 @@ from .metrics import normalize, score
 
 _ROOT = Path("samples/file_tests_3rdparty_01/archive")
 
+# Sources whose ground truth discards letter case, so scoring must be case-insensitive or it
+# measures the dataset's convention, not our recognition. SROIE's GT is 100.0% uppercase
+# (measured over all 345k alpha chars in the corpus, 2026-07-07) — its transcribers upper-cased
+# everything, but the pipeline reads the receipt's real mixed case, so case-sensitive scoring
+# charged every correctly-cased letter as a substitution (this is the bulk of the long-standing
+# "SROIE recall ~0.6" — corrected it is ~0.90). FUNSD keeps real case (44.5% uppercase), so it
+# is NOT listed here. See metrics.score(caseless=...).
+_CASELESS_REF = {"sroie"}
+
 
 def sroie_reference(ann_path) -> str:
     d = json.loads(Path(ann_path).read_text(encoding="utf-8"))
@@ -148,5 +157,6 @@ def evaluate_dataset(source: str, cfg: Config, split: str = "test", limit: int =
         pdf, _ = ingest.to_pdf(img, tmp_root / "derived")
         doc = process(pdf, eval_cfg, pipeline=pipeline, digest=f"{source}_{i:04d}")
         hyp = "\n".join(recovered_text(p) for p in doc.pages)
-        results.append({"id": img.stem, "source": source, **score(ref, hyp)})
+        results.append({"id": img.stem, "source": source,
+                        **score(ref, hyp, caseless=source in _CASELESS_REF)})
     return results

@@ -25,6 +25,17 @@ def test_word_recall_is_meaningful_for_cjk():
     assert word_tokens(ref) != [ref]         # not one giant token
 
 
+def test_caseless_scoring_ignores_case_on_both_sides():
+    # An all-uppercase reference (SROIE convention) vs a correctly mixed-case reading: case
+    # sensitive charges every lowercase letter as a substitution; caseless credits the match.
+    ref, hyp = "CASH TOTAL RM9.00", "Cash Total RM9.00"
+    assert score(ref, hyp)["word_recall"] < 1.0                    # cased: 'Cash' != 'CASH'
+    assert score(ref, hyp, caseless=True)["word_recall"] == 1.0    # caseless: full credit
+    assert score(ref, hyp, caseless=True)["cer"] == 0.0
+    # Default is case-sensitive (case is OCR fidelity for real documents).
+    assert score("Ab", "ab")["cer"] > 0.0
+
+
 def test_edit_ops_classifies_operations():
     assert edit_ops(list("abc"), list("abc")) == (0, 0, 0)
     assert edit_ops(list("abc"), list("axc")) == (1, 0, 0)   # substitution
