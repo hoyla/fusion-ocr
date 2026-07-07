@@ -87,6 +87,10 @@ def main() -> None:
                          "adapter) against its annotations")
     ap.add_argument("--limit", type=int, default=20, help="dataset: items to sample")
     ap.add_argument("--split", default="test", help="dataset: train | val | test")
+    ap.add_argument("--placement", action="store_true",
+                    help="with --dataset: score box-PLACEMENT (P1) — does each recovered word "
+                         "land on its own GT line's box, not just anywhere on the page? "
+                         "Reports placement_recall vs plain_recall; the gap is mis-placement.")
     ap.add_argument("--pages", default=None,
                     help="comma-separated page indices (born-digital mode; default: all)")
     ap.add_argument("--dpi", type=int, default=200)
@@ -125,6 +129,21 @@ def main() -> None:
         for r in results:
             r["tag"] = r["id"][:24]
         _print_scorecard(results, label_col="label")
+        return
+
+    if args.dataset and args.placement:
+        from .datasets import evaluate_placement
+        from .placement import summarize
+        rows = evaluate_placement(args.dataset, cfg, split=args.split,
+                                  limit=args.limit, no_vlm=args.no_vlm)
+        if not rows:
+            print(f"no scorable items in {args.dataset}/{args.split}")
+            return
+        s = summarize(rows)
+        print(f"\nPLACEMENT ({args.dataset}/{args.split}, {s['pages']} pages, "
+              f"{s['gt_words']} GT words):")
+        print(f"  placement_recall {s['placement_recall']:.3f}   "
+              f"plain_recall {s['plain_recall']:.3f}   gap {s['placement_gap']:.3f}")
         return
 
     if args.dataset:
