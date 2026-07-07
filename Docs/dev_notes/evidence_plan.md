@@ -93,6 +93,15 @@ manifest dir and move on — don't let B block C/D.
 
 ### C. P1 — box-placement accuracy (new metric, small code)
 
+> **METRIC BUILT + DETERMINISTIC FLOOR MEASURED (2026-07-07).** `eval/placement.py` +
+> `--dataset X --placement` + tests; manifest `eval_out/manifests/placement_deterministic_2026-07-07.md`.
+> First-ever P1 numbers (deterministic path = detector geometry): **SROIE placement 0.85 /
+> plain 0.91, gap 0.06** (single-column, placement ≈ recognition); **FUNSD placement 0.60 /
+> plain 0.81, gap 0.21** (dense 2-D — gap is an upper bound, inflated by the metric's own
+> line-assignment ambiguity). **Still open — the headline:** the **fused/VLM** placement (does
+> fusion pin the VLM's words to the right box) needs the stream-A VLM run. The metric is the
+> committed **regression guard** for the rapidfuzz port + fusion changes.
+
 FUNSD (and SROIE) carry per-line **box + text** GT — placement is measurable with data already
 on disk. Method (new `eval/placement.py`, ~100 lines):
 

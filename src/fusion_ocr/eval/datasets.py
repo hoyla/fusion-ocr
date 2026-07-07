@@ -160,3 +160,37 @@ def evaluate_dataset(source: str, cfg: Config, split: str = "test", limit: int =
         results.append({"id": img.stem, "source": source,
                         **score(ref, hyp, caseless=source in _CASELESS_REF)})
     return results
+
+
+def evaluate_placement(source: str, cfg: Config, split: str = "test", limit: int = 20,
+                       no_vlm: bool = False, root=_ROOT) -> list[dict]:
+    """Box-placement accuracy (evidence-plan stream C, P1): reprocess a sample and score whether
+    each recovered word lands on its own GT line's box — not just anywhere on the page. Needs the
+    sources' per-line boxes; scores the gated `page.segments` (the overlay/segment_index)."""
+    import json as _json
+    from PIL import Image
+
+    from .. import ingest
+    from ..pipeline import deterministic_pipeline, process
+    from .placement import gt_lines, placement_counts
+
+    anns = _annotation_index(Path(root) / _SOURCES[source][0])
+    pairs = iter_pairs(source, split=split, root=root, limit=limit)
+    tmp_root = Path(tempfile.mkdtemp(prefix=f"fusion_place_{source}_"))
+    eval_cfg = dataclasses.replace(cfg, out_dir=tmp_root / "out")
+    pipeline = deterministic_pipeline() if no_vlm else None
+
+    results = []
+    for i, (img, _ref) in enumerate(pairs):
+        ann = anns.get(img.stem)
+        if ann is None:
+            continue
+        lines = gt_lines(_json.loads(Path(ann).read_text(encoding="utf-8")), source)
+        if not lines:
+            continue
+        w, h = Image.open(img).size
+        pdf, _ = ingest.to_pdf(img, tmp_root / "derived")
+        doc = process(pdf, eval_cfg, pipeline=pipeline, digest=f"{source}_{i:04d}")
+        counts = placement_counts(doc.pages[0], lines, w, h, caseless=source in _CASELESS_REF)
+        results.append({"id": img.stem, "source": source, **counts})
+    return results
