@@ -54,3 +54,26 @@ def test_caseless_matches_uppercase_gt():
     lines = [([0, 0, 20, 10], "TOTAL")]                      # SROIE-style uppercase GT
     assert placement.placement_counts(page, lines, 100, 100, caseless=False)["placed"] == 0
     assert placement.placement_counts(page, lines, 100, 100, caseless=True)["placed"] == 1
+
+
+def test_band_credits_a_tall_box_that_covers_the_line_where_strict_does_not():
+    # One coarse segment (tall box) spans two GT lines and carries both words. Strict assigns it to
+    # ONE line -> the other's word is "misplaced". Band credits both (the tall box covers each
+    # line — a correct-if-tall highlight). This is the fused-output granularity confound.
+    page = Page(index=0, width=100, height=100)
+    page.segments = [_seg(0, 0, 30, 40, "alpha beta")]        # tall box over both lines
+    lines = [([0, 0, 30, 18], "alpha"), ([0, 20, 30, 38], "beta")]
+    strict = placement.placement_counts(page, lines, 100, 100)
+    band = placement.placement_counts(page, lines, 100, 100, band=True)
+    assert strict["placed"] == 1 and strict["total"] == 2     # only one line wins the box
+    assert band["placed"] == 2                                 # both lines covered by the box
+
+
+def test_band_still_penalises_a_word_on_a_box_that_misses_its_line():
+    # "beta" is recovered but only in a short box on line 1 that does NOT cover line 2 -> band
+    # misses it: placed < plain flags genuine displacement (band isn't just plain recall).
+    page = Page(index=0, width=100, height=100)
+    page.segments = [_seg(0, 0, 30, 10, "alpha beta")]        # short box, line 1 only
+    lines = [([0, 0, 30, 10], "alpha"), ([0, 50, 30, 60], "beta")]
+    band = placement.placement_counts(page, lines, 100, 100, band=True)
+    assert band["placed"] == 1 and band["plain"] == 2

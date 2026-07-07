@@ -191,6 +191,9 @@ def evaluate_placement(source: str, cfg: Config, split: str = "test", limit: int
         w, h = Image.open(img).size
         pdf, _ = ingest.to_pdf(img, tmp_root / "derived")
         doc = process(pdf, eval_cfg, pipeline=pipeline, digest=f"{source}_{i:04d}")
-        counts = placement_counts(doc.pages[0], lines, w, h, caseless=source in _CASELESS_REF)
-        results.append({"id": img.stem, "source": source, **counts})
+        cl = source in _CASELESS_REF
+        strict = placement_counts(doc.pages[0], lines, w, h, caseless=cl)
+        band = placement_counts(doc.pages[0], lines, w, h, caseless=cl, band=True)
+        results.append({"id": img.stem, "source": source, **strict,
+                        "band_placed": band["placed"]})
     return results

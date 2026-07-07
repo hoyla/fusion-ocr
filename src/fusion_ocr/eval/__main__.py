@@ -140,10 +140,14 @@ def main() -> None:
             print(f"no scorable items in {args.dataset}/{args.split}")
             return
         s = summarize(rows)
+        tot = s["gt_words"] or 1
+        band = sum(r.get("band_placed", 0) for r in rows) / tot
         print(f"\nPLACEMENT ({args.dataset}/{args.split}, {s['pages']} pages, "
               f"{s['gt_words']} GT words):")
-        print(f"  placement_recall {s['placement_recall']:.3f}   "
-              f"plain_recall {s['plain_recall']:.3f}   gap {s['placement_gap']:.3f}")
+        print(f"  strict {s['placement_recall']:.3f}   band {band:.3f}   "
+              f"plain {s['plain_recall']:.3f}")
+        print("  (band = granularity-tolerant: word in a box COVERING its line — the fair "
+              "measure for fused/coarse output; strict = exact per-line box.)")
         return
 
     if args.dataset:

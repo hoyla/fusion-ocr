@@ -67,12 +67,33 @@ def _iou(a: list[float], b: tuple[float, ...]) -> float:
     return inter / ua if ua > 0 else 0.0
 
 
+def _covers_line(seg_bbox: tuple[float, ...], line_pt: list[float]) -> bool:
+    """True if a segment's box vertically COVERS a GT line (y-overlap ≥ half the line height) and
+    x-overlaps it — a highlight on that box lands on that line even if the box is taller (spans
+    several lines). The granularity-tolerant credit — see `band=` in placement_counts."""
+    ov = max(0.0, min(seg_bbox[3], line_pt[3]) - max(seg_bbox[1], line_pt[1]))
+    return (ov >= 0.5 * (line_pt[3] - line_pt[1])
+            and min(seg_bbox[2], line_pt[2]) > max(seg_bbox[0], line_pt[0]))
+
+
 def placement_counts(page, lines: list[tuple[list[float], str]], img_w: float, img_h: float,
-                     *, caseless: bool = False, iou_min: float = _IOU_MIN) -> dict:
+                     *, caseless: bool = False, iou_min: float = _IOU_MIN, band: bool = False) -> dict:
     """Well-placed / plain-recovered / total GT-word counts for one page against its GT lines.
 
-    A GT word is *well-placed* if it appears in the union text of the segments whose best-overlap
-    GT line is the one containing that word. *plain* ignores placement (word anywhere on page)."""
+    Two credit modes:
+
+    - **strict** (default): a GT word is well-placed if it is in the segment whose *best* IoU GT
+      line is the word's own line. Right when segment granularity ≈ GT-line granularity (the
+      DETERMINISTIC path — ~per-line PaddleOCR boxes). **Confounded on FUSED output**, whose line
+      clustering merges boxes coarser than per-line GT: a correct-but-tall box can win only one GT
+      line, so its other lines' words score as misplaced (it can even *reverse* a ranking).
+    - **band** (`band=True`): well-placed if the word is in ANY segment that *covers* its line
+      (`_covers_line`). A taller box over the right line is still a correct highlight, so this is
+      the granularity-robust measure and the fair one for comparing fused (coarse) vs deterministic
+      (fine). It still penalises true displacement — a word pinned to a box that misses its line.
+
+    `plain` ignores placement (word anywhere on page). Use `band` for fused output; report both
+    when comparing across granularities."""
     segs = [s for s in page.segments if (s.best_text or "").strip() and not getattr(s, "superseded", False)]
     if not segs or not lines or not img_w or not img_h:
         return {"placed": 0, "plain": 0, "total": 0, "segs": len(segs)}
@@ -80,24 +101,29 @@ def placement_counts(page, lines: list[tuple[list[float], str]], img_w: float, i
     gt_pt = [([b[0] * sx, b[1] * sy, b[2] * sx, b[3] * sy], t) for b, t in lines]
 
     fold = str.casefold if caseless else (lambda s: s)
-    # assign each segment to its best-overlap GT line (index), if any clears the threshold
-    seg_words_by_line: dict[int, set[str]] = {}
-    for s in segs:
-        best_i, best_iou = -1, iou_min
-        for i, (bb, _) in enumerate(gt_pt):
-            v = _iou(bb, s.box.bbox)
-            if v >= best_iou:
-                best_i, best_iou = i, v
-        if best_i >= 0:
-            seg_words_by_line.setdefault(best_i, set()).update(
-                fold(w) for w in word_tokens(s.best_text or ""))
+    seg_words = [{fold(w) for w in word_tokens(s.best_text or "")} for s in segs]
+    words_by_line: dict[int, set[str]] = {}
+    if band:
+        for si, s in enumerate(segs):
+            for i, (bb, _) in enumerate(gt_pt):
+                if _covers_line(s.box.bbox, bb):
+                    words_by_line.setdefault(i, set()).update(seg_words[si])
+    else:
+        for si, s in enumerate(segs):
+            best_i, best_iou = -1, iou_min
+            for i, (bb, _) in enumerate(gt_pt):
+                v = _iou(bb, s.box.bbox)
+                if v >= best_iou:
+                    best_i, best_iou = i, v
+            if best_i >= 0:
+                words_by_line.setdefault(best_i, set()).update(seg_words[si])
 
-    all_words = {fold(w) for s in segs for w in word_tokens(s.best_text or "")}
+    all_words = set().union(*seg_words) if seg_words else set()
     placed = plain = total = 0
     for i, (_, text) in enumerate(gt_pt):
         gw = [fold(w) for w in word_tokens(text)]
         total += len(gw)
-        here = seg_words_by_line.get(i, set())
+        here = words_by_line.get(i, set())
         placed += sum(1 for w in gw if w in here)
         plain += sum(1 for w in gw if w in all_words)
     return {"placed": placed, "plain": plain, "total": total, "segs": len(segs)}
