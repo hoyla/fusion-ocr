@@ -50,6 +50,17 @@ argument, not a measurement. They are streams C and D below and outrank everythi
 > VLM CER 0.15, and the receipt "VLM CER win" claim — both need caseless re-scoring) and the
 > **150-DPI re-check**.
 
+> **VLM PASS DONE (2026-07-07)** — FUNSD 199 + SROIE seed-150, full pipeline. Manifest
+> `eval_out/manifests/stream_a_vlm_2026-07-07.md`. **VLM out-recognises deterministic on both:**
+> FUNSD 0.817/CER 0.170 (Q1's n=16 CER 0.15 HOLDS at scale); SROIE caseless 0.956/0.138 vs det
+> 0.864/0.391 — the receipt VLM win is real and bigger corrected, so *with the VLM* receipts are
+> VLM-favoured (updates the det-pass Q2 tie). **Fused placement (P1): fusion ≥ deterministic under
+> the fair (band) metric** — SROIE 0.924 vs 0.864, FUNSD 0.564 vs 0.538. The scary strict-metric
+> result (fused < det) was a granularity artifact (fusion's coarser boxes); `band=` mode added to
+> `placement.py`. Residual FUNSD placement gap is shared by both engines (dense-form difficulty),
+> not a fusion regression. **Still open:** 150-DPI re-check; gated-vs-ungated insertion (D);
+> dense-form placement improvement.
+
 Full-set runs on the two human-GT corpora already wired into the harness:
 
 ```bash
