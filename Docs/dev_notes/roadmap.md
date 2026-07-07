@@ -254,22 +254,32 @@ What's usable, and the traps:
 - **Total-Text** (`real_life/`, ~1554) — scene text (photos / signage), arguably **out of the
   document domain**; likely set aside.
 
-The ingest adapter + SROIE/FUNSD loaders are now built, so this is partly explored. **First
-benchmark run** (via the image→PDF ingest path), aggregate word recall / CER:
+The ingest adapter + SROIE/FUNSD loaders are now built. **FULL-SET deterministic benchmark**
+(evidence-plan stream A, 2026-07-07 — all 199 FUNSD + 973 SROIE, both engines, `--no-vlm`;
+manifest `eval_out/manifests/stream_a_deterministic_2026-07-07.md`). Word recall, case-corrected
+(see below):
 
-| source | PaddleOCR | Apple Vision | Qwen3-VL-8B |
-| --- | --- | --- | --- |
-| SROIE receipts (n=12) | 0.595 / 0.485 | 0.589 / 0.492 | **0.624 / 0.319** |
-| FUNSD forms (n=10 det, n=8 vlm) | **0.816 / 0.397** | 0.717 / 0.448 | 0.782 / 0.388 |
+| source | PaddleOCR | Apple Vision |
+| --- | --- | --- |
+| SROIE receipts (n=973) | 0.901 | **0.911** |
+| FUNSD forms (n=199) | **0.810** | 0.749 |
 
-Read: **PaddleOCR is the deterministic baseline and beats Apple Vision on both** (reinforcing
-[[feedback-paddleocr-is-the-deterministic-baseline]]). The VLM's value **scales with difficulty**:
-transformational on handwriting (the Mandelson 0.10→0.95 story), a modest recall lead + big CER
-win on degraded thermal receipts, and **no clear lead on clean forms** (PaddleOCR edges it). So
-the product earns its keep exactly where the deterministic tools fail; on clean print the
-deterministic engine alone is already strong. Caveats: small n, and the FUNSD VLM row ran on 8 of
-the 10 (so not a strictly matched set). To grow this: scale n with matched sets, add per-source
-loaders. Fuller analysis in the `dataset-3rdparty-ocr-benchmark` session memory.
+**This supersedes the old n=10–12 pilot table**, which reported SROIE ~0.59 for every engine and
+"PaddleOCR beats Apple Vision on both". The full run corrected two things:
+
+1. **The SROIE ~0.6 was a scoring artifact, not the engines.** SROIE's GT is 100.0% uppercase;
+   case-sensitive scoring charged every correctly-cased letter as an error. Corrected (caseless,
+   per-source flag — the pilot's numbers were raw), true receipt recognition is **~0.90 for both
+   engines**. (Third harness-artifact of this class, after CJK tokenisation.)
+2. **"PaddleOCR out-recognises Apple Vision" is document-type-dependent, not global.** Paddle
+   leads clearly on **forms** (0.810 vs 0.749) but the two are a **tie on receipts** (Vision
+   fractionally ahead). So [[feedback-paddleocr-is-the-deterministic-baseline]] holds for forms /
+   structured layouts, *not* as a blanket claim — narrow it to the document class.
+
+The VLM rows (the old table's Qwen column, and the "VLM's CER win on receipts" story) are **not
+yet re-run at scale** and must get the same caseless treatment before being trusted — stream A's
+VLM pass is queued. Handwriting (the Mandelson 0.10→0.95 story) is still n=1 until IAM is
+unblocked (stream B). Fuller analysis in [[dataset-3rdparty-ocr-benchmark]].
 
 Scale-triggered — don't build until the load is real (principle 6, *look before infra*):
 

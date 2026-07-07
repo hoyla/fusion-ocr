@@ -107,7 +107,7 @@ def _overlap(ref_words: list, hyp_words: list) -> int:
     return sum((Counter(ref_words) & Counter(hyp_words)).values())
 
 
-def score(ref_text: str, hyp_text: str) -> dict:
+def score(ref_text: str, hyp_text: str, *, caseless: bool = False) -> dict:
     """Full breakdown for one (reference, hypothesis) pair, carrying raw counts so a
     corpus can be micro-averaged.
 
@@ -115,7 +115,15 @@ def score(ref_text: str, hyp_text: str) -> dict:
     are the ORDER-INSENSITIVE pair: recall = fraction of reference words recovered
     (recognition completeness), precision = fraction of output words that are real
     (1 - precision is the hallucination proxy). A high recall with a high CER means the
-    text was recognised but mis-ordered (multi-column), not misread."""
+    text was recognised but mis-ordered (multi-column), not misread.
+
+    `caseless` folds case on BOTH sides before scoring. Default False — case is part of OCR
+    fidelity for a real document (see `normalize`). Set it only when the *reference itself*
+    carries no case information, so case-sensitive scoring would measure the reference's
+    convention rather than our recognition (e.g. SROIE's all-uppercase ground truth — see
+    `datasets._CASELESS_REF`)."""
+    if caseless:
+        ref_text, hyp_text = ref_text.casefold(), hyp_text.casefold()
     rn, hn = normalize(ref_text), normalize(hyp_text)
     ref_w, hyp_w = word_tokens(ref_text), word_tokens(hyp_text)   # CJK-aware (see word_tokens)
     c = _rate(list(rn), list(hn))
