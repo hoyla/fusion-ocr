@@ -35,7 +35,22 @@ dist/
 # locally; tests skip cleanly when they're absent.
 /samples/*
 !samples/.gitkeep
-# Eval outputs are bulky and machine-local — EXCEPT manifests, which the evidence plan
-# requires committed (small text: run metadata + aggregate scores, the durable record).
+# Eval outputs are bulky and machine-local — EXCEPT the durable evidence record the evidence
+# plan requires committed: manifests, the run scripts that produced the numbers, and each run's
+# aggregate results.csv (all small; pure metrics/metadata, no source text). The bulky per-item
+# out/ trees (overlay PDFs, per-stage JSON) stay local + archived off-repo.
 /eval_out/*
 !/eval_out/manifests/
+!/eval_out/*.py
+!/eval_out/noise_floor/
+!/eval_out/ocrq_full/
+!/eval_out/stream_a/
+!/eval_out/stream_a_vlm/
+/eval_out/noise_floor/*
+/eval_out/ocrq_full/*
+/eval_out/stream_a/*
+/eval_out/stream_a_vlm/*
+!/eval_out/noise_floor/results.csv
+!/eval_out/ocrq_full/results.csv
+!/eval_out/stream_a/results.csv
+!/eval_out/stream_a_vlm/results.csv
