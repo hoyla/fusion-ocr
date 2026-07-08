@@ -188,6 +188,15 @@ rather than shipping it off (dead pillar = doc drift).
 
 ### G. Noise floor (prerequisite for all future "X beats Y")
 
+> **DONE (2026-07-08) — the floor is ZERO.** 3× identical config on a fixed seeded-30 FUNSD set,
+> genuinely independent (distinct out_dir/digest → real ~22min VLM runs, not cache hits): all 30
+> items **bit-identical**, every metric spread 0.00000 (recall/CER/insertion/placement). MLX
+> 4-bit greedy decode (temp 0.0) is deterministic run-to-run. Manifest
+> `eval_out/manifests/noise_floor_2026-07-08.md`. **So: single runs are trustworthy — don't
+> repeat for variance; the binding constraint on a delta is now SAMPLE SIZE, not noise (the
+> Qwen3.5 Δ0.005/n=4 fails on n, not variance). Unblocks the RapidOCR / PP-OCRv6 / quant A/Bs.**
+> Caveat: re-measure if MLX/model/machine changes or any sampling (temp>0) is used.
+
 Run the identical config 3× on the labelled set + seeded FUNSD n=30 (temperature is already
 0.0; this measures the residual MLX/decode/env variance). Publish the per-metric spread in a
 manifest. **Every future default change cites it**: a delta inside the floor is not a result.
