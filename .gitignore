@@ -46,11 +46,14 @@ dist/
 !/eval_out/ocrq_full/
 !/eval_out/stream_a/
 !/eval_out/stream_a_vlm/
+!/eval_out/dpi_recheck/
 /eval_out/noise_floor/*
 /eval_out/ocrq_full/*
 /eval_out/stream_a/*
 /eval_out/stream_a_vlm/*
+/eval_out/dpi_recheck/*
 !/eval_out/noise_floor/results.csv
 !/eval_out/ocrq_full/results.csv
 !/eval_out/stream_a/results.csv
 !/eval_out/stream_a_vlm/results.csv
+!/eval_out/dpi_recheck/results.csv
