@@ -92,6 +92,18 @@ and the review_03 caveats — citing the manifest.
 
 ### B. Unblock IAM — handwriting beyond n=1
 
+> **EXECUTED (2026-07-09) — the capability generalises.** FKI human transcriptions sourced
+> (`ascii/lines.txt`); adapter `datasets.iam_line_index` / `iam_hw_bbox` / `iter_pairs('iam')`
+> pairs all 1539 images (unit-tested). Runner `eval_out/stream_b_iam.py`, manifest
+> `manifests/stream_b_iam_2026-07-09.md`; seeded n=100, both engines vs the human GT.
+> **VLM punctuation-normalized recall 0.955 at n=100 = the Mandelson 0.95 reproduced at scale**
+> (medCER 0.035, precision 0.845); deterministic 0.557 / medCER 0.150 — the VLM decisively
+> out-reads PaddleOCR on cursive. **Method catch (n=1 smoke):** IAM forms carry a printed prompt
+> ABOVE the handwriting, so a full-page OCR double-counts (CER > 1.0); we crop to the union of the
+> handwritten line boxes so the eval measures handwriting, not the prompt. Raw word recall (0.72) is
+> deflated by IAM tokenising punctuation as separate tokens — punct-normalized + medCER are the true
+> signal. **Guard holds:** IAM is clean ruled English = a FLOOR, not degraded FOI.
+
 The headline capability (handwriting) is proven on one letter; 1,539 IAM pages sit on disk
 unusable because the bundled annotations are OCR output (circular). Fix: source the original
 FKI/IAM human transcriptions (registration required, free for research; the ASCII

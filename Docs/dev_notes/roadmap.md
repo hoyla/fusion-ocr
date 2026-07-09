@@ -16,7 +16,7 @@ real, not before.
   threshold sensitivity, quant A/B, IAM fix. This subsumes the eval-expansion goals below at
   larger scale; the hand-labelling work remains complementary (it covers cases the gold sets
   don't).
-  **Status (2026-07-09) — streams A, C, G, D, F done** (manifests in `eval_out/manifests/`):
+  **Status (2026-07-09) — streams A, C, G, D, F, B done** (manifests in `eval_out/manifests/`):
   VLM out-recognises deterministic on both corpora; fused placement ≥ deterministic under the band
   metric (P1); noise floor is zero; 150 DPI confirmed on gold; P2 measured — D2 blank probes pass
   (0 gated invented words), D3 divergence triage empty on clean gold, **D1 fired tripwire (b)**
@@ -30,9 +30,13 @@ real, not before.
   2× memory (keep 4-bit); and **Qwen3.6-35B-A3B (MoE, 3B-active) beats the default on quality AND
   speed** (recall +0.018, medCER −0.012, ~28% faster) — a strong generalist-default candidate
   pending broader validation + the 20 GB footprint (Luke's call).
+  **B done:** FKI human transcriptions sourced; IAM adapter (crops to the handwriting region, since
+  forms carry a printed prompt above it) pairs all 1539 pages. At n=100 the **VLM's
+  punctuation-normalized handwriting recall is 0.955 — the Mandelson n=1 (0.95) reproduced at scale**
+  (medCER 0.035), vs deterministic 0.557 / 0.150. The handwriting claim is no longer a single
+  anecdote (IAM = clean ruled English = a FLOOR, not degraded FOI).
   **Outstanding:** **E** — threshold sensitivity (±30%, 4 constants) + the `escalate_below`
-  keep-or-delete decision; **B** — IAM handwriting beyond n=1, blocked on the external FKI/IAM
-  transcription registration (log-and-move-on if it stalls > 1 week). **Follow-ups from F:** decide
+  keep-or-delete decision (the last un-run evidence-plan stream). **Follow-ups from F:** decide
   on Qwen3.6-35B-A3B as the default (needs Thai/table/full-mix validation); generalise the
   repetition guard to catch low-entropy character floods (not just `[illegible]`).
 - **Fail loud on reader failure (review 03).** `vlm_read` / `table_read` / `language` catch
