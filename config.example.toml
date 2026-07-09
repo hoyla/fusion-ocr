@@ -62,7 +62,7 @@ forwarded_allow_ips = "127.0.0.1"
 # so the runtime is a free variable. On Apple Silicon, MLX is ~10-40x faster than Ollama —
 # serve it with:  python -m mlx_vlm.server --port 8080
 base_url = "http://localhost:8080/v1"                      # mlx-vlm server
-model    = "mlx-community/Qwen3.5-9B-MLX-4bit"             # generalist; rollback: Qwen3-VL-8B-Instruct-4bit
+model    = "mlx-community/Qwen3.6-35B-A3B-4bit"           # generalist (MoE, ~3B-active); rollback: Qwen3.5-9B-MLX-4bit
 api_key  = "not-needed-locally"
 # Alternatives:
 # base_url = "http://localhost:11434/v1"; model = "qwen2.5vl:7b"        # Ollama

@@ -79,9 +79,9 @@ Readers are OpenAI-compatible endpoints, so each tool runs wherever it's fastest
 the router points per-script at the right one. Default setup on Apple Silicon:
 
 ```bash
-# generalist reader — Qwen3.5-9B via MLX (~10-40x faster than Ollama on Apple Silicon)
+# generalist reader — Qwen3.6-35B-A3B (MoE) via MLX (~10-40x faster than Ollama on Apple Silicon)
 pip install mlx-vlm
-python -m mlx_vlm.server --port 8080        # serves mlx-community/Qwen3.5-9B-MLX-4bit
+python -m mlx_vlm.server --port 8080        # serves mlx-community/Qwen3.6-35B-A3B-4bit
 
 # Thai specialist — Typhoon on Ollama
 ollama pull scb10x/typhoon-ocr1.5-3b

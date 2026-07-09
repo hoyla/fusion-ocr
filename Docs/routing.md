@@ -159,13 +159,16 @@ a runtime artifact, not the model.** Takeaways:
 
 - **MLX is the preferred local runtime on Apple Silicon**; serve readers via
   `python -m mlx_vlm.server` and set `vlm.base_url = http://localhost:8080/v1`.
-- **Qwen3.5-9B (MLX)** is the default generalist — a strong, fast, multilingual reader,
-  marginally ahead of Qwen3-VL-8B overall and clearly better on handwriting in the
-  2026-06-30 re-test (which is why it's now the default; Qwen3-VL-8B remains a one-line
-  rollback). Use a trusted build (`mlx-community/Qwen3.5-9B-MLX-4bit`) — the Qwen3.5 space
-  has many abliterated/"Heretic" variants; never run a tampered build on confidential material.
-- Qwen3.5-VL exists (text MLX builds published; VL MLX build not yet) — re-test when
-  available.
+- **Qwen3.6-35B-A3B (MLX)** is the default generalist — a 256-expert / ~3B-active MoE, so a
+  nominally larger model that reads *better and ~28% faster* than the previous Qwen3.5-9B default
+  (evidence-plan stream F, 2026-07-09, n=55 vs a zero noise floor: higher recall, lower CER, 0
+  runaway repetitions). It trades ~20 GB resident memory (vs ~5 GB for the 4-bit 9B) — size it for
+  the deployment target. **Rollback: Qwen3.5-9B-MLX-4bit** (one line, still cached). Use trusted
+  builds (`mlx-community/…`) — the Qwen3.x space has many abliterated/"Heretic" variants; never run
+  a tampered build on confidential material.
+- Earlier defaults, kept as rollbacks: Qwen3.5-9B (chosen over Qwen3-VL-8B in the 2026-06-30
+  re-test; stream F later showed that pair is a recognition tie, so 3.5-9B was kept on
+  robustness + speed before 3.6 superseded it).
 - Lesson (again): benchmark the *runtime*, not just the model.
 
 ## Single-Mac vs VPC
