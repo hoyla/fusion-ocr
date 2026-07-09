@@ -158,9 +158,12 @@ regression.*
 >   +0.04). **Same confound family as the strict-vs-band placement artifact** (the campaign's 5th).
 >   The ink-gate's insertion *benefit* lives in the hallucination regime (blank/degraded pages),
 >   which the blank-gate already covers, so it reads ~0 on these ink-full corpora.
-> - **Open decision for certification:** the **P2 headline framing** — report the word-level
->   figures as the on-content P2 proxy (char-`insertion_rate` benefit reserved for the D2/OCRQ
->   hallucination regime), or refine the metric. See `manifests/insertion_gate_2026-07-09.md`.
+> - **CERTIFIED (Luke, 2026-07-09):** the reading-order-confound diagnosis is accepted; on ink-full
+>   corpora the **P2 gated proxy is the word-level figure** (gated `1 − word_precision` 0.184 FUNSD /
+>   0.100 SROIE, ~recall-free), and the char-`insertion_rate` gate *benefit* is reserved for the
+>   D2 hallucination regime (blank/degraded pages). So the certified P2 result is a **regime split**:
+>   the D1 on-content cost + the D2 blank-regime benefit (0 gated invented words), not one headline
+>   number. See `manifests/insertion_gate_2026-07-09.md`.
 
 1. **Report `insertion_rate`** in every harness/labels/dataset CSV and manifest — both ungated
    (`vlm_reading`) and gated (fused) columns. The gated-vs-ungated insertion gap is the

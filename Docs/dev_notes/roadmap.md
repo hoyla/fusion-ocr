@@ -20,8 +20,11 @@ real, not before.
   VLM out-recognises deterministic on both corpora; fused placement ≥ deterministic under the band
   metric (P1); noise floor is zero; 150 DPI confirmed on gold; P2 measured — D2 blank probes pass
   (0 gated invented words), D3 divergence triage empty on clean gold, **D1 fired tripwire (b)**
-  (gated char-insertion > ungated = a reading-order confound, not hallucination) → the **P2 headline
-  framing is pending certification** (see the insertion_gate manifest / evidence_plan §D).
+  (gated char-insertion > ungated = a reading-order confound, not hallucination). **P2 framing
+  certified (Luke, 2026-07-09):** on ink-full corpora the gated proxy is the word-level figure
+  (gated 1−word_precision 0.18 FUNSD / 0.10 SROIE, ~recall-free), char-insertion benefit reserved
+  for the D2 blank regime — so P2 is a regime split (D1 on-content cost + D2 blank-regime benefit),
+  not one headline number (see the insertion_gate manifest / evidence_plan §D).
   **Outstanding:** **F** — quant 4-bit-vs-8-bit + Qwen3.5-vs-Qwen3-VL at n≥50 (config-only,
   unblocked by the zero noise floor); **E** — threshold sensitivity (±30%, 4 constants) + the
   `escalate_below` keep-or-delete decision; **B** — IAM handwriting beyond n=1, blocked on the

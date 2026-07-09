@@ -5,9 +5,11 @@ ungated (`vlm_reading`) **and** gated (fused overlay), the gap being the measure
 ink-gate. Pure re-score of the 349 archived stream-A VLM docs (`stream_a_vlm/out/*/doc.json`), NO
 VLM compute. Runner `eval_out/insertion_gate.py`.*
 
-**FIRST MEASUREMENT — escalation tripwire (b) fired; the interpretation below is a diagnosis
-pending Luke's certification, not a settled verdict (per the pins' "stop and diagnose → senior
-eyes"). No downstream claim/memory is updated on the back of this run yet.**
+**FIRST MEASUREMENT — tripwire (b) fired, was diagnosed, and the diagnosis is CERTIFIED
+(Luke, 2026-07-09): the reading-order-confound reading is accepted. P2 decision — on ink-full
+corpora the gated proxy is the WORD-LEVEL figure (`1 − word_precision` / invented words); the
+char-`insertion_rate` gate *benefit* is reserved for the D2 hallucination regime (blank/degraded
+pages, where it is 0). Char-level is still reported alongside, for transparency.**
 
 ## Definitions (pinned)
 
@@ -79,14 +81,16 @@ benefit; it is the right regime to confirm the **cost is ~0** (tripwire c clear)
 - **Reads cleanly (high confidence):** the gate is nearly **recall-free** on content (cost
   0.004 / 0.014) and injects almost no new words into the overlay (94.4% shared with the reading);
   archive integrity confirmed.
-- **Needs senior eyes (tripwire b):** whether to (i) accept the reading-order-confound diagnosis
-  and report the **word-level** figures as the P2 gated proxy on ink-full corpora (with the
-  char-`insertion_rate` benefit reserved for the D2 hallucination regime), or (ii) refine the
-  metric (e.g. score the gated text against a placement-ordered reference, or use invented-words
-  as the headline). The strict-vs-band precedent argues for (i) + reporting both.
-- **Does not settle P2 outright:** the published gated-vs-ungated *benefit* number is regime
-  dependent; D2 supplies the blank-page benefit, D1 supplies the on-content cost. Together they
-  are the P2 pair — but the framing of the headline number is the certification question.
+- **Certified (Luke, 2026-07-09) — option (i):** the reading-order-confound diagnosis is accepted;
+  the on-content P2 gated proxy is the **word-level** figure — gated `1 − word_precision`
+  **0.184 (FUNSD) / 0.100 (SROIE)** — reported alongside the char-level for transparency. The
+  char-`insertion_rate` gate *benefit* is reserved for the D2 hallucination regime.
+- **P2 now has first published gated numbers.** The D1 on-content **cost** (gated word-level
+  hallucination ~0.18 / ~0.10, ~recall-free) + the D2 blank-regime **benefit** (0 gated invented
+  words) are the certified P2 pair — a regime-split number, not a single headline. Note the gated
+  word-level rate sits ~0.04 *above* the ungated reading's (the overlay honestly carries the
+  detector's real ink fragments), so the ink-gate is not a hallucination-*reducer* on ink-full
+  pages; its reduction shows only where the VLM invents past the ink (D2 / OCRQ-924).
 
 ## Caveats
 
