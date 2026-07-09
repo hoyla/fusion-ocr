@@ -22,9 +22,9 @@ the big remediations is in the review/plan notes — this is the index, not a du
   which recovered only the printed header/footer and essentially nothing of the handwriting.
   (n=1, the canonical reject.)
 - Two-axis routing ([routing.md](../routing.md)): Apple Vision cheap tier, Typhoon Thai
-  specialist, **Qwen3.5-9B generalist** via MLX (switched from Qwen3-VL-8B after the
-  2026-06-30 re-test — marginally better overall, clearly better on handwriting; Qwen3-VL-8B
-  is a one-line rollback).
+  specialist, **Qwen3.6-35B-A3B generalist** via MLX (a 3B-active MoE — switched from Qwen3.5-9B
+  after evidence-plan stream F, 2026-07-09: reads better AND ~28% faster at n=55 vs a zero noise
+  floor; ~20 GB resident. Qwen3.5-9B is the one-line rollback, still cached).
 - Layout PP-DocLayoutV2 (learned reading order); classified SLANeXt scanned tables;
   born-digital PyMuPDF `find_tables`.
 - Searchable bbox overlay (Unicode font), per-language markdown, provenance segment index.
