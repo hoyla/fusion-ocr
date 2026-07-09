@@ -16,7 +16,7 @@ real, not before.
   threshold sensitivity, quant A/B, IAM fix. This subsumes the eval-expansion goals below at
   larger scale; the hand-labelling work remains complementary (it covers cases the gold sets
   don't).
-  **Status (2026-07-09) — streams A, C, G, D done** (manifests in `eval_out/manifests/`):
+  **Status (2026-07-09) — streams A, C, G, D, F done** (manifests in `eval_out/manifests/`):
   VLM out-recognises deterministic on both corpora; fused placement ≥ deterministic under the band
   metric (P1); noise floor is zero; 150 DPI confirmed on gold; P2 measured — D2 blank probes pass
   (0 gated invented words), D3 divergence triage empty on clean gold, **D1 fired tripwire (b)**
@@ -25,10 +25,16 @@ real, not before.
   (gated 1−word_precision 0.18 FUNSD / 0.10 SROIE, ~recall-free), char-insertion benefit reserved
   for the D2 blank regime — so P2 is a regime split (D1 on-content cost + D2 blank-regime benefit),
   not one headline number (see the insertion_gate manifest / evidence_plan §D).
-  **Outstanding:** **F** — quant 4-bit-vs-8-bit + Qwen3.5-vs-Qwen3-VL at n≥50 (config-only,
-  unblocked by the zero noise floor); **E** — threshold sensitivity (±30%, 4 constants) + the
-  `escalate_below` keep-or-delete decision; **B** — IAM handwriting beyond n=1, blocked on the
-  external FKI/IAM transcription registration (log-and-move-on if it stalls > 1 week).
+  **F done:** at n=55 Qwen3.5-9B vs Qwen3-VL-8B is a recognition tie (keep 3.5-9B on robustness +
+  speed — 3-VL-8B hit a guard-missed `.`-repetition loop); 8-bit is a marginal gain at 23% slower +
+  2× memory (keep 4-bit); and **Qwen3.6-35B-A3B (MoE, 3B-active) beats the default on quality AND
+  speed** (recall +0.018, medCER −0.012, ~28% faster) — a strong generalist-default candidate
+  pending broader validation + the 20 GB footprint (Luke's call).
+  **Outstanding:** **E** — threshold sensitivity (±30%, 4 constants) + the `escalate_below`
+  keep-or-delete decision; **B** — IAM handwriting beyond n=1, blocked on the external FKI/IAM
+  transcription registration (log-and-move-on if it stalls > 1 week). **Follow-ups from F:** decide
+  on Qwen3.6-35B-A3B as the default (needs Thai/table/full-mix validation); generalise the
+  repetition guard to catch low-entropy character floods (not just `[illegible]`).
 - **Fail loud on reader failure (review 03).** `vlm_read` / `table_read` / `language` catch
   every exception and return `""` with no logging anywhere in those stages — a dead MLX server
   or misconfigured model name silently degrades the whole corpus to det_text. Add logging + a

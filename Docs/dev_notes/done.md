@@ -123,6 +123,13 @@ the big remediations is in the review/plan notes — this is the index, not a du
   published numbers are a **regime split** (D1 on-content cost + D2 blank benefit), not one headline;
   the ink-gate is not a hallucination-reducer on ink-full pages (it honestly carries detector ink),
   only where the VLM invents past the ink.
+- **Evidence-plan stream F executed** ([evidence_plan.md](evidence_plan.md) §F; manifest
+  `eval_out/manifests/stream_f_model_ab_2026-07-09.md`) — model + quant A/Bs at n=55 (labelled 5 +
+  FUNSD 50) against the zero noise floor. Keep Qwen3.5-9B over Qwen3-VL-8B (recognition tie; 3-VL-8B
+  hit a guard-missed `.`-repetition loop → 262k chars; 3.5-9B faster); keep 4-bit over 8-bit
+  (marginal gain, 23% slower + 2× memory). **Qwen3.6-35B-A3B** (MoE, 3B-active) measured **better on
+  quality AND speed** than the default (recall +0.018, medCER −0.012, ~28% faster) — a generalist
+  default-upgrade candidate pending broader validation (Luke's call; no default flipped).
 
 ## Config & API
 - Settings registry (`settings.py`) → `GET` / `PATCH /config`; secrets masked;

@@ -292,6 +292,18 @@ rather than shipping it off (dead pillar = doc drift).
 
 ### F. Model/runtime deltas we shipped without measuring
 
+> **EXECUTED (2026-07-09)** — runner `eval_out/stream_f_model_ab.py`, manifest
+> `eval_out/manifests/stream_f_model_ab_2026-07-09.md`; 4 models × (labelled 5 + FUNSD n=50),
+> against the zero noise floor. **Model-gen:** Qwen3.5-9B vs Qwen3-VL-8B is a *tie* on recognition
+> at n=55 (the Δ0.005/n=4 recall gap doesn't survive) — keep Qwen3.5-9B on **robustness + speed**
+> (Qwen3-VL-8B hit a bare-`.` repetition loop on 1/50 FUNSD → 262k chars, guard-missed; Qwen3.5-9B
+> 0 such, ~4s faster). **Quant:** 8-bit is +0.006 recall / medCER-tie at ~23% slower + 2× memory —
+> keep 4-bit. **New-gen (added this session):** **Qwen3.6-35B-A3B** (MoE, 3B-active, `qwen3_5_moe`,
+> mlx_vlm 0.6.3-compat) **beats the default on quality AND speed** — recall +0.018, medCER −0.012,
+> **~28% faster** (13.8 vs 19.2s), 0 runaways — a strong generalist-default candidate pending
+> broader validation (n=55/2 corpora here; ~20 GB resident). Decisions surfaced for Luke, no default
+> flipped. Also: generalise the repetition guard to catch low-entropy floods (roadmap item).
+
 - **4-bit vs 8-bit Qwen3.5-9B** on the labelled set + seeded FUNSD n=50: recall/CER/insertion
   + `t_vlm_read`. *Criterion:* keep 4-bit iff quality delta < noise floor. (Review_01 asked
   for this; it's a config-only A/B.)
