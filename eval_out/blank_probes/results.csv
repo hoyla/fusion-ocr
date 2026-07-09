@@ -1,0 +1,13 @@
+probe,ref,vlm_invoked,n_segments,t_vlm,secs,ungated_words,ungated_invented,ungated_ins_chars,gated_words,gated_invented,gated_ins_chars,ungated_text,gated_text
+blank_white,,0,0,0.0,19.3,0,0,0,0,0,0,,
+blank_offwhite,,0,0,0.0,11.7,0,0,0,0,0,0,,
+blank_lightgrey,,0,0,0.0,11.2,0,0,0,0,0,0,,
+speckle_lo,,0,0,0.0,11.2,0,0,0,0,0,0,,
+speckle_mid,,0,0,0.0,11.2,0,0,0,0,0,0,,
+speckle_hi,,0,0,0.0,11.2,0,0,0,0,0,0,,
+stamp_circle,,0,0,0.0,11.2,0,0,0,0,0,0,,
+stamp_solidbox,,0,0,0.0,11.2,0,0,0,0,0,0,,
+stamp_copy,COPY,1,1,12.67,24.9,1,0,0,1,0,0,COPY,COPY
+ruled_grid,,0,0,0.0,27.1,0,0,0,0,0,0,,
+ruled_lined,,0,0,0.0,20.4,0,0,0,0,0,0,,
+ruled_formboxes,,0,0,0.0,12.4,0,0,0,0,0,0,,
