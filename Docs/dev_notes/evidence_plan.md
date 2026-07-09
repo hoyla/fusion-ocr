@@ -160,6 +160,91 @@ regression.*
 claim — any nonzero is a bug); `document.md` insertion rate gets *reported* with no pass bar
 yet (first measurement), but becomes a release-note number — "defensible" means we publish it.
 
+#### Operational pins (2026-07-09 — pre-execution)
+
+*The three definitions the prose above leaves open, pinned before running so execution needs
+no judgment calls. Field names, loaders, and paths below are verified against the code and the
+archived artifacts, not assumed.*
+
+**D1 — the gated column (`eval_out/insertion_gate.py`).** Pure re-scoring, no VLM compute:
+the 349 stream-A VLM fused docs are archived at
+`/Volumes/CORSAIR/Work_Corsair/fusion-ocr/eval_out/stream_a_vlm/out/<id>/doc.json` (CORSAIR
+must be mounted); load with `Document.from_json` (`models.py`). References and caseless
+handling exactly as `eval_out/stream_a_vlm.py` (`iter_pairs` / `_annotation_index` /
+`_CASELESS_REF`).
+
+- **Ungated hyp** = `page.vlm_reading` joined over pages (what `document.md` carries when
+  VLM-read). Recomputing it must reproduce the committed `stream_a_vlm/results.csv` columns —
+  a built-in check that the archive is the same run.
+- **Gated hyp (the definition):** segments with non-empty `best_text` and not `superseded`,
+  sorted by `compose.reading_key`, joined with `"\n"` — i.e. exactly the fallback branch of
+  `eval.harness.recovered_text`, applied unconditionally. This is the text of
+  `segment_index.json` / the overlay (same filter `placement.py` uses), so it scores the
+  product artifact.
+- Score both hyps with `metrics.score(ref, hyp, caseless=…)`. **Report the PAIR, per item and
+  aggregate, for both columns:** `insertion_rate` (char-level — the pre-registered proxy) AND
+  `word_recall`. The gate's *benefit* is ungated−gated insertion; the gate's *cost* is
+  ungated−gated recall (true words dropped for lack of ink support). Publishing the benefit
+  without the cost flatters the gate — the manifest carries both. (`1 − word_precision` is the
+  word-level hallucination companion; it falls out of the same `score()` call, report it too.)
+- Items with empty `vlm_reading` (guards discarded the read; ungated≈gated by construction):
+  keep them, count them, report the count.
+
+**D2 — the probe set (`eval_out/blank_probes.py`).** Twelve synthetic single-page PDFs,
+generated deterministically by the runner with PyMuPDF drawing primitives (commit the script,
+not the PDFs): 3 blank (white / off-white / light-grey), 3 speckle (faint dots, seeded RNG, at
+increasing density), 2 text-free stamp-like marks (circular rubber-stamp shape; solid dark
+box), 1 stamp with the word "COPY" (its ref = `"COPY"`), 3 ruled-but-empty (table grid / lined
+page / empty form boxes). Ref = `""` for all but the COPY stamp.
+
+- Full pipeline via `process()`, live MLX reader up, fresh out_dir, distinct digest per probe
+  (the guard-check rerun's method). Record wall time and whether the VLM was invoked — true
+  blanks should short-circuit at the blank-gate (verified 2026-07-06); the near-blanks are the
+  real test.
+- **Metric unit is WORDS** (as pre-registered above): invented words per probe =
+  `hyp_words − word_overlap` from `score()` (multiset difference), computed for BOTH the
+  ungated reading and the gated text (D1's definition). Char `insertion_rate` is also logged
+  but degenerates to a raw count when ref is empty (`n = max(len(ref), 1)`) — words are the
+  headline unit.
+- **Pass/fail applies to D2 only:** gated invented words = **0 on every probe**; any nonzero
+  is a gate bug — stop and diagnose. Ungated counts are reported, no bar.
+- The four real OCR-Quality probes (blank 924/967/969, loop 654) stand as the companion set —
+  already verified in situ 2026-07-06 (`ocrq_full_2026-07-06.md`); cite, don't re-run.
+
+**D3 — the selection rule (`eval_out/divergence_triage.py`).** Universe = the same 349
+archived docs. Per item, disagreement = word-multiset F1 between the normalized `vlm_reading`
+and the concatenation of non-superseded segments' `det_text`:
+`2·overlap / (|vlm_words| + |det_words|)` via `word_tokens` + the `score()` overlap (SROIE
+casefolded both sides).
+
+- **Candidates:** F1 < 0.5 AND mean `det_conf` over non-superseded segments ≥ 0.80 (the
+  codebase's own det-trust bar, `fuse_det_conf_trust`) AND both sides non-trivial (normalized
+  `vlm_reading` ≥ 20 chars; ≥ 3 det segments). "Both confident" operationalized: det by
+  confidence; the VLM by having produced a guard-surviving, non-trivial reading (VLMs emit no
+  calibrated confidence).
+- **Sample:** `random.seed(1)`, `sample(candidates, min(20, len(candidates)))`. If fewer than
+  20 qualify, take all and record the count — no threshold-relaxing top-up (that would unpin
+  the rule).
+- **Verdicts** (gold-anchored — unlike OCR-Quality, these corpora have real references):
+  per item, compare each side's `score()` vs gold, inspect the image, classify
+  **VLM-wrong / det-wrong / both-wrong / reference-fault** (keep the fourth bucket; the OCRQ
+  adjudication showed it is a real class — expect it rare here). Claude-Vision-assisted
+  inspection is fine (dev samples are cleared for Vision); Luke certifies the final table.
+  Verdicts + per-item notes land in `eval_out/divergence_triage/verdicts.md`.
+
+**Mechanics (all three):** run with the project `.venv` interpreter (the pyenv trap); D1/D3
+need no reader, D2 needs MLX on :8080. Durable/resumable CSV-append runners in the
+`stream_a_vlm.py` style; one manifest per runner in `eval_out/manifests/`
+(`insertion_gate_<date>.md`, `blank_probes_<date>.md`, `divergence_triage_<date>.md`).
+
+**Escalation tripwires (diagnosis triggers, NOT pass bars — D1/D3 remain first-measurement):**
+(a) any probe with nonzero *gated* invented words; (b) aggregate gated insertion not lower
+than ungated; (c) gate recall cost > 0.05 absolute on either corpus; (d) D3 verdicts
+contradicting the D1 story (e.g. det-wrong dominating where the insertion numbers implied VLM
+hallucination). Any of these fires → stop and diagnose before writing the manifest verdict —
+that diagnosis is the interpretive step (the strict-vs-band placement confound is the
+precedent for why it gets senior eyes).
+
 ### E. Threshold sensitivity (not full calibration)
 
 Full calibration of ~15 constants is over-engineering at this corpus size; **sensitivity** is
