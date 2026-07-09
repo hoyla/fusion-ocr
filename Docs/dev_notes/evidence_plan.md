@@ -136,6 +136,32 @@ regression.*
 
 ### D. P2 — hallucination measured and reported
 
+> **EXECUTED (2026-07-09) — D1 gated column, D2 blank probes, D3 divergence triage.** Runners
+> `eval_out/{insertion_gate,divergence_triage,blank_probes}.py`; manifests
+> `eval_out/manifests/{insertion_gate,divergence_triage,blank_probes}_2026-07-09.md`. **Archive
+> integrity: 349/349 stream-A docs reproduce `stream_a_vlm/results.csv`.**
+>
+> - **D2 = PASS** (the one hard bar): **0 gated invented words on all 12** synthetic blank/near-blank
+>   probes; the COPY positive control is recovered. Caveat: 11/12 were blank-gated *upstream* (0
+>   detector segments → VLM never invoked), so the ink-gate's own drop-VLM-text-past-ink path was
+>   not isolated by the synthetics; the real-instance companion stays OCRQ idx-924.
+> - **D3 = ZERO candidates** under the pinned rule (VLM and detector agree almost everywhere —
+>   median word-F1 0.913; `det_conf ≥ 0.80` is a no-op at min-mean 0.863; the only two sub-0.5-F1
+>   items are VLM non-reads, correctly excluded). Corroborates D1 → tripwire (d) clear. No top-up.
+> - **D1 = tripwire (b) FIRED** — gated (overlay) char-`insertion_rate` is *higher* than ungated
+>   (`vlm_reading`): benefit −0.055 (FUNSD) / −0.086 (SROIE), inverting the pre-registered
+>   expectation. **Tripwire (c) clear** (recall cost 0.004 / 0.014 ≪ 0.05 — gating is ~recall-free).
+> - **Diagnosis (pending Luke's certification — NOT a settled verdict, per the pins' senior-eyes
+>   rule):** a reading-order + det-fragment artifact, not overlay hallucination — the gated text
+>   shares **94.4%** of its words with the ungated reading, is 1.06× the reference length, 0
+>   superseded; the char-insertion gap exceeds the order-insensitive word gap (1−precision only
+>   +0.04). **Same confound family as the strict-vs-band placement artifact** (the campaign's 5th).
+>   The ink-gate's insertion *benefit* lives in the hallucination regime (blank/degraded pages),
+>   which the blank-gate already covers, so it reads ~0 on these ink-full corpora.
+> - **Open decision for certification:** the **P2 headline framing** — report the word-level
+>   figures as the on-content P2 proxy (char-`insertion_rate` benefit reserved for the D2/OCRQ
+>   hallucination regime), or refine the metric. See `manifests/insertion_gate_2026-07-09.md`.
+
 1. **Report `insertion_rate`** in every harness/labels/dataset CSV and manifest — both ungated
    (`vlm_reading`) and gated (fused) columns. The gated-vs-ungated insertion gap is the
    measured value of the ink-gate. Zero new metric code; it exists and is dropped on the floor.
@@ -351,10 +377,10 @@ framing below — NOT accuracy. What it produced:
 | Step | What | Cost (wall-clock, desktop) |
 | --- | --- | --- |
 | 1 | G noise floor + A deterministic full runs | hours, CPU-bound |
-| 2 | D1 insertion reporting + manifest plumbing | ~½ day code |
-| 3 | C placement metric | ~1 day code, runs ride on A |
-| 4 | A VLM rows (FUNSD full, SROIE n=150) | ~1–2 days compute |
-| 5 | D2 blank probes + D3 triage | ~½ day |
+| 2 | D1 insertion reporting + manifest plumbing ✅ (2026-07-09) | ~½ day code |
+| 3 | C placement metric ✅ | ~1 day code, runs ride on A |
+| 4 | A VLM rows (FUNSD full, SROIE n=150) ✅ | ~1–2 days compute |
+| 5 | D2 blank probes + D3 triage ✅ (2026-07-09) | ~½ day |
 | 6 | F quant + model A/Bs | ~1 day compute |
 | 7 | E sensitivity sweeps | ~1–2 days compute, automatable |
 | 8 | B IAM sourcing + adapter | external dependency; parallel |

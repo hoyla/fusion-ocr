@@ -1,0 +1,1 @@
+dataset,id,f1,mean_det_conf,vlm_recall,vlm_cer,det_recall,det_cer,gold_favors,img

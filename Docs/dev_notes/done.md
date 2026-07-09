@@ -110,6 +110,14 @@ the big remediations is in the review/plan notes — this is the index, not a du
   reader) — also a saved VLM call; (2) **degenerate-repetition guard** — a read that collapses
   into a loop (`[illegible] [illegible] …` to the token cap) is discarded like a refusal, so
   fusion falls back to det_text. Both validated on the real 1000-run failure pages.
+- **Evidence-plan stream D executed** ([evidence_plan.md](evidence_plan.md) §D; manifests
+  `eval_out/manifests/{insertion_gate,divergence_triage,blank_probes}_2026-07-09.md`) — the P2
+  measurement infrastructure: gated-vs-ungated insertion re-scoring (D1), synthetic blank/near-blank
+  probes (D2), gold-anchored divergence triage (D3), all re-scored from the archived stream-A docs
+  (349/349 reproduce the committed run). **D2 passes** (0 gated invented words); **D3 is empty** on
+  clean gold (engines agree); **D1 fired tripwire (b)** — gated char-insertion > ungated, diagnosed
+  as a reading-order confound (gated shares 94.4% of words with the reading), so the **P2 headline
+  framing is pending certification**, not yet a shipped claim.
 
 ## Config & API
 - Settings registry (`settings.py`) → `GET` / `PATCH /config`; secrets masked;

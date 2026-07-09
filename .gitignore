@@ -57,3 +57,18 @@ dist/
 !/eval_out/stream_a/results.csv
 !/eval_out/stream_a_vlm/results.csv
 !/eval_out/dpi_recheck/results.csv
+# stream D (2026-07-09): small text artifacts committed; out/ + probe pdfs stay local
+!/eval_out/insertion_gate/
+/eval_out/insertion_gate/*
+!/eval_out/insertion_gate/results.csv
+!/eval_out/insertion_gate/summary.json
+!/eval_out/divergence_triage/
+/eval_out/divergence_triage/*
+!/eval_out/divergence_triage/f1_all.csv
+!/eval_out/divergence_triage/triage_table.csv
+!/eval_out/divergence_triage/sample.json
+!/eval_out/divergence_triage/verdicts.md
+!/eval_out/blank_probes/
+/eval_out/blank_probes/*
+!/eval_out/blank_probes/results.csv
+!/eval_out/blank_probes/summary.json
