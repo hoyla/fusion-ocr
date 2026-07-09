@@ -80,9 +80,11 @@ SROIE (a full VLM SROIE run is ~days on one Mac — sample first, extend if vari
 - Why is absolute receipt performance poor for *every* engine (recall ~0.6)? Diagnose before
   narrating: harness artifact (normalisation, matching) vs genuine engine weakness on thermal
   print. This number was published in the roadmap and never explained.
-- **150-DPI re-check:** A/B `ocr_det` 150 vs 200 DPI on a seeded n=50 subset of each. The
-  shipped default was validated on 5 pseudo-GT pages; this is the real test.
-  *Criterion:* keep 150 iff recall delta < noise floor (stream G) on both corpora.
+- **150-DPI re-check — DONE (2026-07-08): keep 150, confirmed on gold.** A/B `ocr_det` 150 vs
+  200 DPI, deterministic, seeded n=50 FUNSD + n=50 SROIE (manifest
+  `eval_out/manifests/dpi_recheck_2026-07-08.md`). **150 ≥ 200 on both** — FUNSD +0.011 recall /
+  −0.009 CER (150 marginally *better*), SROIE +0.0015 (tie). The 5-pseudo-GT-page validation
+  behind PR #16 holds on 100 human-GT items; 150 is faster + shares the raster cache. No revisit.
 
 **On completion:** update or retire the affected claims — the
 `feedback-paddleocr-is-the-deterministic-baseline` memory note, the roadmap benchmark table,
