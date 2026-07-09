@@ -103,10 +103,66 @@ def funsd_reference(ann_path) -> str:
     return "\n".join(i["text"] for i in _reading_order(lines))
 
 
-# source -> (category subdir, reference extractor)
+# IAM handwriting: the per-image JSON bundled in document/ is an OCR engine's OUTPUT (per-line
+# confidences) — scoring our OCR against it is circular, which is why IAM was parked. The ORIGINAL
+# HUMAN transcriptions live in the FKI `ascii/lines.txt` (registration-gated; sourced 2026-07-09),
+# keyed by line id `<form>-<line>`. Unlike FUNSD, IAM forms are SINGLE-COLUMN and the line ids are
+# sequential top-to-bottom, so line-id order IS reading order — no geometric reconstruction needed.
+_IAM_ASCII = _ROOT / "document" / "ascii" / "lines.txt"
+
+
+def iam_line_index(lines_txt=_IAM_ASCII, *, drop_err: bool = False) -> dict:
+    """form_id -> human transcription (reading order), parsed from IAM's ascii/lines.txt.
+
+    Each non-comment line is
+      ``<form>-<line> <ok|err> <graylevel> <ncomp> <x> <y> <w> <h> <word1|word2|...>``
+    The transcription is the 9th field, words separated by ``|`` (→ spaces). ``drop_err=True``
+    skips lines IAM flagged as segmentation errors (kept by default — the text is still correct)."""
+    idx: dict[str, list[tuple[int, str]]] = {}
+    for ln in Path(lines_txt).read_text(encoding="utf-8").splitlines():
+        if ln.startswith("#") or not ln.strip():
+            continue
+        parts = ln.split(" ", 8)
+        if len(parts) < 9:
+            continue
+        lid, status, text = parts[0], parts[1], parts[8]
+        if drop_err and status != "ok":
+            continue
+        form_id, lineno = lid.rsplit("-", 1)
+        idx.setdefault(form_id, []).append((int(lineno), text.replace("|", " ")))
+    return {fid: "\n".join(t for _, t in sorted(ln)) for fid, ln in idx.items()}
+
+
+def iam_hw_bbox(lines_txt=_IAM_ASCII) -> dict:
+    """form_id -> (x0, y0, x1, y1): the tight union of a form's handwritten line boxes (from
+    lines.txt) = the HANDWRITING region, in original-image pixels.
+
+    IAM 'forms' are not bare handwriting: each shows a printed header + the printed prompt sentence
+    the writer copied, THEN the handwritten version below. Scoring a full-page OCR against the
+    handwriting-only transcription double-counts the text (the printed prompt supplies every word
+    for free — recall is inflated and CER blows past 1.0 on the duplication). Cropping the image to
+    this bbox isolates the handwriting, which is what the handwriting claim actually means to
+    measure. (Verified by eye on a01-020u, 2026-07-09.)"""
+    boxes: dict[str, list[tuple[int, int, int, int]]] = {}
+    for ln in Path(lines_txt).read_text(encoding="utf-8").splitlines():
+        if ln.startswith("#") or not ln.strip():
+            continue
+        p = ln.split()
+        if len(p) < 8:
+            continue
+        fid = p[0].rsplit("-", 1)[0]
+        x, y, w, h = (int(v) for v in p[4:8])
+        boxes.setdefault(fid, []).append((x, y, x + w, y + h))
+    return {fid: (min(b[0] for b in bs), min(b[1] for b in bs),
+                  max(b[2] for b in bs), max(b[3] for b in bs)) for fid, bs in boxes.items()}
+
+
+# source -> (category subdir, reference extractor). IAM's reference comes from the shared
+# ascii/lines.txt (not a per-image file), so it is handled specially in iter_pairs.
 _SOURCES = {
     "sroie": ("invoice", sroie_reference),
     "funsd": ("form", funsd_reference),
+    "iam": ("document", None),
 }
 
 
@@ -126,12 +182,16 @@ def iter_pairs(source: str, split: str = "test", root=_ROOT, limit=None):
         raise ValueError(f"unknown source {source!r}; known: {sorted(_SOURCES)}")
     subdir, ref_fn = _SOURCES[source]
     category = Path(root) / subdir
-    anns = _annotation_index(category)
+    # IAM: reference is a stem lookup into the shared ascii/lines.txt (human transcriptions),
+    # not a per-image annotation file.
+    iam_idx = iam_line_index(category / "ascii" / "lines.txt") if source == "iam" else None
+    anns = None if source == "iam" else _annotation_index(category)
     pairs = []
     for img in sorted(p for p in (category / split / "images").glob("*") if p.is_file()):
-        ann = anns.get(img.stem)
-        if ann is not None:
-            pairs.append((img, ref_fn(ann)))
+        ref = iam_idx.get(img.stem) if source == "iam" else (
+            ref_fn(anns[img.stem]) if img.stem in anns else None)
+        if ref is not None:
+            pairs.append((img, ref))
             if limit and len(pairs) >= limit:
                 break
     return pairs

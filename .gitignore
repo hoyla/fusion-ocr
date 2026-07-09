@@ -75,3 +75,6 @@ dist/
 !/eval_out/stream_f_model_ab/
 /eval_out/stream_f_model_ab/*
 !/eval_out/stream_f_model_ab/results.csv
+!/eval_out/stream_b_iam/
+/eval_out/stream_b_iam/*
+!/eval_out/stream_b_iam/results.csv

@@ -1,5 +1,5 @@
-"""3rd-party benchmark loaders: reference extraction (SROIE / FUNSD) and stem pairing.
-These are pure JSON/path logic — no images, models, or the real (gitignored) dataset."""
+"""3rd-party benchmark loaders: reference extraction (SROIE / FUNSD / IAM) and stem pairing.
+These are pure JSON/text/path logic — no images, models, or the real (gitignored) dataset."""
 
 from __future__ import annotations
 
@@ -89,4 +89,50 @@ def test_iter_pairs_matches_annotation_in_a_different_split(tmp_path):
 
 def test_iter_pairs_unknown_source_raises(tmp_path):
     with pytest.raises(ValueError):
-        datasets.iter_pairs("iam", root=tmp_path)      # IAM intentionally not a gold source
+        datasets.iter_pairs("totaltext", root=tmp_path)   # scene text: out of the document domain
+
+
+def test_iam_line_index_parses_human_transcription(tmp_path):
+    # IAM's human GT (ascii/lines.txt): `<form>-<line> <ok|err> ...6 fields... <w1|w2|...>`.
+    # Lines given out of order -> index must sort by line number; `|` -> spaces; forms separate.
+    lines = tmp_path / "lines.txt"
+    lines.write_text(
+        "# a comment line\n"
+        "a01-000u-01 ok 1 2 3 4 5 6 world|again\n"     # line 01 before 00 in the file
+        "a01-000u-00 ok 1 2 3 4 5 6 hello|there\n"
+        "a01-000u-02 err 1 2 3 4 5 6 bad|seg\n"        # err-segmented: kept by default
+        "b02-111-00 ok 1 2 3 4 5 6 second|form\n")
+    idx = datasets.iam_line_index(lines)
+    assert idx["a01-000u"] == "hello there\nworld again\nbad seg"   # reading order; | -> space
+    assert idx["b02-111"] == "second form"
+    assert datasets.iam_line_index(lines, drop_err=True)["a01-000u"] == "hello there\nworld again"
+
+
+def test_iter_pairs_iam_pairs_images_to_lines_txt(tmp_path):
+    # IAM reference is a stem lookup into the shared ascii/lines.txt (NOT a per-image file);
+    # an image with no transcription is dropped, like an orphan annotation.
+    doc = tmp_path / "document"
+    (doc / "test" / "images").mkdir(parents=True)
+    (doc / "ascii").mkdir(parents=True)
+    (doc / "test" / "images" / "a01-000u.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (doc / "test" / "images" / "orphan.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (doc / "ascii" / "lines.txt").write_text("a01-000u-00 ok 1 2 3 4 5 6 hello|world\n")
+
+    pairs = datasets.iter_pairs("iam", split="test", root=tmp_path)
+    assert [p[0].stem for p in pairs] == ["a01-000u"]     # orphan (no human transcription) dropped
+    assert pairs[0][1] == "hello world"
+
+
+def test_iam_hw_bbox_unions_line_boxes(tmp_path):
+    # The handwriting region = union of the form's line boxes (fields x y w h), so a full-page OCR
+    # can be cropped to it (IAM forms also carry a printed prompt above the handwriting).
+    lines = tmp_path / "lines.txt"
+    lines.write_text(
+        "a01-000u-00 ok 1 2 100 200 50 20 hi\n"       # (100,200)-(150,220)
+        "a01-000u-01 ok 1 2 120 260 80 20 there\n")    # (120,260)-(200,280)
+    assert datasets.iam_hw_bbox(lines) == {"a01-000u": (100, 200, 200, 280)}
+
+
+def test_iam_is_not_caseless():
+    # IAM keeps real letter case (like FUNSD, unlike SROIE) -> scored case-sensitively.
+    assert "iam" not in datasets._CASELESS_REF

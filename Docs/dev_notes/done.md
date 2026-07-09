@@ -130,6 +130,14 @@ the big remediations is in the review/plan notes — this is the index, not a du
   (marginal gain, 23% slower + 2× memory). **Qwen3.6-35B-A3B** (MoE, 3B-active) measured **better on
   quality AND speed** than the default (recall +0.018, medCER −0.012, ~28% faster) — a generalist
   default-upgrade candidate pending broader validation (Luke's call; no default flipped).
+- **Evidence-plan stream B executed — handwriting generalises** ([evidence_plan.md](evidence_plan.md)
+  §B; manifest `eval_out/manifests/stream_b_iam_2026-07-09.md`). FKI human transcriptions sourced;
+  IAM adapter (`datasets.iam_line_index` / `iam_hw_bbox` / `iter_pairs('iam')`, unit-tested) pairs
+  all 1539 pages, cropping each form to its handwritten-line-box region (IAM forms carry a printed
+  prompt above the handwriting — a full-page OCR would double-count). At n=100 the **VLM's
+  punctuation-normalized handwriting recall is 0.955 — the Mandelson n=1 (0.95) reproduced at
+  scale** (medCER 0.035, precision 0.845), vs deterministic PaddleOCR 0.557 / 0.150. The headline
+  capability is no longer a single anecdote (IAM = clean ruled English = a floor, not degraded FOI).
 
 ## Config & API
 - Settings registry (`settings.py`) → `GET` / `PATCH /config`; secrets masked;
