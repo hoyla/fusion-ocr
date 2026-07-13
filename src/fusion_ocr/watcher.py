@@ -22,6 +22,7 @@ from . import config as config_mod
 from . import ingest, storage
 from .jobs import JobStore
 from .pipeline import process, sha256_of
+from .vlm.openai_compat import preflight_reader
 
 
 def _move_out(src: Path, in_dir: Path, subdir: str, digest: str) -> None:
@@ -117,6 +118,18 @@ def main() -> None:
 
     jobs = JobStore(Path(cfg.out_dir) / "jobs.sqlite")
     print(f"[watch] {cfg.in_dir}/  ->  {cfg.out_dir}/   (vlm: {cfg.vlm.base_url})")
+
+    # Preflight the reader once at startup: a tiny inference proving it can actually READ (a
+    # wedged server answers /v1/models 200 while failing generation, so a plain ping wouldn't
+    # catch it). Non-fatal — a dead reader only means pages fall back to det_text, now VISIBLY
+    # (page.read_failed + a logged warning) — but surfacing it here beats discovering it after a
+    # corpus silently degraded. Also warms the model so the first real document isn't slow.
+    ok, detail = preflight_reader(cfg)
+    if ok:
+        print(f"[reader] {detail}")
+    else:
+        print(f"[warn] READER PREFLIGHT FAILED — VLM pages will fall back to det_text until the "
+              f"reader is up: {detail}", file=sys.stderr)
 
     if args.once:
         # --once never moves: a manual re-run shouldn't disturb the drop folder.

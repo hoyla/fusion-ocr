@@ -15,6 +15,8 @@ born-digital docs never hit the VLM.
 
 from __future__ import annotations
 
+import logging
+
 from .. import raster
 from ..config import AirgapError, Config
 from ..models import Document
@@ -23,6 +25,14 @@ from ..vlm.openai_compat import OpenAICompatVLM
 from ..vlm.prompts import select_prompt
 
 _DPI = 150
+_log = logging.getLogger(__name__)
+
+
+class ReaderError(Exception):
+    """The VLM reader failed for a reason OTHER than a legitimate empty/refusal response —
+    server down / wedged / timeout / bad model name. Kept distinct from a refusal so the
+    pipeline can FAIL LOUD (log it + flag the page) instead of silently degrading to det_text;
+    a run where every page raises this is a dead reader, not hard documents."""
 
 
 class VlmRead:
@@ -76,7 +86,15 @@ class VlmRead:
                 det_chars = sum(len(s.det_text or "") for s in page.segments
                                 if s.source == "paddle")
 
-                reading = self._read(img, model, base_url, cfg)
+                try:
+                    reading = self._read(img, model, base_url, cfg)
+                except ReaderError:
+                    # Reader unavailable for this page: FLAG it (the warning was logged in
+                    # _read) and fall back to routed det_text via fusion — visibly, not silently.
+                    page.read_failed = True
+                    page.vlm_reading = ""
+                    page.read_model = ""
+                    continue
 
                 # Confidence-gated escalation: if the primary read looks like a refusal
                 # or the page's deterministic confidence is low, re-read with a stronger
@@ -85,8 +103,11 @@ class VlmRead:
                 if esc and esc != model and (
                         _looks_like_refusal(reading, det_chars)
                         or _low_confidence(page, cfg.vlm.escalate_below)):
-                    esc_reading = self._read(
-                        img, esc, cfg.vlm.escalation_base_url or base_url, cfg)
+                    try:
+                        esc_reading = self._read(
+                            img, esc, cfg.vlm.escalation_base_url or base_url, cfg)
+                    except ReaderError:
+                        esc_reading = ""   # escalation reader failed; keep the primary reading
                     if not _looks_like_refusal(esc_reading, det_chars):
                         reading, model = esc_reading, esc
 
@@ -104,8 +125,12 @@ class VlmRead:
             return client.read(img, select_prompt(model)) or ""
         except AirgapError:
             raise  # misconfigured sensitive tier (remote endpoint): fail loud, not det_text
-        except Exception:
-            return ""  # transient/other: degrade, fusion falls back to det_text
+        except Exception as exc:
+            # Fail LOUD: a reader failure used to return "" here, silently degrading the whole
+            # corpus to det_text with no trace. Log it and raise a distinct error the caller
+            # flags on the page (fusion still falls back to det_text — but visibly now).
+            _log.warning("VLM read failed (model=%s, endpoint=%s): %s", model, base_url, exc)
+            raise ReaderError(f"{type(exc).__name__}: {exc}") from exc
 
 
 _REFUSAL_MARKERS = (

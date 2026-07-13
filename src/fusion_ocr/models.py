@@ -89,6 +89,11 @@ class Page:
     rotation: int = 0
     script: str = ""        # detected script -> routing (e.g. "thai", "latin")
     read_model: str = ""    # VLM model used to read this page (provenance)
+    # True when the VLM read FAILED (reader down / wedged / timeout / bad model) — as opposed to
+    # a legitimate empty/refusal read. Fusion still falls back to det_text either way, but this
+    # flag (plus a logged warning) makes a silent corpus-wide degradation VISIBLE in the artifacts:
+    # a run where every page has read_failed=True is a dead reader, not a hard document.
+    read_failed: bool = False
     image_ref: str | None = None
     vlm_reading: str = ""  # raw VLM transcription of the page (clean reading view)
     regions: list[Region] = field(default_factory=list)
