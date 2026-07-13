@@ -302,6 +302,91 @@ Also: **decide `escalate_below`** — a routing-design pillar that ships disable
 escalation on stream A's worst-recall decile: if it doesn't pay there, delete the feature
 rather than shipping it off (dead pillar = doc drift).
 
+#### Operational pins (2026-07-12 — pre-execution; refined scope)
+
+*Pinned before running (the D-pins precedent: Fable defines, Opus executes). Execution recon
+found two flaws in the paragraph above; the refined method is registered here, loudly, before
+any number is produced. Paths/symbols verified against code and the CORSAIR archive:
+`doc.06-table_read.json` exists per item on both corpora; the stage is `Fusion` (fusion.py:229,
+constructed no-arg in pipeline.py:46); fusion.py last changed 2026-06-30 — before the
+2026-07-07 archive — so baseline re-runs should reproduce it exactly.*
+
+**Deviation 1 — only the fusion pair is swept.** `_MR_COVERAGE` and `_LARGE_IMAGE_FRAC` are
+NOT sweepable on the gold corpora: image-ingested FUNSD/SROIE pages carry no text layer
+(`region_text_coverage` = 0 → every region classifies "ocr" at any threshold) and are single
+full-page images (image fraction ≈ 1.0 > any ±30% cut), so their sweeps would be flat **by
+construction** and the pre-registered rule ("flat → benign") would launder a corpus artifact
+into a false verdict — the campaign's 6th metric-artifact catch, this one caught pre-run.
+They are **not declared benign**: both execute on real mixed-content documents (the Thai
+scans). Disposition: the manifest documents the gap with the re-trigger = first mixed-content
+gold corpus OR a real-world misclassification incident. No synthetic boundary probe (compose
+is unit-tested; marginal information).
+
+**E1 — the sweep (`eval_out/stream_e_sensitivity.py`), zero-VLM.** Universe = the 349
+archived stream-A docs. Per (item, config): load `doc.06-table_read.json` (the pre-fusion
+state) **fresh from disk per config** — fusion mutates the Document; never reuse a loaded
+object across configs — run `Fusion().run(doc, cfg)` in-process, score the result. Configs:
+one-at-a-time, 5 points each, baseline shared:
+`fuse_min_sim` ∈ {0.238, 0.289, **0.34**, 0.391, 0.442};
+`fuse_det_conf_trust` ∈ {0.56, 0.68, **0.80**, 0.92, 1.04} — 1.04 exceeds any real
+confidence, i.e. a **guard-off endpoint**; label it as such, don't read it as a linear point.
+cfg = `config.load()` + `dataclasses.replace` of the one field. n = all 349; pre-authorized
+fallback to a seeded n=150 (seed 1) iff projected wall-clock > ~3 h.
+
+- **Response variables (per corpus; SROIE caseless):** word_recall + word_precision of the
+  GATED text (D1's definition; word-level per the certified D1 lesson — char metrics logged,
+  not headline) **and band placement** (`placement_counts(band=True)`; strict logged too).
+  Placement is MANDATORY: stream C pre-registered it as the regression guard for exactly
+  these constants ("a fusion change that improves CER but drops placement is a regression").
+- **Built-in integrity check:** the baseline config must reproduce the archived fused output
+  (the committed stream-A/D1 columns). Mismatch → STOP: archive/code drift, by measurement
+  not assumption.
+- **Interpretation bars (pre-registered):** per constant, micro-avg |Δ| vs baseline on BOTH
+  word_recall and band placement across the swept range: < 0.005 everywhere → **benign**
+  (document, stop); ≥ 0.02 anywhere → **load-bearing** (calibration-pass candidate);
+  between → mild — document, no action. The zero noise floor (G) makes deltas real; these
+  bars are materiality, not significance. *Correction to the prose above:* the fusion pair is
+  ALREADY config-exposed, settings-registered and in `recipe_fingerprint` (settings-registry
+  work) — "fold into fingerprint" is satisfied for them; the deferred module constants stay
+  unfingerprinted (not runtime-tunable).
+
+**E2 — fresh-default confirmation (the only part needing the reader).** The archive's
+readings are Qwen3.5-9B-era; conclusions must attach to the current default. Seeded n=20
+FUNSD (seed 1): full pipeline once per item at baseline under Qwen3.6 (~20 reads), keep the
+fresh `doc.06` snapshots, fusion-only sweep them across the 8 non-baseline configs. Check =
+**direction of effect** agrees with E1 per constant/metric; magnitude may differ.
+
+**E3 — `escalate_below` rescue analysis (free; + 2 optional live reads). Decision rule
+registered BEFORE anyone looks at the numbers** (as of this pin, nobody has):
+- From stream F `results.csv` (both models × the same 55 items): the worst decile (6 items)
+  of `q36_35ba3b_4bit` by word_recall → count items where `q35_9b_4bit` scores ≥ +0.05
+  word_recall higher (a "rescue"); symmetrically, q35's worst decile vs q36.
+- Optional, 2 live reads: the stream-A refusal pages (`funsd/80707440_7443`,
+  `sroie/X51005719863` — vlm_empty under 3.5) through Qwen3.6; "rescued" = a guard-surviving
+  reading with word_recall ≥ the archived det-fallback row + 0.05.
+- **Rule:** decile rescues < 2 in BOTH directions AND refusal rescues = 0 → recommend
+  **DELETE** the escalation plumbing (`escalate_below`, `escalation_model`,
+  `escalation_base_url`, `_low_confidence`, the esc block in `vlm_read.run`) — no stronger
+  local tier exists (Qwen3.6 is the top), principle 6, "dead pillar = doc drift"; the in-VPC
+  vLLM tier is the documented re-add trigger and git preserves the code. Refusal rescues ≥ 1
+  with decile rescues < 2 → evidence for a simpler retry-on-refusal-with-alternate-model;
+  surface as a design option, build nothing in E. Decile rescues ≥ 2 in either direction →
+  keep-disabled + document; threshold calibration becomes a follow-up (senior eyes). In
+  every case the delete/keep lands as a **separate small PR carrying the evidence table —
+  Luke decides on that PR**; E produces evidence + recommendation only.
+
+**Mechanics:** project `.venv`; CORSAIR mounted; NO reader for E1/E3's table (the MLX server
+matters only for E2 + the 2 optional E3 reads). Durable CSV-append runners in the D1 style;
+one manifest `stream_e_sensitivity_<date>.md` carrying the sweep tables (5 points × 2
+metrics × 2 corpora per constant) + the E3 evidence table; gitignore negations for the new
+results.csv per the established pattern.
+
+**Escalation tripwires (diagnosis triggers, not pass bars):** (a) baseline fails to
+reproduce the archived fused output; (b) word_recall and band placement move in OPPOSITE
+directions anywhere in a sweep (the C-registered regression pattern); (c) E2's direction of
+effect disagrees with E1's (model-dependent sensitivity — conclusions wouldn't attach to the
+current default). Any of these → stop and get senior eyes before writing a manifest verdict.
+
 ### F. Model/runtime deltas we shipped without measuring
 
 > **EXECUTED (2026-07-09)** — runner `eval_out/stream_f_model_ab.py`, manifest
