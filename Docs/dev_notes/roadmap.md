@@ -39,10 +39,13 @@ real, not before.
   keep-or-delete decision (the last un-run evidence-plan stream). **Follow-ups from F:** decide
   on Qwen3.6-35B-A3B as the default (needs Thai/table/full-mix validation); generalise the
   repetition guard to catch low-entropy character floods (not just `[illegible]`).
-- **Fail loud on reader failure (review 03).** `vlm_read` / `table_read` / `language` catch
-  every exception and return `""` with no logging anywhere in those stages — a dead MLX server
-  or misconfigured model name silently degrades the whole corpus to det_text. Add logging + a
-  per-page `read_failed` provenance flag so a degraded run is visible in the artifacts.
+- **Fail loud on reader failure (review 03) — DONE (2026-07-12).** The reader stages used to
+  swallow every exception and return `""`, silently degrading the whole corpus to det_text. Now:
+  each logs a warning; `vlm_read` raises a distinct `ReaderError` and sets a per-page `read_failed`
+  provenance flag (a run where every page has it set is a dead reader, not hard documents); and the
+  watcher runs a **reader preflight** at startup — a tiny real inference, since a wedged server
+  answers `/v1/models` 200 while failing generation — warning loudly if the reader can't read. See
+  [done.md](done.md).
 - **Job-lifecycle document-loss bugs (review 03):** (a) API uploads are keyed by client
   filename — two same-named uploads with different content overwrite in `in/` and strand the
   first job `queued` forever; key by digest/UUID. (b) A worker killed between `claim` and

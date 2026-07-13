@@ -161,3 +161,69 @@ def test_airgap_refusal_fails_loud_not_silent_det_text(tmp_path):
     doc.pages = [page]
     with pytest.raises(AirgapError):
         VlmRead(client=_AirgapClient()).run(doc, config_mod.Config())
+
+
+class _FailingVLM:
+    """A reader that ERRORS (server down / wedged / timeout) — not a refusal response."""
+    def read(self, image_png, prompt, **opts):
+        raise ConnectionError("connection refused")
+
+
+def _scan_doc(tmp_path):
+    pdf = tmp_path / "scan.pdf"
+    d = fitz.open(); pg = d.new_page()
+    pg.insert_image(pg.rect, pixmap=fitz.open().new_page().get_pixmap(dpi=72))
+    d.save(str(pdf)); d.close()
+    doc = Document(source_path=str(pdf), sha256="x")
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    page.segments = [_ink_seg()]                      # detected ink, so the VLM is reached
+    doc.pages = [page]
+    return doc, page
+
+
+def test_reader_failure_is_flagged_not_silent(tmp_path):
+    # A reader FAILURE (server down/wedged) must set page.read_failed AND fall back to det_text —
+    # the old behaviour silently returned "" here, hiding a corpus-wide degradation.
+    doc, page = _scan_doc(tmp_path)
+    VlmRead(client=_FailingVLM()).run(doc, config_mod.Config())
+    assert page.read_failed is True                   # fail loud: visible in the artifact
+    assert page.vlm_reading == ""                     # fusion still falls back to det_text
+    assert page.read_model == ""
+
+
+def test_legit_refusal_is_not_flagged_as_failure(tmp_path):
+    # A refusal/empty RESPONSE (the model read but declined) is NOT a reader failure — no flag,
+    # so a run of hard-but-real pages isn't mistaken for a dead reader.
+    doc, page = _scan_doc(tmp_path)
+    VlmRead(client=_FakeVLM("[Image content here]")).run(doc, config_mod.Config())
+    assert page.read_failed is False
+    assert page.vlm_reading == ""
+
+
+def test_read_failed_defaults_false_and_round_trips(tmp_path):
+    # provenance flag defaults False and survives the schema-driven serialiser
+    doc, page = _scan_doc(tmp_path)
+    VlmRead(client=_FakeVLM("A real reading. " * 8)).run(doc, config_mod.Config())
+    assert page.read_failed is False
+    assert Document.from_json(doc.to_json()).pages[0].read_failed is False
+
+
+def test_preflight_reader_ok(monkeypatch):
+    from fusion_ocr.vlm import openai_compat
+    monkeypatch.setattr(openai_compat.OpenAICompatVLM, "probe", lambda self: None)
+    ok, detail = openai_compat.preflight_reader(config_mod.Config())
+    assert ok and "ready" in detail.lower()
+
+
+def test_preflight_reader_reports_not_ready(monkeypatch):
+    # a dead/wedged reader is surfaced as (False, why) — the caller warns/aborts instead of
+    # silently degrading a whole batch to det_text
+    from fusion_ocr.vlm import openai_compat
+
+    def boom(self):
+        raise ConnectionError("connection refused")
+
+    monkeypatch.setattr(openai_compat.OpenAICompatVLM, "probe", boom)
+    ok, detail = openai_compat.preflight_reader(config_mod.Config())
+    assert not ok
+    assert "not ready" in detail.lower()

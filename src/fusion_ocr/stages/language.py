@@ -13,6 +13,8 @@ page, so the routing decision stays auditable. Client is injectable for tests.
 
 from __future__ import annotations
 
+import logging
+
 from .. import raster
 from ..config import AirgapError, Config
 from ..models import Document
@@ -23,6 +25,7 @@ from ..routing import detect_script
 # cost is vision-token prefill, scaling with image size, not the one-word generation). Replacing
 # the VLM probe with a cheaper detector (ANE Apple Vision / a script classifier) is the
 # documented follow-up (routing.md), now that profiling shows the probe is ~14% of runtime.
+_log = logging.getLogger(__name__)
 _PROBE_DPI = 72
 _SCRIPT_PROBE = (
     "What is the dominant script of the main printed text in this image? "
@@ -88,7 +91,8 @@ def _probe_script(client, img: bytes) -> str:
         ans = (client.read(img, _SCRIPT_PROBE) or "").strip().lower()
     except AirgapError:
         raise  # sealed tier pointed at a remote endpoint: fail loud, like vlm_read
-    except Exception:
+    except Exception as exc:
+        _log.warning("VLM script probe failed: %s — script routing defaults to latin", exc)
         return ""
     # scan every word so a verbose answer ("the script is Cyrillic") still resolves
     for w in ans.replace(".", " ").replace(",", " ").split():

@@ -16,7 +16,7 @@ from __future__ import annotations
 import base64
 import time
 
-from ..config import AirgapError
+from ..config import AirgapError, Config
 
 
 def _airgap_in_chain(exc: BaseException) -> AirgapError | None:
@@ -104,6 +104,38 @@ class OpenAICompatVLM:
             self._http.close()
             self._http = None
 
+    def probe(self) -> None:
+        """Readiness probe: a tiny 1-token inference on a blank image. RAISES on failure.
+        A plain GET /v1/models is NOT sufficient — a wedged mlx-vlm server answers that 200 while
+        failing generation; only a real (if trivial) completion proves the reader can read. Doubles
+        as a warm-up: it triggers the model load if the server is cold."""
+        import io
+
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("RGB", (32, 32), "white").save(buf, format="JPEG")
+        self.read(buf.getvalue(), "Reply with OK.", max_tokens=1)
+
 
 def _backoff(attempt: int) -> float:
     return min(0.5 * (2 ** attempt), 8.0)   # 0.5s, 1s, 2s, 4s … capped at 8s
+
+
+def preflight_reader(cfg: Config, timeout: float = 120.0) -> tuple[bool, str]:
+    """Check the configured VLM reader can actually READ before a batch run, so a dead or wedged
+    server surfaces up front instead of silently degrading every page to det_text. Returns
+    ``(ok, detail)``. Bounded (default 120s) to cover a cold model load without hanging forever on
+    a wedged one; loopback-only under airgap, like the reads themselves. Non-fatal by contract —
+    the caller decides whether to warn or abort."""
+    client = OpenAICompatVLM(base_url=cfg.vlm.base_url, model=cfg.vlm.model,
+                             api_key=cfg.vlm.api_key, timeout=timeout, max_tokens=1, max_retries=1)
+    try:
+        client.probe()
+        return True, f"reader ready: {cfg.vlm.model} @ {cfg.vlm.base_url}"
+    except AirgapError as exc:
+        return False, f"reader endpoint blocked by airgap: {exc}"
+    except Exception as exc:  # noqa: BLE001 — any failure means "not ready"
+        return False, (f"reader NOT ready ({cfg.vlm.model} @ {cfg.vlm.base_url}): "
+                       f"{type(exc).__name__}: {exc}")
+    finally:
+        client.close()

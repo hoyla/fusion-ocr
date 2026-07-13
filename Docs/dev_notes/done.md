@@ -63,6 +63,15 @@ the big remediations is in the review/plan notes — this is the index, not a du
   transient 5xx (an `AirgapError` is never retried — sealed tier fails loud), one keep-alive
   `httpx.Client` across pages, and JPEG (not PNG) image parts. `max_tokens` / `jpeg_quality`
   are fingerprinted; all three settings-registered.
+- **Fail-loud reader failure + preflight** (review_03): the reader stages no longer degrade
+  silently. `vlm_read` distinguishes a reader FAILURE (server down / wedged / timeout) from a
+  legitimate refusal — it logs a warning, raises `ReaderError`, and sets a per-page `read_failed`
+  provenance flag (fusion still falls back to det_text, but *visibly*: a whole run flagged = a dead
+  reader, not hard documents); `table_read` / `language` log their failures too. The watcher
+  **preflights** the reader at startup — `preflight_reader` / `OpenAICompatVLM.probe` do a tiny
+  real inference, because a plain `/v1/models` GET is insufficient (a wedged mlx-vlm server answers
+  it 200 while failing generation) — and warns loudly if it can't read, instead of grinding a whole
+  batch down to det_text. (Motivated by a wedged-server incident during the Qwen3.6 switch.)
 
 ## Input formats & benchmarks
 - **Image→PDF ingest** (`ingest.py`): PNG/JPEG/TIFF (incl. multi-page TIFF) normalised to PDF

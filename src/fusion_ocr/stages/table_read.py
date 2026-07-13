@@ -21,12 +21,16 @@ refinement, matching the Table stage).
 
 from __future__ import annotations
 
+import logging
+
 from .. import raster
 from ..config import AirgapError, Config
 from ..models import Document
 from ..routing import resolve
 from ..vlm.openai_compat import OpenAICompatVLM
 from ..vlm.prompts import select_table_prompt
+
+_log = logging.getLogger(__name__)
 
 _DPI = 150
 
@@ -90,5 +94,7 @@ class TableRead:
             return (client.read(img, select_table_prompt(model)) or "").strip()
         except AirgapError:
             raise  # misconfigured sensitive tier: fail loud, not silent grid fallback
-        except Exception:
+        except Exception as exc:
+            _log.warning("VLM table read failed (model=%s): %s — falling back to the "
+                         "deterministic grid", model, exc)
             return ""  # degrade: render falls back to the deterministic grid
