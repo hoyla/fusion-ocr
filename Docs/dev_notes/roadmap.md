@@ -36,9 +36,11 @@ real, not before.
   (medCER 0.035), vs deterministic 0.557 / 0.150. The handwriting claim is no longer a single
   anecdote (IAM = clean ruled English = a FLOOR, not degraded FOI).
   **Outstanding:** **E** — threshold sensitivity (±30%, 4 constants) + the `escalate_below`
-  keep-or-delete decision (the last un-run evidence-plan stream). **Follow-ups from F:** decide
-  on Qwen3.6-35B-A3B as the default (needs Thai/table/full-mix validation); generalise the
-  repetition guard to catch low-entropy character floods (not just `[illegible]`).
+  keep-or-delete decision (the last un-run evidence-plan stream). **Follow-ups from F — both
+  DONE:** Qwen3.6-35B-A3B adopted as the default generalist (2026-07-09, merged); the repetition
+  guard generalised to catch low-entropy character floods, not just `[illegible]` token loops
+  (2026-07-12 — `_is_degenerate_repetition` now also flags a dominant-char / tiny-alphabet run,
+  which the whitespace-split token check missed for the spaceless `.`×260k flood).
 - **Fail loud on reader failure (review 03) — DONE (2026-07-12).** The reader stages used to
   swallow every exception and return `""`, silently degrading the whole corpus to det_text. Now:
   each logs a warning; `vlm_read` raises a distinct `ReaderError` and sets a per-page `read_failed`

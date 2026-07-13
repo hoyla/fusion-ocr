@@ -79,6 +79,22 @@ def test_degenerate_repetition_is_discarded():
     assert not _is_degenerate_repetition("short repeated repeated")   # too short to judge
 
 
+def test_char_flood_repetition_is_discarded():
+    from fusion_ocr.stages.vlm_read import _is_degenerate_repetition, _looks_like_refusal
+    # the exact stream-F failure: a bare-'.' flood with NO spaces — a single "word", so the
+    # token-level check missed it. Must be caught + treated as a refusal so fusion uses det_text.
+    flood = "." * 262144
+    assert _is_degenerate_repetition(flood)
+    assert _looks_like_refusal(flood, 500)
+    # low-alphabet floods with spaces (≤3 distinct non-space chars) are caught too
+    assert _is_degenerate_repetition(". " * 500)
+    assert _is_degenerate_repetition("- " * 500)
+    # real long prose (high char variety) is NOT flagged, even at length
+    assert not _is_degenerate_repetition(" ".join(f"word{i}" for i in range(300)))
+    # a genuine short reading is never flagged as a flood
+    assert not _is_degenerate_repetition("Total: $9.00")
+
+
 class _SeqVLM:
     """Returns canned responses in order — first the primary read, then escalation."""
     def __init__(self, *responses):
@@ -126,8 +142,9 @@ def test_refusal_detection():
     assert _looks_like_refusal("I'm unable to read this image.", 500)
     # far shorter than what OCR found -> discard
     assert _looks_like_refusal("ก", 500)
-    # a genuine full reading -> kept
-    assert not _looks_like_refusal("A" * 400, 500)
+    # a genuine full reading -> kept (varied text, not a single repeated char — "A"*400 would
+    # now be caught as a degenerate character flood, correctly)
+    assert not _looks_like_refusal(" ".join(f"word{i}" for i in range(90)), 500)
     assert not _looks_like_refusal("short but no OCR to beat", 0)
 
 

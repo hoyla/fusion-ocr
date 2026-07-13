@@ -117,8 +117,11 @@ the big remediations is in the review/plan notes — this is the index, not a du
   deterministic engine detected no text boxes, skip the VLM entirely (an empty image makes it
   hallucinate, e.g. inventing `$$1/√2$$`; keys on *detection* so handwriting still reaches the
   reader) — also a saved VLM call; (2) **degenerate-repetition guard** — a read that collapses
-  into a loop (`[illegible] [illegible] …` to the token cap) is discarded like a refusal, so
-  fusion falls back to det_text. Both validated on the real 1000-run failure pages.
+  into a loop is discarded like a refusal, so fusion falls back to det_text. Catches both a
+  **token** loop (`[illegible] [illegible] …` to the token cap) and, since 2026-07-12, a
+  **character** flood (a dominant single char / tiny alphabet with no word breaks — `.`×260k,
+  which Qwen3-VL-8B produced on 1/50 FUNSD pages; the whitespace-split token check missed it
+  because a spaceless run is a single "word"). Both validated on real failure pages.
 - **Evidence-plan stream D executed** ([evidence_plan.md](evidence_plan.md) §D; manifests
   `eval_out/manifests/{insertion_gate,divergence_triage,blank_probes}_2026-07-09.md`) — the P2
   measurement infrastructure: gated-vs-ungated insertion re-scoring (D1), synthetic blank/near-blank
