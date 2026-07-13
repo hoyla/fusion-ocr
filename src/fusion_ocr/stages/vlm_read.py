@@ -174,12 +174,26 @@ def _looks_like_refusal(reading: str, det_chars: int) -> bool:
 
 
 def _is_degenerate_repetition(reading: str) -> bool:
-    """True if the read collapsed into a repetition loop — one token dominating the output, or
-    a tiny vocabulary over a long output. Measured failure mode: the VLM emitting '[illegible]
-    [illegible] …' to the token cap on a figure-heavy / sparse page. Only long outputs are
-    checked, so ordinary prose (high vocabulary variety) is never flagged."""
+    """True if the read collapsed into a low-entropy repeat filling the output. Two shapes:
+
+    (a) **token** repetition — a whitespace-delimited word dominating, or a tiny vocabulary over a
+        long output ('[illegible] [illegible] …' to the token cap on a figure-heavy/sparse page);
+    (b) **character** flood — one character (or a tiny alphabet) repeated with no word breaks
+        ('..........' ×260k — Qwen3-VL-8B did exactly this on 1/50 FUNSD pages, stream F). The
+        token check alone MISSES (b): a spaceless run is a single 'word', so the word-count gate
+        never trips.
+
+    Only long outputs are judged, so ordinary prose (high variety) and short real reads pass."""
     from collections import Counter
 
+    # (b) character flood — a dominant single char, or ≤3 distinct chars, over a long output.
+    chars = [c for c in reading if not c.isspace()]
+    if len(chars) >= 200:
+        _, top_char = Counter(chars).most_common(1)[0]
+        if top_char >= 0.90 * len(chars) or len(set(chars)) <= 3:
+            return True
+
+    # (a) token repetition (unchanged).
     words = reading.split()
     if len(words) < 40:
         return False
