@@ -162,6 +162,28 @@ real, not before.
   adds paragraph/table/list structure to the fast tier we currently use as flat det/rec —
   possibly a free structure signal on the ANE. (Engine A/Bs — PP-OCRv6, RapidOCR,
   PP-DocLayoutV3 — live in [rapidocr_eval_plan.md](rapidocr_eval_plan.md).)
+- **Landscape re-check (2026-08-19)** — a fresh survey six weeks after review 03 re-confirmed the
+  architecture: the top document-parsing systems (PaddleOCR-VL 1.6, GLM-OCR, MinerU2.5-Pro) have
+  all converged on deterministic-localization-then-VLM-read; word-level VLM grounding is still
+  measurably unusable (JSL grounded-OCR benchmark 03/2026: frontier VLMs > 0.5 box-CER vs
+  Tesseract 0.18; the PP-OCRv6 paper puts frontier-VLM detection Hmean at 38–47% vs 86% for a
+  detector); and **no self-hosted tool ships a searchable text layer** — the overlay requirement
+  (a Giant integration deal-breaker) remains the least-served in the ecosystem. Standing items
+  with triggers, next check ~2027-02:
+  - **OCRmyPDF v17's engine-agnostic `OcrElement` API** (2026) — adoption candidate for overlay
+    assembly (build-vs-adopt: their renderer is hardened against PDF long-tail weirdness). Guard
+    any migration with the searchability eval — the bespoke writer's Thai Unicode-font handling
+    must not regress.
+  - **Docling** — still "the project to watch" (review 03): re-check when it ships
+    searchable-overlay output (docling-serve #613) + cross-engine reconciliation.
+  - **Fusion-shrink tripwire:** an open VLM under ~0.1 box-CER on a word-level grounded eval
+    would let fusion shrink toward a verification pass. Nothing close as of 08/2026.
+  - **Candidate readers** (config-cheap via the OpenAI-compatible seam, adopt only on harness
+    numbers): GLM-OCR (0.9B, MIT, fast) as a possible middle tier; Typhoon 1.5 at 2B for Thai.
+    Chandra 2 is the best open handwriting reader but its **OpenRAIL-M revenue-capped licence
+    likely blocks Guardian production use** — check before spending eval time.
+  - **PP-OCRv6 dropped Thai** from its 50-language list — whatever the engine A/B decides, the
+    Thai route keeps the v5 Thai recogniser.
 - **Replace the VLM script-probe with a cheaper detector (perf).** The `language` stage IDs the
   dominant script to route the recogniser/reader; for no-text-layer scans it fires a whole 9B-VLM
   image inference per page to do it (the documented "first cut" — [routing.md](../routing.md) flags
@@ -191,10 +213,12 @@ real, not before.
   NFC vs NFD; reading is solid, reliable highlight is the gap. Also needs a Thai reader to verify.
 - **Word-level overlay subdivision** — *parked from near-term, behind a trigger:* revisit only if
   **line-level** highlighting proves inadequate in real reporter use. Honest word boxes would come
-  from the Apple Vision per-word API / PyMuPDF `words` (never proportional splitting — that
-  manufactures precision), but it adds an alignment step over fusion that can itself err, and
-  per-word geometry isn't always available (PaddleOCR detection is line-level). Don't build the
-  refinement before the simpler thing is shown wanting (*look before infra*).
+  from the Apple Vision per-word API / PyMuPDF `words` — and *(corrected 2026-08-19)* from
+  PaddleOCR itself: PP-OCRv5 exposes per-word boxes (`return_word_box=True`), so the earlier
+  "per-word geometry isn't always available" blocker no longer holds (never proportional
+  splitting — that manufactures precision). What remains true: it adds an alignment step over
+  fusion that can itself err. Don't build the refinement before the simpler thing is shown
+  wanting (*look before infra*).
 - **"Giant rejects" eval at corpus scale** — *parked from near-term:* needs more reject documents
   than test set 1 holds. The *small* old-vs-new comparison is **done** (Mandelson letter:
   tesseract ~0.10 vs our ~0.95 word recall — see [done.md](done.md)); the corpus-scale version
