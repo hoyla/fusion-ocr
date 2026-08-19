@@ -62,6 +62,13 @@ class Config:
     # still escalate to the VLM.
     prefer_apple_vision: bool = False
     apple_vision_skip_vlm: float = 0.92
+    # The same cheap-tier contract for PaddleOCR (cross-platform — the Vision tier is
+    # macOS-only, so the Linux/VPC deployment has no VLM-skip without this): when the
+    # page's mean PaddleOCR confidence is >= paddle_skip_vlm, det_text IS the reading.
+    # Ships DISABLED (0.0) until the archived-counterfactual eval prices the recall/
+    # placement cost (eval_out/paddle_skip_cost.py) — the Vision tier was benchmarked
+    # before it was enabled, and this one must clear the same bar.
+    paddle_skip_vlm: float = 0.0
     # RapidOCR (ONNX Runtime) as the deterministic engine instead of PaddleOCR — an A/B
     # option for the perf eval (Docs/dev_notes/rapidocr_eval_plan.md), inert unless set AND
     # the `rapid` extra is installed. Same routing seam as Apple Vision.
@@ -121,6 +128,7 @@ def load(path: str | Path = "config.toml") -> Config:
         overlay_font=run.get("overlay_font", ""),
         prefer_apple_vision=run.get("prefer_apple_vision", False),
         apple_vision_skip_vlm=run.get("apple_vision_skip_vlm", 0.92),
+        paddle_skip_vlm=run.get("paddle_skip_vlm", 0.0),
         prefer_rapidocr=run.get("prefer_rapidocr", False),
         table_vlm_read=run.get("table_vlm_read", True),
         fuse_min_sim=run.get("fuse_min_sim", 0.34),
@@ -157,6 +165,7 @@ def to_toml_dict(cfg: Config) -> dict:
             "overlay_font": cfg.overlay_font,
             "prefer_apple_vision": cfg.prefer_apple_vision,
             "apple_vision_skip_vlm": cfg.apple_vision_skip_vlm,
+            "paddle_skip_vlm": cfg.paddle_skip_vlm,
             "prefer_rapidocr": cfg.prefer_rapidocr,
             "table_vlm_read": cfg.table_vlm_read,
             "fuse_min_sim": cfg.fuse_min_sim,

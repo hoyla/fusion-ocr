@@ -68,6 +68,84 @@ def test_blank_page_skips_vlm_no_hallucination(tmp_path):
     assert doc.pages[0].vlm_reading == ""
 
 
+def _scan_pdf(tmp_path, name="scan.pdf"):
+    pdf = tmp_path / name
+    d = fitz.open(); pg = d.new_page()
+    pg.insert_image(pg.rect, pixmap=fitz.open().new_page().get_pixmap(dpi=72))
+    d.save(str(pdf)); d.close()
+    return pdf
+
+
+def test_paddle_confident_page_skips_vlm(tmp_path):
+    # The cross-platform cheap tier: mean PaddleOCR confidence >= paddle_skip_vlm ->
+    # det_text IS the reading; the VLM is never called and provenance records "paddle".
+    import dataclasses
+    doc = Document(source_path=str(_scan_pdf(tmp_path)), sha256="x")
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    page.segments = [_ink_seg("clean print", conf=0.97)]
+    doc.pages = [page]
+    cfg = dataclasses.replace(config_mod.Config(), paddle_skip_vlm=0.95)
+
+    fake = _FakeVLM("should never be asked")
+    VlmRead(client=fake).run(doc, cfg)
+
+    assert fake.calls == 0
+    assert page.vlm_reading == ""            # fusion falls back to det_text
+    assert page.read_model == "paddle"
+
+
+def test_paddle_skip_disabled_by_default(tmp_path):
+    # Ships DISABLED (0.0): even a fully confident Paddle page still gets the VLM read
+    # until the paddle_skip_cost eval prices the skip and the operator opts in.
+    doc = Document(source_path=str(_scan_pdf(tmp_path)), sha256="x")
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    page.segments = [_ink_seg("clean print", conf=0.99)]
+    doc.pages = [page]
+
+    fake = _FakeVLM("the reading")
+    VlmRead(client=fake).run(doc, config_mod.Config())
+
+    assert fake.calls == 1
+    assert page.vlm_reading == "the reading"
+
+
+def test_paddle_low_confidence_still_reads(tmp_path):
+    # Below the threshold (degraded scan / handwriting) the page falls through to the
+    # VLM — the whole point of the cascade.
+    import dataclasses
+    doc = Document(source_path=str(_scan_pdf(tmp_path)), sha256="x")
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    page.segments = [_ink_seg("garbled", conf=0.50)]
+    doc.pages = [page]
+    cfg = dataclasses.replace(config_mod.Config(), paddle_skip_vlm=0.95)
+
+    fake = _FakeVLM("the VLM reading")
+    VlmRead(client=fake).run(doc, cfg)
+
+    assert fake.calls == 1
+    assert page.vlm_reading == "the VLM reading"
+
+
+def test_paddle_skip_ignores_vision_segments(tmp_path):
+    # The paddle tier keys on source=="paddle" only — confident Apple Vision segments
+    # have their own tier (apple_vision_skip_vlm) and must not trip this one.
+    import dataclasses
+    doc = Document(source_path=str(_scan_pdf(tmp_path)), sha256="x")
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    seg = _ink_seg("vision text", conf=0.99)
+    seg.source = "vision"
+    page.segments = [seg]
+    doc.pages = [page]
+    # vision tier effectively off (1.0 > 0.99), paddle tier on — neither may skip
+    cfg = dataclasses.replace(config_mod.Config(),
+                              apple_vision_skip_vlm=1.0, paddle_skip_vlm=0.95)
+
+    fake = _FakeVLM("the VLM reading")
+    VlmRead(client=fake).run(doc, cfg)
+
+    assert fake.calls == 1
+
+
 def test_degenerate_repetition_is_discarded():
     from fusion_ocr.stages.vlm_read import _is_degenerate_repetition, _looks_like_refusal
     loop = "[illegible] " * 200                         # the measured failure mode
