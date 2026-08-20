@@ -35,8 +35,13 @@ real, not before.
   punctuation-normalized handwriting recall is 0.955 — the Mandelson n=1 (0.95) reproduced at scale**
   (medCER 0.035), vs deterministic 0.557 / 0.150. The handwriting claim is no longer a single
   anecdote (IAM = clean ruled English = a FLOOR, not degraded FOI).
-  **Outstanding:** **E** — threshold sensitivity (±30%, 4 constants) + the `escalate_below`
-  keep-or-delete decision (the last un-run evidence-plan stream). **Follow-ups from F — both
+  **E executed (2026-08-19/20** — manifest `stream_e_sensitivity_2026-08-19.md`; every
+  campaign stream has now run): `fuse_min_sim` mild (a monotone recall↔placement dial);
+  `fuse_det_conf_trust` flat in range, with the guard-off endpoint delivering the first
+  direct measurement of the anti-misalignment gate's value (+1.6–2.6pt band placement for
+  −0.6–0.9pt recall — diagnosis pending certification); `escalate_below` → **keep-disabled**
+  under the pinned rule (a stronger model rescues 3/6 of the weaker's worst decile, so
+  escalation pays once the in-VPC tier exists). **Follow-ups from F — both
   DONE:** Qwen3.6-35B-A3B adopted as the default generalist (2026-07-09, merged); the repetition
   guard generalised to catch low-entropy character floods, not just `[illegible]` token loops
   (2026-07-12 — `_is_degenerate_repetition` now also flags a dominant-char / tiny-alphabet run,
