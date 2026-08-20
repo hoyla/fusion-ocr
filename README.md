@@ -20,7 +20,7 @@ calls**. The most-sensitive tier runs fully air-gapped.
 | Concern | Owner |
 | --- | --- |
 | **Geometry** (boxes, tables, reading order) | deterministic — PaddleOCR / Apple Vision; layout via PP-DocLayoutV2 |
-| **Semantics** (reading, structure, translation) | VLM |
+| **Semantics** (reading, structure, translation) | VLM (orchestrator can choose by task e.g. Qwen 3.6 MoE for latin text; Typhoon for Thai) |
 | **Fusion** | align VLM text onto deterministic boxes; the deterministic layer serves as a anti-hallucination gate |
 
 Boxes never come from the VLM. That's what makes the searchable overlay reliable and
