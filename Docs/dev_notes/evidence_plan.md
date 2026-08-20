@@ -296,9 +296,9 @@ precedent for why it gets senior eyes).
 > `stream_e_sensitivity/results.csv`. Results: **`fuse_min_sim` = mild** (max |Δ| 0.006,
 > a monotone recall↔placement dial; 0.34 not knife-edge). **`fuse_det_conf_trust` = flat in
 > range** (0.56–0.92 within 0.0014); the 1.04 **guard-off endpoint fired tripwire (b)** on
-> both corpora (recall up, placement/precision down) — proposed diagnosis, **PENDING Luke's
-> certification**: the endpoint measures the anti-misalignment **gate's existence, not the
-> constant's sensitivity** — the first direct measurement of the gate's value (+1.6–2.6pt
+> both corpora (recall up, placement/precision down) — diagnosis **CERTIFIED (Luke,
+> 2026-08-20; 0.34/0.80 stay)**: the endpoint measures the anti-misalignment **gate's
+> existence, not the constant's sensitivity** — the first direct measurement of the gate's value (+1.6–2.6pt
 > band placement for −0.6–0.9pt recall; the C-registered regression signature produced
 > deliberately). **E3 → KEEP-DISABLED (unconditional under the pinned rule):** q35's worst
 > decile rescued by q36 on 3/6 items, reverse 0/6 — escalation pays once a stronger tier
