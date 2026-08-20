@@ -51,6 +51,16 @@ def available() -> bool:
 
 
 _ENGINE = None  # per-process cache, like ocr_det._engine_for
+_REC_TIER: str | None = None  # None = the package default (v6 small)
+
+
+def set_rec_tier(tier: str | None) -> None:
+    """Select the recognition-model tier ('tiny'|'small'|'medium'|None=default) for the
+    NEXT engine build — the engine A/B knob (rapidocr >= 2 only; the RapidAI zoo ships
+    SHA256-pinned PP-OCRv6 tiers). Clears the cached engine so the change takes effect."""
+    global _ENGINE, _REC_TIER
+    if tier != _REC_TIER:
+        _ENGINE, _REC_TIER = None, tier
 
 
 def _engine():
@@ -58,9 +68,14 @@ def _engine():
     if _ENGINE is None:
         try:
             from rapidocr_onnxruntime import RapidOCR   # legacy package name (1.x)
+            _ENGINE = RapidOCR()                        # 1.x: no tier selection
         except ImportError:
-            from rapidocr import RapidOCR               # current package name (>= 2)
-        _ENGINE = RapidOCR()
+            from rapidocr import ModelType, OCRVersion, RapidOCR  # current name (>= 2)
+            params = {}
+            if _REC_TIER:
+                params = {"Rec.model_type": ModelType(_REC_TIER),
+                          "Rec.ocr_version": OCRVersion.PPOCRV6}
+            _ENGINE = RapidOCR(params=params)
     return _ENGINE
 
 

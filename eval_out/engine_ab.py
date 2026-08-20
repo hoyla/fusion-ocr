@@ -53,6 +53,10 @@ ARMS = [
     ("paddle_v5s", {"det_model": "PP-OCRv5_server_det",
                     "rec_model": "PP-OCRv5_server_rec"}),
     ("rapid", {"prefer_rapidocr": True}),              # ONNX; bundled rec = PP-OCRv6_small
+    # tier-confound resolver (2026-08-20 follow-up): same engine, REC model = v6 MEDIUM
+    # (det stays small — word counts showed detection wasn't the gap). If this closes
+    # recall to within the plan's bar, the x15+ speedup becomes an adoption case.
+    ("rapid_medrec", {"prefer_rapidocr": True}),
 ]
 
 
@@ -78,6 +82,8 @@ def run_sweep():
 
     base = cm.load()
     for arm, overrides in ARMS:
+        from fusion_ocr.engines import rapid
+        rapid.set_rec_tier("medium" if arm == "rapid_medrec" else None)
         cfg = dataclasses.replace(base, out_dir=RES / "out" / arm, **overrides)
         todo = [it for it in items if (arm, it[0], it[1].stem) not in done]
         print(f"== {arm}: {len(todo)}/{len(items)} to go", flush=True)
@@ -134,11 +140,12 @@ def report():
     if ("paddle_v6m", "funsd") in agg and ("rapid", "funsd") in agg:
         print("\nDecision inputs (plan criteria: adopt iff faster AND recall within ~0.01"
               " + geometry equivalent [pre-verified]):")
-        for ds in ("funsd", "sroie"):
-            a, b = agg.get(("paddle_v6m", ds)), agg.get(("rapid", ds))
-            if a and b:
-                print(f"  {ds}: Δrecall(rapid−v6m) {b['recall']-a['recall']:+.4f}; "
-                      f"speedup ×{a['t']/b['t']:.1f} ({a['t']:.2f}s → {b['t']:.2f}s)")
+        for rarm in ("rapid", "rapid_medrec"):
+            for ds in ("funsd", "sroie"):
+                a, b = agg.get(("paddle_v6m", ds)), agg.get((rarm, ds))
+                if a and b:
+                    print(f"  {rarm}/{ds}: Δrecall {b['recall']-a['recall']:+.4f}; "
+                          f"speedup ×{a['t']/b['t']:.1f} ({a['t']:.2f}s → {b['t']:.2f}s)")
     print("\n(adoption is per-component and lands on the PR carrying this table + the "
           "manifest — Luke decides; layout/table stay PaddleOCR regardless, per the plan)")
 
