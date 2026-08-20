@@ -288,6 +288,24 @@ precedent for why it gets senior eyes).
 
 ### E. Threshold sensitivity (not full calibration)
 
+> **EXECUTED (2026-08-19/20) — the campaign's last stream has run.** Full n=349 (1.6s/item,
+> no fallback needed), archive **integrity check PASS** (16/16 probed items reproduce the
+> committed stream-A columns — the CORSAIR copy is the committed run); E2 n=20 under Qwen3.6
+> **direction-confirms E1** (tripwire c clear); manifest
+> `manifests/stream_e_sensitivity_2026-08-19.md`, per-item rows
+> `stream_e_sensitivity/results.csv`. Results: **`fuse_min_sim` = mild** (max |Δ| 0.006,
+> a monotone recall↔placement dial; 0.34 not knife-edge). **`fuse_det_conf_trust` = flat in
+> range** (0.56–0.92 within 0.0014); the 1.04 **guard-off endpoint fired tripwire (b)** on
+> both corpora (recall up, placement/precision down) — proposed diagnosis, **PENDING Luke's
+> certification**: the endpoint measures the anti-misalignment **gate's existence, not the
+> constant's sensitivity** — the first direct measurement of the gate's value (+1.6–2.6pt
+> band placement for −0.6–0.9pt recall; the C-registered regression signature produced
+> deliberately). **E3 → KEEP-DISABLED (unconditional under the pinned rule):** q35's worst
+> decile rescued by q36 on 3/6 items, reverse 0/6 — escalation pays once a stronger tier
+> than the default exists, and none does locally; re-add trigger stays the in-VPC vLLM
+> tier. No config changed; the keep/delete PR carries `stream_e_sensitivity/e3_rescue_table.md`.
+> Deviation 1 (the un-sweepable pair) stands as pinned, re-trigger unchanged.
+
 Full calibration of ~15 constants is over-engineering at this corpus size; **sensitivity** is
 the honest, affordable version. For the four highest-leverage constants —
 `fuse_min_sim` (0.34), `fuse_det_conf_trust` (0.80), `_MR_COVERAGE` (0.5),
