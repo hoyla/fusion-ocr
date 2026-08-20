@@ -7,7 +7,8 @@ self-hosted VLM so you get the best of both: **trustworthy bounding boxes** from
 deterministic side and **clean, structure-aware reading** (tables → markdown, translation)
 from the VLM — fused into one "best of" output with a searchable bbox text overlay.
 
-![The fusion-ocr pipeline: a PDF is triaged and laid out, then forks into a deterministic geometry track and a VLM semantics track that meet at fusion, rendering an overlay PDF, per-language markdown, and a segment index.](Docs/fusion-ocr-pipeline.png)
+![The fusion-ocr pipeline: a PDF is triaged and laid out, then forks into a deterministic geometry track and a VLM semantics track that meet at fusion, rendering an overlay PDF, per-language markdown, and a segment index.](https://raw.githubusercontent.com/hoyla/fusion-ocr/main/Docs/fusion-ocr-pipeline.png)
+
 
 Everything runs **on your own estate** — local models via Ollama/MLX now, an in-VPC
 CUDA endpoint (e.g. vLLM on the transcription GPU) later — with **no third-party LLM
