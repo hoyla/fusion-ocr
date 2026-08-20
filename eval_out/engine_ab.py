@@ -60,18 +60,23 @@ ARMS = [
 ]
 
 
-def sampled_items():
+def sampled_items(full: bool = False):
     out = []
     for ds in ("funsd", "sroie"):
         pool = [(ds, img, ref) for sp in ("train", "test", "val")
                 for img, ref in iter_pairs(ds, split=sp)]
-        random.seed(SEED)
-        out += random.sample(pool, N_PER_DS)
+        if full:
+            out += pool          # full-set confirmation mode (pre-adoption evidence)
+        else:
+            random.seed(SEED)
+            out += random.sample(pool, N_PER_DS)
     return out
 
 
-def run_sweep():
-    items = sampled_items()
+def run_sweep(full_arm: str | None = None):
+    """Default: the seeded n=30 sample across all arms. `--full <arm>`: EVERY gold item
+    for that one arm (resumable; the n=30 rows are a subset so they're reused)."""
+    items = sampled_items(full=full_arm is not None)
     done = set()
     if CSV_OUT.exists():
         done = {(r["arm"], r["dataset"], r["id"]) for r in csv.DictReader(CSV_OUT.open())}
@@ -82,6 +87,8 @@ def run_sweep():
 
     base = cm.load()
     for arm, overrides in ARMS:
+        if full_arm is not None and arm != full_arm:
+            continue
         from fusion_ocr.engines import rapid
         rapid.set_rec_tier("medium" if arm == "rapid_medrec" else None)
         cfg = dataclasses.replace(base, out_dir=RES / "out" / arm, **overrides)
@@ -151,4 +158,9 @@ def report():
 
 
 if __name__ == "__main__":
-    report() if "--report" in sys.argv else run_sweep()
+    if "--report" in sys.argv:
+        report()
+    elif "--full" in sys.argv:
+        run_sweep(full_arm=sys.argv[sys.argv.index("--full") + 1])
+    else:
+        run_sweep()
