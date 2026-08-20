@@ -48,6 +48,9 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("prefer_apple_vision", "bool", settable=True),
     Setting("apple_vision_skip_vlm", "float", settable=True, lo=0.0, hi=1.0,
             help="skip the VLM read when mean Apple Vision confidence >= this"),
+    Setting("paddle_skip_vlm", "float", settable=True, lo=0.0, hi=1.0,
+            help="skip the VLM read when mean PaddleOCR confidence >= this; 0 disables "
+                 "(default — enable on the paddle_skip_cost eval's evidence)"),
     Setting("prefer_rapidocr", "bool", settable=True,
             help="use RapidOCR (ONNX) as the deterministic engine — perf A/B, needs the rapid extra"),
     Setting("table_vlm_read", "bool", settable=True,

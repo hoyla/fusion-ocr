@@ -79,6 +79,12 @@ class VlmRead:
                 if _vision_confident(page, cfg.apple_vision_skip_vlm):
                     page.read_model = "apple_vision"
                     continue
+                # Same contract for PaddleOCR (the cross-platform tier — Vision is
+                # macOS-only). Disabled by default (0.0) until priced by the
+                # paddle_skip_cost eval; see config.paddle_skip_vlm.
+                if _paddle_confident(page, cfg.paddle_skip_vlm):
+                    page.read_model = "paddle"
+                    continue
                 route = resolve(page.script or "latin", cfg)
                 model = route.vlm_model or cfg.vlm.model
                 base_url = route.vlm_base_url or cfg.vlm.base_url
@@ -145,6 +151,17 @@ def _vision_confident(page, threshold: float) -> bool:
     vis = [s.det_conf for s in page.segments
            if s.source == "vision" and s.det_conf is not None]
     return bool(vis) and (sum(vis) / len(vis) >= threshold)
+
+
+def _paddle_confident(page, threshold: float) -> bool:
+    """True if PaddleOCR read this page at high mean confidence — its det_text is good
+    enough to skip the VLM (the cross-platform cheap tier). 0 disables (the default:
+    unlike the Vision tier this one ships unmeasured — enable on evidence)."""
+    if threshold <= 0:
+        return False
+    confs = [s.det_conf for s in page.segments
+             if s.source == "paddle" and s.det_conf is not None]
+    return bool(confs) and (sum(confs) / len(confs) >= threshold)
 
 
 def _low_confidence(page, threshold: float) -> bool:

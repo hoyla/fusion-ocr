@@ -90,6 +90,7 @@ def recipe_fingerprint(cfg: Config, pipeline: list[Stage]) -> str:
         "routes": cfg.routes,
         "flags": {"prefer_apple_vision": cfg.prefer_apple_vision,
                   "apple_vision_skip_vlm": cfg.apple_vision_skip_vlm,
+                  "paddle_skip_vlm": cfg.paddle_skip_vlm,
                   "table_vlm_read": cfg.table_vlm_read,
                   "granularity": cfg.granularity,
                   "overlay_font": cfg.overlay_font,

@@ -78,6 +78,9 @@ dist/
 !/eval_out/stream_b_iam/
 /eval_out/stream_b_iam/*
 !/eval_out/stream_b_iam/results.csv
+!/eval_out/paddle_skip_cost/
+/eval_out/paddle_skip_cost/*
+!/eval_out/paddle_skip_cost/results.csv
 !/eval_out/stream_e_sensitivity/
 /eval_out/stream_e_sensitivity/*
 !/eval_out/stream_e_sensitivity/results.csv
