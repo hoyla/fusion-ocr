@@ -59,7 +59,7 @@ Features used (cheap, deterministic, auditable):
 - **rotation**, and **PaddleOCR confidence** — low confidence ≈ handwriting/degraded →
   escalate to a stronger/specialist reader (confidence-gated escalation)
 
-Unmatched scripts fall through to the **generalist default** (Qwen2.5-VL). Adding a
+Unmatched scripts fall through to the **generalist default** (Qwen3.6-35B-A3B). Adding a
 tool is a config row, not a code change.
 
 ### Design principles

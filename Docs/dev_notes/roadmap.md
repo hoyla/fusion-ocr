@@ -10,49 +10,12 @@ real, not before.
 
 ## Now / near-term
 
-- **Run the evidence plan** ([evidence_plan.md](evidence_plan.md)) — the pre-registered
-  measurement campaign from [review 03](review_03_260705.md): full FUNSD/SROIE runs, the
-  box-placement metric (P1), insertion-rate reporting + blank-page probes (P2), noise floor,
-  threshold sensitivity, quant A/B, IAM fix. This subsumes the eval-expansion goals below at
-  larger scale; the hand-labelling work remains complementary (it covers cases the gold sets
-  don't).
-  **Status (2026-07-09) — streams A, C, G, D, F, B done** (manifests in `eval_out/manifests/`):
-  VLM out-recognises deterministic on both corpora; fused placement ≥ deterministic under the band
-  metric (P1); noise floor is zero; 150 DPI confirmed on gold; P2 measured — D2 blank probes pass
-  (0 gated invented words), D3 divergence triage empty on clean gold, **D1 fired tripwire (b)**
-  (gated char-insertion > ungated = a reading-order confound, not hallucination). **P2 framing
-  certified (Luke, 2026-07-09):** on ink-full corpora the gated proxy is the word-level figure
-  (gated 1−word_precision 0.18 FUNSD / 0.10 SROIE, ~recall-free), char-insertion benefit reserved
-  for the D2 blank regime — so P2 is a regime split (D1 on-content cost + D2 blank-regime benefit),
-  not one headline number (see the insertion_gate manifest / evidence_plan §D).
-  **F done:** at n=55 Qwen3.5-9B vs Qwen3-VL-8B is a recognition tie (keep 3.5-9B on robustness +
-  speed — 3-VL-8B hit a guard-missed `.`-repetition loop); 8-bit is a marginal gain at 23% slower +
-  2× memory (keep 4-bit); and **Qwen3.6-35B-A3B (MoE, 3B-active) beats the default on quality AND
-  speed** (recall +0.018, medCER −0.012, ~28% faster) — a strong generalist-default candidate
-  pending broader validation + the 20 GB footprint (Luke's call).
-  **B done:** FKI human transcriptions sourced; IAM adapter (crops to the handwriting region, since
-  forms carry a printed prompt above it) pairs all 1539 pages. At n=100 the **VLM's
-  punctuation-normalized handwriting recall is 0.955 — the Mandelson n=1 (0.95) reproduced at scale**
-  (medCER 0.035), vs deterministic 0.557 / 0.150. The handwriting claim is no longer a single
-  anecdote (IAM = clean ruled English = a FLOOR, not degraded FOI).
-  **E executed (2026-08-19/20** — manifest `stream_e_sensitivity_2026-08-19.md`; every
-  campaign stream has now run): `fuse_min_sim` mild (a monotone recall↔placement dial);
-  `fuse_det_conf_trust` flat in range, with the guard-off endpoint delivering the first
-  direct measurement of the anti-misalignment gate's value (+1.6–2.6pt band placement for
-  −0.6–0.9pt recall — certified, Luke 2026-08-20; 0.34/0.80 stay); `escalate_below` → **keep-disabled**
-  under the pinned rule (a stronger model rescues 3/6 of the weaker's worst decile, so
-  escalation pays once the in-VPC tier exists). **Follow-ups from F — both
-  DONE:** Qwen3.6-35B-A3B adopted as the default generalist (2026-07-09, merged); the repetition
-  guard generalised to catch low-entropy character floods, not just `[illegible]` token loops
-  (2026-07-12 — `_is_degenerate_repetition` now also flags a dominant-char / tiny-alphabet run,
-  which the whitespace-split token check missed for the spaceless `.`×260k flood).
-- **Fail loud on reader failure (review 03) — DONE (2026-07-12).** The reader stages used to
-  swallow every exception and return `""`, silently degrading the whole corpus to det_text. Now:
-  each logs a warning; `vlm_read` raises a distinct `ReaderError` and sets a per-page `read_failed`
-  provenance flag (a run where every page has it set is a dead reader, not hard documents); and the
-  watcher runs a **reader preflight** at startup — a tiny real inference, since a wedged server
-  answers `/v1/models` 200 while failing generation — warning loudly if the reader can't read. See
-  [done.md](done.md).
+- **Evidence plan — COMPLETE (2026-08-20).** Every pre-registered stream (A–G) of the
+  [review-03](review_03_260705.md) measurement campaign has executed, with both tripwire
+  diagnoses certified. The full record now lives in [done.md](done.md) (*Evidence campaign*
+  section) and the per-stream manifests in `eval_out/manifests/`; the questions it left open
+  are ordinary roadmap items below (hand-labelling breadth, Z-order prose pages, the engine
+  full-set verdict).
 - **Job-lifecycle document-loss bugs (review 03):** (a) API uploads are keyed by client
   filename — two same-named uploads with different content overwrite in `in/` and strand the
   first job `queued` forever; key by digest/UUID. (b) A worker killed between `claim` and
@@ -63,7 +26,10 @@ real, not before.
   `tempfile.mkdtemp` for rendered pages + full text, never cleaned — fine for benchmark data,
   dangerous the day someone runs `--labels` on a confidential document. Use a run-scoped dir
   under `eval_out/` (gitignored) with cleanup.
-- **Expand the hand-labelled eval set (non-Thai).** Scaffold + first baseline shipped (see
+- **Expand the hand-labelled eval set (non-Thai).** *(Note: the labelset was feared lost on
+  2026-08-20 — it was only ever on the desktop, under its differently-named repo path — and is
+  now recovered onto BOTH machines with its source PDFs; being gitignored/machine-local it
+  deserves a backup home.)* Scaffold + first baseline shipped (see
   [done.md](done.md)): `--labels` manifest with multi-page spans, `--no-vlm` to isolate the
   deterministic engine, guide in [eval-labelling.md](../eval-labelling.md). Four hard pages are
   labelled, with the first measured numbers (VLM ~0.92 aggregate recall, handwriting ~0.95). The
@@ -165,8 +131,10 @@ real, not before.
   9B generalist (caveat: its reading is un-cross-checked VLM output, so it slots in as a
   *reader*, never as geometry); and Apple Vision's WWDC25 **`RecognizeDocumentsRequest`**
   adds paragraph/table/list structure to the fast tier we currently use as flat det/rec —
-  possibly a free structure signal on the ANE. (Engine A/Bs — PP-OCRv6, RapidOCR,
-  PP-DocLayoutV3 — live in [rapidocr_eval_plan.md](rapidocr_eval_plan.md).)
+  possibly a free structure signal on the ANE. *(Engine A/Bs — EXECUTED 2026-08-20, see
+  [done.md](done.md) + `manifests/engine_ab_2026-08-20.md`: PP-OCRv6 turned out to be the
+  default already; RapidOCR medium-rec meets the adoption criteria at n=30, full-set verdict
+  pending the desktop run, then an adoption PR. PP-DocLayoutV3 remains untested.)*
 - **Landscape re-check (2026-08-19)** — a fresh survey six weeks after review 03 re-confirmed the
   architecture: the top document-parsing systems (PaddleOCR-VL 1.6, GLM-OCR, MinerU2.5-Pro) have
   all converged on deterministic-localization-then-VLM-read; word-level VLM grounding is still
@@ -175,10 +143,12 @@ real, not before.
   detector); and **no self-hosted tool ships a searchable text layer** — the overlay requirement
   (a Giant integration deal-breaker) remains the least-served in the ecosystem. Standing items
   with triggers, next check ~2027-02:
-  - **OCRmyPDF v17's engine-agnostic `OcrElement` API** (2026) — adoption candidate for overlay
-    assembly (build-vs-adopt: their renderer is hardened against PDF long-tail weirdness). Guard
-    any migration with the searchability eval — the bespoke writer's Thai Unicode-font handling
-    must not regress.
+  - **OCRmyPDF v17's engine-agnostic `OcrElement` API** — **spiked 2026-08-20, PASS**
+    ([ocrmypdf_v17_overlay_spike.md](ocrmypdf_v17_overlay_spike.md)): fits fusion's data,
+    EN+Thai searchable and placed, invisible mode verified, glyph-coverage font fallback beats
+    the bespoke writer's. Migration guard = the searchability eval (Thai regression terms +
+    rotated Goldfinch, band placement, NFC parity) — **unblocked 2026-08-20** (the labelset is
+    recovered and resolves on the laptop); the migration is ready to attempt.
   - **Docling** — still "the project to watch" (review 03): re-check when it ships
     searchable-overlay output (docling-serve #613) + cross-engine reconciliation.
   - **Fusion-shrink tripwire:** an open VLM under ~0.1 box-CER on a word-level grounded eval

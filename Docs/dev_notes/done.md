@@ -151,6 +151,74 @@ the big remediations is in the review/plan notes — this is the index, not a du
   scale** (medCER 0.035, precision 0.845), vs deterministic PaddleOCR 0.557 / 0.150. The headline
   capability is no longer a single anecdote (IAM = clean ruled English = a floor, not degraded FOI).
 
+## Evidence campaign — COMPLETE (evidence_plan.md, streams A–G; final certifications 2026-08-20)
+
+The pre-registered measurement campaign from review 03 ran to its end state: every stream
+executed, every tripwire diagnosis certified, every claim manifest-backed
+(`eval_out/manifests/`). Streams D, F, B are logged above; the rest:
+
+- **Stream A — gold-set scale** (2026-07-07): full FUNSD (199) + SROIE (973), both engines +
+  VLM rows. VLM out-recognises deterministic on both corpora (FUNSD 0.817/CER 0.170; SROIE
+  caseless 0.956 vs det 0.864); the SROIE "~0.6" mystery was a scoring artifact (100%-uppercase
+  GT, caseless fix); "Paddle beats Vision" is document-type-dependent (forms yes, receipts tie).
+- **Stream C — P1 placement metric** (2026-07-07): `eval/placement.py` (strict + band modes).
+  **Fused placement ≥ deterministic under the band metric** (SROIE 0.924 vs 0.864, FUNSD 0.564
+  vs 0.538) — the click-a-claim promise measured; the committed regression guard for any
+  fusion/alignment change.
+- **Stream G — noise floor** (2026-07-08): **zero.** 3× identical runs, 30 items, every metric
+  bit-identical (MLX greedy decode is deterministic). Single runs bind; sample size, not
+  variance, is the constraint on any delta.
+- **Stream E — threshold sensitivity + `escalate_below`** (2026-08-19/20; manifest
+  `stream_e_sensitivity_2026-08-19.md`): full n=349 fusion-only sweeps, archive integrity
+  verified. `fuse_min_sim` is **mild** (a monotone recall↔placement dial; 0.34 not knife-edge);
+  `fuse_det_conf_trust` is **flat across 0.56–0.92**, and the pre-labelled guard-off endpoint
+  (1.04) delivered the **first direct measurement of the anti-misalignment gate's value:
+  +1.6–2.6pt band placement (and up to +4.5pt precision) for −0.6–0.9pt recall** — the
+  C-registered regression signature produced deliberately (diagnosis certified, Luke
+  2026-08-20; 0.34/0.80 stay). E2 (n=20 fresh Qwen3.6 reads) direction-confirms. E3's pinned
+  rescue rule → **`escalate_below` stays keep-disabled**: a stronger model rescues 3/6 of the
+  weaker's worst decile (reverse 0/6), so escalation pays only once a stronger-than-default
+  tier exists (the in-VPC re-add trigger).
+- **150-DPI re-check** (2026-07-08): 150 ≥ 200 DPI on 100 human-GT items — the speedup was
+  quality-free; no revisit.
+
+## 2026-08 — strategy re-check & engine work
+
+- **Landscape re-check (2026-08-19/20)** — prompted by "is a single off-the-shelf tool now
+  good enough?": the architecture re-validated (the field's leaders converged on
+  deterministic-localization-then-VLM-read; word-level VLM grounding still measurably
+  unusable; **no self-hosted tool ships a searchable text layer** — the Giant deal-breaker).
+  Standing triggers + ~2027-02 next check live in the roadmap.
+- **OCRmyPDF v17 `OcrElement` spike — PASS** ([ocrmypdf_v17_overlay_spike.md](ocrmypdf_v17_overlay_spike.md)):
+  their engine-agnostic text-layer API accepts fusion's segment data exactly; EN + Thai
+  searchable with hits on the ink; invisible mode verified (`3 Tr`); per-word glyph-coverage
+  font fallback handles the missing-Thai-font case *better* than the bespoke writer. Migration
+  scoped + guarded (searchability eval) — blocked on the lost labelset (below).
+- **`paddle_skip_vlm` shipped disabled and priced STAY-DISABLED**
+  (`manifests/paddle_skip_cost_2026-08-19.md`): the cross-platform cheap-tier knob exists, but
+  the counterfactual showed **PaddleOCR is confidently wrong on a real tail** (receipts losing
+  20–40 recall pts at conf 0.95–0.99) — so the VLM pays +4–8 recall pts even on clean
+  high-confidence print. First direct pricing of "why not deterministic-only on easy pages".
+- **Engine A/B executed** (`manifests/engine_ab_2026-08-20.md`; the
+  [rapidocr_eval_plan](rapidocr_eval_plan.md)): the 7th "audit the defaults" catch —
+  **paddleocr 3.7.0's default was already PP-OCRv6_medium** since the 2026-06-28 pin, so every
+  July "PaddleOCR" number was v6 unknowingly; the v5→v6 generation delta is 13–37 recall pts
+  (via the new `det_model`/`rec_model` knob). **RapidOCR implemented** (`engines/rapid.py`,
+  ONNX): small-rec default ×16–22 faster but fails the quality bar; **medium-rec meets all
+  three adoption criteria at n=30** (recall −0.009/+0.005, ×4.5–7.1 faster, symmetric tail) —
+  full-set same-runner verdict pending (desktop run), adoption PR after.
+- **Qwen3.8-27B rejected** (`manifests/stream_f_q38_2026-08-20.md`): the cached-but-unbenchmarked
+  dense 27B loses to the Qwen3.6-35B-A3B default on every metric and is ~36% slower at FUNSD
+  n=50 — the 3B-active MoE wins both axes.
+- **Incident: the hand-labelled labelset was feared lost, then recovered same-day**
+  (2026-08-20). It was only ever on the desktop — whose repo lives at a differently-named
+  path (`~/Code/GitHub_Other/`, not the laptop's `~/Code/hoyla_github/`), which the first
+  search missed. Now present on both machines with the TestPDFs source sets; the engine-A/B
+  and stream-F-addendum manifests carry the stale "missing" claim from the alarm window.
+  Two durable fixes: the stream-F runner warns-and-skips instead of crashing when the
+  labelset is absent, and the gitignored/machine-local labelset is flagged in the roadmap as
+  deserving a backup home.
+
 ## Config & API
 - Settings registry (`settings.py`) → `GET` / `PATCH /config`; secrets masked;
   security/identity fields read-only; output-affecting tunables fingerprinted.
