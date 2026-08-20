@@ -90,3 +90,33 @@ def test_paddleocr_produces_boxed_text(tmp_path):
 
     # End-to-end: the overlay PDF should now actually be produced.
     assert "overlay_pdf" in doc.artifacts
+
+
+def test_engine_for_passes_model_overrides_and_keys_cache(monkeypatch):
+    # det_model/rec_model (the engine-A/B knob) must reach PaddleOCR as the 3.x
+    # model-name kwargs, and the engine cache must key on them — config can change
+    # between runs in one process (PATCH /config), so a lang-only key would serve
+    # a stale engine.
+    import paddleocr
+
+    from fusion_ocr.stages.ocr_det import OcrDet
+
+    calls = []
+
+    class _FakeEngine:
+        def __init__(self, **kw):
+            calls.append(kw)
+
+        def predict(self, img):
+            return []
+
+    monkeypatch.setattr(paddleocr, "PaddleOCR", _FakeEngine)
+    stage = OcrDet()
+    e_default, _ = stage._engine_for("en")
+    e_v5, _ = stage._engine_for("en", "PP-OCRv5_server_det", "PP-OCRv5_server_rec")
+    assert e_default is not e_v5                       # distinct cache entries
+    assert "text_detection_model_name" not in calls[0]  # default passes no override
+    assert calls[1]["text_detection_model_name"] == "PP-OCRv5_server_det"
+    assert calls[1]["text_recognition_model_name"] == "PP-OCRv5_server_rec"
+    e_again, _ = stage._engine_for("en", "PP-OCRv5_server_det", "PP-OCRv5_server_rec")
+    assert e_again is e_v5 and len(calls) == 2         # cache hit, no rebuild

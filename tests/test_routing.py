@@ -63,10 +63,17 @@ def test_rapidocr_engine_seam(monkeypatch):
     assert resolve("latin", SimpleNamespace(prefer_rapidocr=True)).engine == "paddle"
 
 
-def test_rapidocr_recognize_is_a_clear_stub():
-    # Wired but not implemented — calling it must fail loudly, not silently return nothing.
+def test_rapidocr_recognize_returns_engine_shape():
+    # Implemented 2026-08-20 (engine A/B): recognize() must return the shared engine shape
+    # [(quad_points_px, text, conf), ...] — a blank page yields an empty list (engine loads,
+    # inference path runs, nothing detected), never an exception.
     import pytest
 
+    pytest.importorskip("rapidocr", reason="rapid extra not installed")
+    from PIL import Image
+
     from fusion_ocr.engines import rapid
-    with pytest.raises(NotImplementedError):
-        rapid.recognize(object(), "latin")
+    lines = rapid.recognize(Image.new("RGB", (200, 100), "white"))
+    assert isinstance(lines, list)
+    for pts, text, conf in lines:   # shape check on anything detected
+        assert len(pts) == 4 and isinstance(text, str) and 0.0 <= conf <= 1.0

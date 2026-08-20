@@ -45,16 +45,25 @@ class OcrDet:
 
     # -- engine lifecycle ---------------------------------------------------
 
-    def _engine_for(self, lang: str):
+    def _engine_for(self, lang: str, det_model: str = "", rec_model: str = ""):
         """Return (engine, mode) for a recogniser language, building + caching on
-        first use. Falls back to English if PaddleOCR doesn't support the language."""
-        if lang in self._engines:
-            return self._engines[lang]
+        first use. Falls back to English if PaddleOCR doesn't support the language.
+        det_model / rec_model override the engine's default model names (engine A/Bs,
+        e.g. PP-OCRv6_medium_* — see rapidocr_eval_plan.md); they are part of the cache
+        key because config can change between runs in one process (PATCH /config)."""
+        key = (lang, det_model, rec_model)
+        if key in self._engines:
+            return self._engines[key]
         from paddleocr import PaddleOCR  # raises ImportError if extra absent
 
         # CRITICAL for overlay accuracy: disable 3.x document-preprocessing
         # (orientation + UVDoc unwarping + textline orientation) — it warps the image
         # so polygons come back in unwarped space and no longer line up with the page.
+        overrides = {}
+        if det_model:
+            overrides["text_detection_model_name"] = det_model
+        if rec_model:
+            overrides["text_recognition_model_name"] = rec_model
         try:
             try:  # 3.x kwargs
                 engine = PaddleOCR(
@@ -62,20 +71,21 @@ class OcrDet:
                     use_doc_orientation_classify=False,
                     use_doc_unwarping=False,
                     use_textline_orientation=False,
+                    **overrides,
                 )
-            except TypeError:  # 2.x — no unwarping by default
+            except TypeError:  # 2.x — no unwarping (and no model-name overrides)
                 engine = PaddleOCR(use_angle_cls=True, lang=lang)
         except Exception:
             # Unsupported recogniser language -> fall back to English (detection,
             # i.e. the boxes, is script-agnostic; the VLM supplies the reading).
             if lang == self.lang:
                 raise
-            self._engines[lang] = self._engine_for(self.lang)
-            return self._engines[lang]
+            self._engines[key] = self._engine_for(self.lang, det_model, rec_model)
+            return self._engines[key]
 
         mode = "predict" if hasattr(engine, "predict") else "ocr"
-        self._engines[lang] = (engine, mode)
-        return self._engines[lang]
+        self._engines[key] = (engine, mode)
+        return self._engines[key]
 
     # -- stage entrypoint ---------------------------------------------------
 
@@ -110,7 +120,8 @@ class OcrDet:
                         lines, source = self._run_rapid(img, page.script), "rapid"
                     else:
                         try:
-                            engine, mode = self._engine_for(route.paddle_lang)
+                            engine, mode = self._engine_for(
+                                route.paddle_lang, cfg.det_model, cfg.rec_model)
                         except ImportError:
                             return doc  # no PaddleOCR -> degrade cleanly
                         lines, source = self._run(engine, mode, img), "paddle"

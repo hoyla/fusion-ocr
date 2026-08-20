@@ -46,6 +46,10 @@ MODELS = [
     ("q3vl_8b_4bit", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),  # rollback candidate (model-gen A/B)
     ("q35_9b_8bit", "mlx-community/Qwen3.5-9B-MLX-8bit"),      # quant A/B (vs the 4-bit default)
     ("q36_35ba3b_4bit", "mlx-community/Qwen3.6-35B-A3B-4bit"),  # new-gen arm (MoE, qwen3_5_moe, load-smoke-tested)
+    ("q38_27b_4bit", "mlx-community/Qwen3.8-27B-4bit"),  # 2026-08-20 arm: found cached but
+    # never benchmarked ("audit the defaults"); dense 27B VLM (model_type qwen3_5,
+    # vision_config present). NB: run after the labelset went missing (2026-08 storage
+    # shuffle) — this arm has FUNSD rows only; compare per-set, not on "all".
 ]
 
 LABELSET = "eval_labels/labelset.json"
@@ -55,7 +59,15 @@ FUNSD_N, FUNSD_SEED = 50, 7   # seed 7 = the campaign's FUNSD convention (noise_
 # ---- build the shared item list (model-independent); prebuild the derived PDFs once ----
 def build_items():
     items = []   # (kind, id, ref, caseless, pdf_path)
-    for lab in load_labelset(LABELSET):
+    if not Path(LABELSET).exists():
+        # The hand-labelled set is machine-local (gitignored) and went missing in the
+        # 2026-08 storage shuffle — run the gold-set rows rather than crash, LOUDLY:
+        # arms added after this point have no `label` rows and must be compared per-set.
+        print(f"WARNING: {LABELSET} missing — skipping the labelled arm entirely", flush=True)
+        labels = []
+    else:
+        labels = load_labelset(LABELSET)
+    for lab in labels:
         ref = lab.reference()
         if not normalize(ref):
             continue
