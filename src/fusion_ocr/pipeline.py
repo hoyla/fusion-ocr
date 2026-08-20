@@ -95,7 +95,10 @@ def recipe_fingerprint(cfg: Config, pipeline: list[Stage]) -> str:
                   "granularity": cfg.granularity,
                   "overlay_font": cfg.overlay_font,
                   "fuse_min_sim": cfg.fuse_min_sim,
-                  "fuse_det_conf_trust": cfg.fuse_det_conf_trust},
+                  "fuse_det_conf_trust": cfg.fuse_det_conf_trust,
+                  "det_model": cfg.det_model,
+                  "rec_model": cfg.rec_model,
+                  "prefer_rapidocr": cfg.prefer_rapidocr},
         "prompts": {"transcribe": prompts.TRANSCRIBE, "typhoon": prompts.TYPHOON_OCR,
                     "table": prompts.TABLE},
     }

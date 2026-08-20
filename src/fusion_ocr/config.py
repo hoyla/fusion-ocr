@@ -73,6 +73,13 @@ class Config:
     # option for the perf eval (Docs/dev_notes/rapidocr_eval_plan.md), inert unless set AND
     # the `rapid` extra is installed. Same routing seam as Apple Vision.
     prefer_rapidocr: bool = False
+    # PaddleOCR det/rec model-name overrides ("" = the engine's default for the lang).
+    # The pre-registered mechanism for engine-generation A/Bs (rapidocr_eval_plan.md):
+    # e.g. det_model = "PP-OCRv6_medium_det", rec_model = "PP-OCRv6_medium_rec".
+    # Output-affecting -> both are in the recipe fingerprint. NB: an explicit rec_model
+    # overrides the per-script recogniser choice, so leave "" on multilingual estates.
+    det_model: str = ""
+    rec_model: str = ""
     # Route detected table regions on scanned pages to a focused VLM table read (crop +
     # table prompt), regardless of the page-level read — tables are structure that line-
     # OCR/Apple Vision handle poorly. Geometry still comes from the deterministic grid;
@@ -130,6 +137,8 @@ def load(path: str | Path = "config.toml") -> Config:
         apple_vision_skip_vlm=run.get("apple_vision_skip_vlm", 0.92),
         paddle_skip_vlm=run.get("paddle_skip_vlm", 0.0),
         prefer_rapidocr=run.get("prefer_rapidocr", False),
+        det_model=run.get("det_model", ""),
+        rec_model=run.get("rec_model", ""),
         table_vlm_read=run.get("table_vlm_read", True),
         fuse_min_sim=run.get("fuse_min_sim", 0.34),
         fuse_det_conf_trust=run.get("fuse_det_conf_trust", 0.80),
@@ -167,6 +176,8 @@ def to_toml_dict(cfg: Config) -> dict:
             "apple_vision_skip_vlm": cfg.apple_vision_skip_vlm,
             "paddle_skip_vlm": cfg.paddle_skip_vlm,
             "prefer_rapidocr": cfg.prefer_rapidocr,
+            "det_model": cfg.det_model,
+            "rec_model": cfg.rec_model,
             "table_vlm_read": cfg.table_vlm_read,
             "fuse_min_sim": cfg.fuse_min_sim,
             "fuse_det_conf_trust": cfg.fuse_det_conf_trust,

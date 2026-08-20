@@ -50,29 +50,47 @@ def available() -> bool:
             return False
 
 
+_ENGINE = None  # per-process cache, like ocr_det._engine_for
+
+
+def _engine():
+    global _ENGINE
+    if _ENGINE is None:
+        try:
+            from rapidocr_onnxruntime import RapidOCR   # legacy package name (1.x)
+        except ImportError:
+            from rapidocr import RapidOCR               # current package name (>= 2)
+        _ENGINE = RapidOCR()
+    return _ENGINE
+
+
 def recognize(pil_image, script: str | None = None) -> list[tuple[list, str, float]]:
     """[(quad_points_px, text, confidence), ...] in pixel coords (top-left origin) — the SAME
     shape PaddleOCR/Apple Vision return, so ocr_det's coordinate handling stays unchanged.
 
-    NOT IMPLEMENTED — this is the one piece tomorrow fills in. Reference implementation:
-
-        from rapidocr_onnxruntime import RapidOCR          # or: from rapidocr import RapidOCR
-        import numpy as np
-        engine = RapidOCR()                                # cache per-process, like _engine_for
-        result, _ = engine(np.asarray(pil_image))          # result: [[box, text, score], ...]
-        out = []
-        for box, text, score in (result or []):
-            if not text:
-                continue
-            # box is 4 [x, y] points already in pixel space (top-left origin) — pass through
-            out.append(([(float(x), float(y)) for x, y in box], text, float(score)))
-        return out
-
-    To choose the recogniser language, construct RapidOCR with the model files for
-    RAPID_LANGS[script] (the ONNX port's per-language rec model). Confirm box origin/shape
-    against PaddleOCR on a sample before trusting the geometry (see the eval plan).
+    Implemented 2026-08-20 for the engine A/B (rapidocr_eval_plan.md); geometry verified
+    against PaddleOCR on a FUNSD page (box-IoU check in the A/B runner) before the benchmark
+    was trusted. Verification #1 gap, documented: `rapidocr_onnxruntime` 1.x ships the
+    default en/ch det+rec models only — the per-script recognisers in RAPID_LANGS
+    (Thai/Cyrillic/Arabic/devanagari) require supplying per-language rec model files, which
+    the pip package does not bundle. So `script` is currently unused: non-Latin routes must
+    stay on PaddleOCR until per-language ONNX rec models are sourced and validated.
     """
-    raise NotImplementedError(
-        "RapidOCR engine is wired but not implemented — flesh out engines/rapid.recognize() "
-        "and `pip install -e .[rapid]` first (Docs/dev_notes/rapidocr_eval_plan.md)."
-    )
+    import numpy as np
+
+    raw = _engine()(np.asarray(pil_image))
+    # rapidocr >= 2 returns a RapidOCROutput (.boxes/.txts/.scores); the legacy 1.x
+    # package returned ([[box, text, score], ...], elapse). Normalise both.
+    if hasattr(raw, "boxes"):
+        if raw.boxes is None:
+            return []
+        triples = zip(raw.boxes, raw.txts or [], raw.scores or [])
+    else:
+        triples = raw[0] or []
+    out = []
+    for box, text, score in triples:
+        if not text:
+            continue
+        # box is 4 [x, y] points already in pixel space (top-left origin) — pass through
+        out.append(([(float(x), float(y)) for x, y in box], text, float(score)))
+    return out

@@ -25,8 +25,15 @@ apple_vision_skip_vlm = 0.92
 paddle_skip_vlm = 0.0
 # Use RapidOCR (ONNX Runtime) as the deterministic engine instead of PaddleOCR — a perf A/B
 # option (Docs/dev_notes/rapidocr_eval_plan.md). Inert unless true AND the `rapid` extra is
-# installed (`pip install -e .[rapid]`); the engine inference is currently a stub.
+# installed (`pip install -e .[rapid]`). Latin-script routes only (the pip package bundles
+# en/ch models; per-script recognisers are a documented gap — see engines/rapid.py).
 prefer_rapidocr = false
+# PaddleOCR det/rec model-name overrides ("" = the engine's default for the lang) — the
+# engine-generation A/B knob, e.g. det_model = "PP-OCRv5_server_det". NB paddleocr 3.7's
+# built-in default is already PP-OCRv6_medium. An explicit rec_model overrides the
+# per-script recogniser, so leave "" on multilingual estates.
+det_model = ""
+rec_model = ""
 # Route detected table regions on SCANNED pages to a focused VLM table read (crop the
 # region + table prompt), regardless of the page-level read — tables are structure that
 # line-OCR / Apple Vision read poorly. Geometry still comes from the deterministic
