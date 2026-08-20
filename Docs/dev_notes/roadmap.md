@@ -39,7 +39,7 @@ real, not before.
   campaign stream has now run): `fuse_min_sim` mild (a monotone recall↔placement dial);
   `fuse_det_conf_trust` flat in range, with the guard-off endpoint delivering the first
   direct measurement of the anti-misalignment gate's value (+1.6–2.6pt band placement for
-  −0.6–0.9pt recall — diagnosis pending certification); `escalate_below` → **keep-disabled**
+  −0.6–0.9pt recall — certified, Luke 2026-08-20; 0.34/0.80 stay); `escalate_below` → **keep-disabled**
   under the pinned rule (a stronger model rescues 3/6 of the weaker's worst decile, so
   escalation pays once the in-VPC tier exists). **Follow-ups from F — both
   DONE:** Qwen3.6-35B-A3B adopted as the default generalist (2026-07-09, merged); the repetition

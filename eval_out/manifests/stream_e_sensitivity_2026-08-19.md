@@ -50,8 +50,9 @@ across the whole ±30% range. 0.34 is not knife-edge. **Verdict: document, stop.
 
 **Tripwire (b) FIRED — at the guard-off endpoint only** (recall +0.009/+0.006 vs band
 −0.016/−0.026, opposite directions at material magnitude, both corpora). Per the pins the
-verdict below is a **proposed diagnosis, PENDING Luke's certification** (the D1
-senior-eyes precedent):
+verdict below went to senior eyes as a proposed diagnosis (the D1 precedent) and is
+**CERTIFIED (Luke, 2026-08-20): the diagnosis is accepted — keep 0.34/0.80, no
+calibration pass.**
 
 > **Diagnosis:** the entire "load-bearing" signal is the 1.04 endpoint, which the pins
 > pre-labelled guard-off (no real confidence reaches 1.04 → the misalignment refusal never
@@ -91,8 +92,8 @@ guard-off → recall up / precision down / band down). Tripwire (c) clear — th
 conclusions attach to the current default reader.
 
 Tripwire (b) also fired twice at n=20 (min_sim=0.442: recall −0.0104 vs band +0.0060;
-guard-off: recall +0.0252 vs band −0.0096). **Proposed diagnosis (same certification as
-E1's):** these are the same phenomenon seen from both ends — the fusion gate is a
+guard-off: recall +0.0252 vs band −0.0096). **Diagnosis — CERTIFIED with E1's (Luke,
+2026-08-20):** these are the same phenomenon seen from both ends — the fusion gate is a
 recall↔placement **dial**, so *any* material movement along it shows the opposite-direction
 pattern by construction. The C-registered "regression" framing targets unintended code
 changes, not a deliberate sweep of the gate itself. In E1 (n=349) the 0.442 trade sat
@@ -119,5 +120,6 @@ its own PR — this manifest is the evidence table; no config was changed.
 With E executed, every stream of the campaign (A, B, C, D, E, F, G) has run. End-state
 items from `evidence_plan.md`: the four top thresholds have sensitivity curves (two swept
 here; two documented-not-sweepable with a re-trigger); `escalate_below` is
-evaluated-with-verdict (keep-disabled, evidence above). Remaining certification: the
-`fuse_det_conf_trust` diagnosis above (Luke), and the E2 direction check below.
+evaluated-with-verdict (keep-disabled, evidence above). Both tripwire-(b) diagnoses
+(E1 guard-off endpoint; E2 dial framing) are **CERTIFIED (Luke, 2026-08-20)** — nothing
+outstanding; the campaign's end state is met in full.
