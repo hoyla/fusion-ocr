@@ -1,6 +1,22 @@
 # RapidOCR (ONNX) vs PaddleOCR — eval plan
 
-*Scaffolding is wired (this branch); the engine inference is a stub. This note is the plan to
+> **EXECUTED (2026-08-20)** — runner `eval_out/engine_ab.py`, manifest
+> `eval_out/manifests/engine_ab_2026-08-20.md`; `engines/rapid.py` is implemented (no longer
+> a stub; `rapidocr>=3`, whose bundled models are already PP-OCRv6 ONNX). Headlines: the
+> **null hypothesis dissolved** — paddleocr 3.7.0's default has been PP-OCRv6_medium since
+> the 2026-06-28 pin, so "current Paddle" already was v6 (and v5_server trails it by 13–37
+> recall pts, measured via the new `det_model`/`rec_model` knob). **RapidOCR small-rec:**
+> ×16–22 faster, fails the ~0.01 recall bar. **RapidOCR medium-rec (`rapid_medrec`): meets
+> all three adoption criteria at n=30** (recall −0.009/+0.005, ×4.5–7.1, geometry
+> pre-verified 25/25 boxes, symmetric per-item tail). Full-set same-runner confirmation in
+> progress (desktop); adoption lands as its own PR if it passes. Verification #1 gap stands:
+> the pip package bundles en/ch models only → non-Latin routes stay on PaddleOCR. Layout /
+> table were NOT evaluated (reading-order-head portability unverified) and stay on PaddleOCR
+> per the decision criteria below. The CoreML-EP bonus experiment was not needed — the CPU
+> EP alone delivered the speedup.
+
+*Scaffolding is wired (this branch); the engine inference is a stub — since implemented, see
+the banner above. This note is the plan to
 flesh it out and decide — by measurement, not assertion — whether to adopt RapidOCR for some or
 all of the deterministic engine. Prompted by a perf argument (Gemini) + today's profiling
 (`ocr_det` PaddleOCR-on-CPU ≈ 40% of runtime; PaddlePaddle has no Metal/ANE backend).*

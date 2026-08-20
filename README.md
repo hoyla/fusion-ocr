@@ -37,9 +37,12 @@ searchable characters, fully local.
 
 The contract underneath — `Document` in / `Document` out, raw **and** inferred both
 retained, serialised between stages for a recipe-fingerprinted resume — is in place and
-tested (130 tests). Degraded scans and handwriting still want a small hand-labelled set to
-measure against; word-level overlay subdivision and a few table refinements are follow-ups
-(see the roadmap).
+tested (214 tests). The pre-registered **evidence campaign is complete** (streams A–G,
+manifests in `eval_out/manifests/`): handwriting recall generalises to **0.955 at n=100**
+(IAM), fused box placement ≥ deterministic under the band metric, the blank-page
+hallucination gate holds (0 gated invented words), and the anti-misalignment gate's value
+is measured (+1.6–2.6pt placement for −0.6–0.9pt recall). Word-level overlay subdivision
+and a few table refinements are follow-ups (see the roadmap).
 
 ## Run it
 
@@ -87,7 +90,7 @@ python -m mlx_vlm.server --port 8080        # serves mlx-community/Qwen3.6-35B-A
 ollama pull scb10x/typhoon-ocr1.5-3b
 ```
 
-The router sends Latin/handwriting/etc. → Qwen3.5/MLX (`:8080`), Thai → Typhoon
+The router sends Latin/handwriting/etc. → Qwen3.6/MLX (`:8080`), Thai → Typhoon
 (`:11434`). One config value moves any reader — Ollama, MLX, or in-VPC vLLM all speak
 the same API, so swapping local → transcription-GPU is just a `base_url` change. See
 [Docs/routing.md](Docs/routing.md).

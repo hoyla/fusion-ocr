@@ -57,7 +57,7 @@
   <text class="t" x="615" y="324" text-anchor="middle">Reading axis — VLM (specialist varies)</text>
   <text class="s" x="615" y="342" text-anchor="middle">semantics only; geometry never comes from here</text>
   <rect class="stage b" x="468" y="358" width="120" height="44" rx="6"/>
-  <text class="s" x="528" y="378" text-anchor="middle" font-weight="600">Qwen2.5-VL</text>
+  <text class="s" x="528" y="378" text-anchor="middle" font-weight="600">Qwen3.6-35B-A3B</text>
   <text class="s" x="528" y="392" text-anchor="middle">generalist default</text>
   <rect class="stage b" x="598" y="358" width="120" height="44" rx="6"/>
   <text class="s" x="658" y="378" text-anchor="middle" font-weight="600">Typhoon</text>
