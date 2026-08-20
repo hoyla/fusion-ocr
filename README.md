@@ -21,7 +21,7 @@ calls**. The most-sensitive tier runs fully air-gapped.
 | --- | --- |
 | **Geometry** (boxes, tables, reading order) | deterministic — PaddleOCR / Apple Vision; layout via PP-DocLayoutV2 |
 | **Semantics** (reading, structure, translation) | VLM |
-| **Fusion** | align VLM text onto deterministic boxes; the deterministic layer is the anti-hallucination gate |
+| **Fusion** | align VLM text onto deterministic boxes; the deterministic layer serves as a anti-hallucination gate |
 
 Boxes never come from the VLM. That's what makes the searchable overlay reliable and
 keeps the VLM from inventing text where there was no ink.
