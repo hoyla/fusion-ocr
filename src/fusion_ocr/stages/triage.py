@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 
+from .. import ingest
 from ..config import Config
 from ..models import Box, Document, Page, Segment
 
@@ -53,6 +54,13 @@ class Triage:
             if not doc.pages:
                 doc.pages = [Page(index=0)]
             return doc
+
+        # Fail FAST and in words on an input we can't read at all (an encrypted or corrupt
+        # PDF): as the first stage this turns "confusing error deep in a stage" into a job
+        # error the operator can act on (`GET /jobs/{sha}` → error).
+        problem = ingest.readability_problem(doc.source_path)
+        if problem:
+            raise ingest.IngestError(problem)
 
         with fitz.open(doc.source_path) as pdf:
             doc.pages = []

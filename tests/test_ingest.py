@@ -105,3 +105,93 @@ def test_watcher_ingests_an_image_keyed_by_the_originals_hash(tmp_path, monkeypa
     assert seen["pdf"].endswith(f"{original_digest}/source.pdf".replace("/", __import__("os").sep))
     assert (out_dir / original_digest / "source.pdf").exists()
     assert jobs.get(original_digest)["status"] == "done"
+
+
+# ---- review 03 ingest robustness: WebP/HEIC sniffing, page-size cap, EXIF, encrypted PDFs
+
+def test_sniff_webp_and_heic_by_magic():
+    assert ingest.sniff_format(b"RIFF\x10\x00\x00\x00WEBPVP8 ") == "webp"
+    assert ingest.sniff_format(b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00") == "heic"
+    assert ingest.sniff_format(b"\x00\x00\x00\x1cftypmif1\x00\x00\x00\x00") == "heic"   # generic HEIF brand
+    assert ingest.sniff_format(b"\x00\x00\x00\x1cftypavif\x00\x00\x00\x00") is None     # AVIF: not accepted
+    assert ingest.sniff_format(b"RIFF\x10\x00\x00\x00WAVEfmt ") is None                 # RIFF but not WebP
+
+
+def test_page_size_honours_dpi_and_caps_the_long_edge():
+    w, h = ingest.page_size_pt(2480, 3508, (300, 300))
+    assert (round(w), round(h)) == (595, 842)                        # a 300-DPI scan is A4
+    assert ingest.page_size_pt(1000, 1300, None) == (750.0, 975.0)   # no DPI -> 96, as MuPDF did
+    assert ingest.page_size_pt(1000, 1300, (0, 0)) == (750.0, 975.0)  # placeholder DPI -> same
+    w, h = ingest.page_size_pt(5477, 3651, None)                     # a 20-MP photo
+    assert round(w) == 1224 and round(h) == 816                      # long edge capped at 17 in
+    assert abs(w / h - 5477 / 3651) < 1e-6                           # aspect preserved
+
+
+def test_huge_photo_becomes_a_bounded_page_with_full_pixels(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    big = tmp_path / "photo.png"
+    Image.new("RGB", (3000, 2000), "white").save(big)                 # no DPI metadata
+    out = ingest.image_to_pdf(big, tmp_path / "photo.pdf")
+    with fitz.open(out) as d:
+        assert round(d[0].rect.width) == 1224 and round(d[0].rect.height) == 816
+        xref = d[0].get_images(full=True)[0][0]
+        assert d.extract_image(xref)["width"] == 3000                # pixels embedded untouched
+
+
+def test_webp_converts_to_a_one_page_pdf(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    from PIL import features
+    if not features.check("webp"):
+        pytest.skip("Pillow built without WebP")
+    webp = tmp_path / "scan.webp"
+    Image.new("RGB", (240, 320), "white").save(webp)
+    assert ingest.peek(webp) == "webp"
+    out, converted = ingest.to_pdf(webp, tmp_path / "derived")
+    with fitz.open(out) as d:
+        assert converted and d.page_count == 1 and d[0].get_text().strip() == ""
+
+
+def test_heic_without_the_codec_is_a_clear_job_error(tmp_path, monkeypatch):
+    import sys
+    monkeypatch.setitem(sys.modules, "pillow_heif", None)            # `import pillow_heif` fails
+    heic = tmp_path / "IMG_0001.heic"
+    heic.write_bytes(b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00" + b"\x00" * 64)
+    with pytest.raises(ingest.IngestError, match="heic"):
+        ingest.to_pdf(heic, tmp_path / "derived")
+
+
+def test_exif_rotated_jpeg_lands_upright_and_plain_jpeg_is_embedded_verbatim(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    rotated = tmp_path / "rot.jpg"
+    im = Image.new("RGB", (400, 200), "white")
+    ex = im.getexif()
+    ex[0x0112] = 6                                                   # camera held portrait
+    im.save(rotated, exif=ex.tobytes())
+    with fitz.open(ingest.image_to_pdf(rotated, tmp_path / "rot.pdf")) as d:
+        assert d[0].rect.width < d[0].rect.height                    # page shows it upright
+    plain = tmp_path / "plain.jpg"
+    Image.new("RGB", (400, 200), "white").save(plain, quality=90)
+    with fitz.open(ingest.image_to_pdf(plain, tmp_path / "plain.pdf")) as d:
+        xref = d[0].get_images(full=True)[0][0]
+        assert d.extract_image(xref)["ext"] == "jpeg"                # original bytes, no re-encode
+
+
+def test_encrypted_pdf_fails_fast_with_a_clear_error(tmp_path):
+    from fusion_ocr import config as config_mod
+    from fusion_ocr.models import Document
+    from fusion_ocr.stages.triage import Triage
+    locked = tmp_path / "locked.pdf"
+    d = fitz.open(); d.new_page().insert_text((72, 72), "secret"); d.save(
+        str(locked), encryption=fitz.PDF_ENCRYPT_AES_256, user_pw="hunter2", owner_pw="hunter2"); d.close()
+    assert "password" in ingest.readability_problem(locked)
+    assert ingest.to_pdf(locked, tmp_path / "derived") == (locked, False)   # identity still
+    with pytest.raises(ingest.IngestError, match="password-protected"):        # the job fails in words
+        Triage().run(Document(source_path=str(locked), sha256="x"), config_mod.Config())
+    ok = tmp_path / "open.pdf"
+    d = fitz.open(); d.new_page(); d.save(str(ok)); d.close()
+    assert ingest.readability_problem(ok) is None
+    corrupt = tmp_path / "corrupt.pdf"
+    corrupt.write_bytes(b"%PDF-1.4\nnot really\n%%EOF")
+    assert "cannot be opened" in ingest.readability_problem(corrupt)
+    with pytest.raises(ingest.IngestError, match="cannot be opened"):
+        Triage().run(Document(source_path=str(corrupt), sha256="x"), config_mod.Config())

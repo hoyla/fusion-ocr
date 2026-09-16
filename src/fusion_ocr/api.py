@@ -83,11 +83,12 @@ async def _save_upload(pdf, dest: Path, max_mb: float, http_exc) -> None:
         with dest.open("wb") as f:
             while chunk := await pdf.read(_UPLOAD_CHUNK):
                 if not sniffed:
-                    # Ingest format gate: PDF (identity) or a raster image (PNG/JPEG/TIFF);
-                    # the worker converts images to PDF before processing.
+                    # Ingest format gate: PDF (identity) or a raster image (PNG/JPEG/TIFF/
+                    # WebP/HEIC); the worker converts images to PDF before processing.
                     if ingest.sniff_format(chunk[:16]) is None:
                         raise http_exc(status_code=415,
-                                       detail="unsupported format (expected PDF or PNG/JPEG/TIFF)")
+                                       detail="unsupported format (expected PDF or an image: "
+                                              "PNG/JPEG/TIFF/WebP/HEIC)")
                     sniffed = True
                 total += len(chunk)
                 if total > max_bytes:

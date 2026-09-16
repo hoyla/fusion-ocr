@@ -24,6 +24,8 @@ vision = ["ocrmac>=1,<2"]                          # Apple Vision OCR (macOS onl
 # (Docs/dev_notes/rapidocr_eval_plan.md). NOT installed by default; `pip install -e .[rapid]`.
 # the project renamed rapidocr-onnxruntime -> rapidocr at v2; 1.x doesn't ship for py3.13
 rapid = ["rapidocr>=3,<4", "onnxruntime>=1.17"]
+# HEIC/HEIF photo ingest (what an iPhone photo of a document is): registers a Pillow opener.
+heic = ["pillow-heif>=0.18,<1"]
 dev = ["pytest>=8,<10"]
 
 [project.scripts]
