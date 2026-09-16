@@ -13,11 +13,11 @@ the layout/reading-order path. The insertion rate is the hallucination proxy.
 from __future__ import annotations
 
 import dataclasses
-import tempfile
 from pathlib import Path
 
 from ..config import Config
 from .metrics import normalize, score
+from .workdir import workdir
 
 _MIN_REF_CHARS = 50   # too little text to score (cover/figure page) -> skip
 
@@ -59,10 +59,12 @@ def recovered_text(page) -> str:
 
 
 def evaluate_pdf(pdf_path, cfg: Config, pages=None, dpi: int = 200,
-                 tmp_root=None, no_vlm: bool = False) -> list[dict]:
+                 tmp_root=None, no_vlm: bool = False, keep_work: bool = False) -> list[dict]:
     """Score selected born-digital pages of one PDF. Returns a per-page score() list
     (each annotated with pdf/page). ``no_vlm=True`` measures the deterministic engine
-    alone (no reader)."""
+    alone (no reader). Rendered pages + pipeline output go to ``tmp_root`` if given, else
+    to a run-scoped dir under eval_out/_work/ removed afterwards (``keep_work`` retains it)
+    — never to /tmp, since it holds the recovered text (see workdir.py)."""
     import fitz
     from ..pipeline import deterministic_pipeline, process
 
@@ -70,27 +72,28 @@ def evaluate_pdf(pdf_path, cfg: Config, pages=None, dpi: int = 200,
     with fitz.open(pdf_path) as d:
         n = d.page_count
     sel = list(pages) if pages is not None else list(range(n))
-    tmp_root = Path(tmp_root or tempfile.mkdtemp(prefix="fusion_eval_"))
-    eval_cfg = dataclasses.replace(cfg, out_dir=tmp_root / "out")
     pipeline = deterministic_pipeline() if no_vlm else None
 
     results = []
-    for pi in sel:
-        if pi >= n:
-            continue
-        gt = page_text_layer(pdf_path, pi)
-        if len(normalize(gt)) < _MIN_REF_CHARS:
-            continue
-        img_pdf = tmp_root / f"{pdf_path.stem}_p{pi}.pdf"
-        make_image_only_pdf(pdf_path, pi, img_pdf, dpi=dpi)
-        doc = process(img_pdf, eval_cfg, pipeline=pipeline)
-        hyp = recovered_text(doc.pages[0]) if doc.pages else ""
-        results.append({"pdf": str(pdf_path), "page": pi, **score(gt, hyp)})
+    with workdir("harness", tmp_root, keep_work) as work:
+        eval_cfg = dataclasses.replace(cfg, out_dir=work / "out")
+        for pi in sel:
+            if pi >= n:
+                continue
+            gt = page_text_layer(pdf_path, pi)
+            if len(normalize(gt)) < _MIN_REF_CHARS:
+                continue
+            img_pdf = work / f"{pdf_path.stem}_p{pi}.pdf"
+            make_image_only_pdf(pdf_path, pi, img_pdf, dpi=dpi)
+            doc = process(img_pdf, eval_cfg, pipeline=pipeline)
+            hyp = recovered_text(doc.pages[0]) if doc.pages else ""
+            results.append({"pdf": str(pdf_path), "page": pi, **score(gt, hyp)})
     return results
 
 
-def evaluate(pdf_paths, cfg: Config, pages=None, dpi: int = 200, no_vlm: bool = False) -> list[dict]:
+def evaluate(pdf_paths, cfg: Config, pages=None, dpi: int = 200, no_vlm: bool = False,
+             keep_work: bool = False) -> list[dict]:
     out: list[dict] = []
     for p in pdf_paths:
-        out += evaluate_pdf(p, cfg, pages=pages, dpi=dpi, no_vlm=no_vlm)
+        out += evaluate_pdf(p, cfg, pages=pages, dpi=dpi, no_vlm=no_vlm, keep_work=keep_work)
     return out
