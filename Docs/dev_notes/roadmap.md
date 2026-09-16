@@ -16,16 +16,8 @@ real, not before.
   section) and the per-stream manifests in `eval_out/manifests/`; the questions it left open
   are ordinary roadmap items below (hand-labelling breadth, Z-order prose pages, the engine
   full-set verdict).
-- **Job-lifecycle document-loss bugs (review 03):** (a) API uploads are keyed by client
-  filename — two same-named uploads with different content overwrite in `in/` and strand the
-  first job `queued` forever; key by digest/UUID. (b) A worker killed between `claim` and
-  `set_status` orphans the job as `running` forever — add a lease/timeout. (c) The watcher's
-  main loop dies if a file vanishes between `iterdir` and `stat`/hash — guard the loop, not
-  just `process()`.
-- **Eval writes recovered text to `/tmp` (review 03).** `harness`/`labels`/`datasets` use
-  `tempfile.mkdtemp` for rendered pages + full text, never cleaned — fine for benchmark data,
-  dangerous the day someone runs `--labels` on a confidential document. Use a run-scoped dir
-  under `eval_out/` (gitignored) with cleanup.
+- *(The review-03 job-lifecycle document-loss bugs and the eval's `/tmp` hygiene shipped
+  2026-09-16 — see [done.md](done.md) *2026-09 — review-03 hardening*.)*
 - **Expand the hand-labelled eval set (non-Thai).** *(Note: the labelset was feared lost on
   2026-08-20 — it was only ever on the desktop, under its differently-named repo path — and is
   now recovered onto BOTH machines with its source PDFs; being gitignored/machine-local it
@@ -108,18 +100,8 @@ real, not before.
   Latin and skips the probe. Decide script per *region* where layout gives regions, or at
   least probe when the text layer is furniture-only. (Same family as the mixed-content
   composition already shipped.)
-- **detect_script coverage (review 03):** the hand-rolled Unicode ranges miss Arabic
-  presentation forms (U+FB50–FDFF, U+FE70–FEFF — common in real PDF text layers), CJK
-  extensions, fullwidth forms. Either extend the ranges or adopt the `regex` module's script
-  properties (build-vs-adopt says adopt).
-- **Artifact retrieval over the API (review 03).** `GET /jobs/{sha}` returns artifact *names*
-  only — a remote consumer (Giant) can't fetch `document.md`/`overlay.pdf` without a shared
-  filesystem, which contradicts the "stable contract" framing. Add
-  `GET /jobs/{sha}/artifacts/{name}` (and stop listing internal `doc.NN-*.json` resume
-  snapshots as artifacts).
-- **`PATCH /config` doesn't reach the worker (review 03).** In the two-process deployment it
-  mutates only the API process's config; the worker never sees it. Either propagate (config
-  version in the job row, worker reloads) or re-document the endpoint as save-and-restart.
+- *(`detect_script` coverage, artifact retrieval over the API and `PATCH /config` reaching
+  the worker shipped 2026-09-16 — see [done.md](done.md).)*
 - **Airgap: pair the Python seal with an OS-level control (review 03).** The monkeypatch
   covers `connect`/`connect_ex`/`getaddrinfo` but not `gethostbyname`/UDP — and nothing at
   the C level (paddle/onnxruntime natives, subprocesses). Document the seal as a tripwire,
@@ -177,17 +159,19 @@ real, not before.
   scanned docs (Thai forms) are layout-classified `paragraph`/`header`/`footer`, not `table`, and
   the `table`-classified docs (sackler) are born-digital (`find_tables`). A genuinely *scanned*
   data table is missing from the corpus; source one to exercise the path.
-- **`sha → original filename` manifest** — the `out/` folders are content-hash named, so they're
-  opaque to a human ("which job is which?"). The original filename is already recorded inside each
-  job (`doc.json` → `source_path`), but a top-level manifest mapping sha → original would save the
-  lookup. *(Carved out of the now-done output-artifacts doc — see [done.md](done.md) /
-  [outputs.md](../outputs.md).)*
+- **`sha → original filename` lookup** — *largely done 2026-09-16:* the job store records
+  `original_name` and `GET /jobs` / `GET /jobs/{sha}` surface it beside the sha, so a consumer
+  never needs the lookup; for a human browsing `out/` without the API, `sqlite3 out/jobs.sqlite
+  'select sha256, original_name, status from jobs'` is the manifest. A static file in `out/` is
+  not written (two records of one fact drift) — revisit only if someone actually wants one.
 - **Thai ground truth for the eval** — *parked from near-term:* needs a Thai reader. The Thai
   scan was dropped from the labelled set for this reason; pick it up when a reader is available.
 - **Thai overlay search reliability** — *parked from near-term:* combining vowels / tone marks,
   NFC vs NFD; reading is solid, reliable highlight is the gap. Also needs a Thai reader to verify.
 - **Word-level overlay subdivision** — *parked from near-term, behind a trigger:* revisit only if
-  **line-level** highlighting proves inadequate in real reporter use. Honest word boxes would come
+  **line-level** highlighting proves inadequate in real reporter use. *(The old
+  `granularity="word"` mode — equal-width steps, i.e. invented positions — was retired
+  2026-09-16; the setting is line-only until this lands.)* Honest word boxes would come
   from the Apple Vision per-word API / PyMuPDF `words` — and *(corrected 2026-08-19)* from
   PaddleOCR itself: PP-OCRv5 exposes per-word boxes (`return_word_box=True`), so the earlier
   "per-word geometry isn't always available" blocker no longer holds (never proportional
@@ -218,20 +202,11 @@ Capability beyond the MVP target:
 - **Rotated-page tables** — the table-structure and focused table-read stages currently skip
   rotated pages ([review_02](review_02_2602627.md) #8). Add support when rotated scans turn
   up in the corpus.
-- **Ingest robustness (review 03):** encrypted/password PDFs are unhandled (fail confusingly
-  deep in a stage — detect `needs_pass` at ingest and fail with a clear job error); **HEIC**
-  (what an iPhone photo of a document actually is) and WebP aren't sniffed; `image_to_pdf`
-  embeds photos at native pixel size (a 20 MP JPEG → ~420 MB pixmap per raster — add a
-  downscale cap). Also: page-level triage never OCRs a small embedded scan (<40% image, ≥50%
-  text coverage) on a mostly-text page — region-level OCR is the fix, same family as the
-  per-region script item under Next.
-- **Small-bug sweep from review 03** (each minor alone, worth one pass): overlay
-  `granularity="word"` places words at equal-width steps (wrong geometry — fix via per-word
-  boxes or drop the mode); `populate_table_html` only fills literal `<td...></td>` (a
-  `<td> </td>` yields a silently empty table); raster cache keyed on `pdf.name` (empty for
-  in-memory docs — latent collision); `vlm_read`'s refusal length-check counts only
-  `source=="paddle"` chars so it's disabled on Apple-Vision-routed pages; overlay `place()`
-  and several stage helpers swallow all exceptions silently.
+- **Small embedded scans on mostly-text pages (review 03):** page-level triage never OCRs a
+  small embedded scan (<40% image, ≥50% text coverage) on a mostly-text page — region-level OCR
+  is the fix, same family as the per-region script item under Next. *(The rest of the review-03
+  ingest-robustness item — encrypted PDFs, HEIC/WebP, the page-size cap, EXIF orientation — and
+  the small-bug sweep shipped 2026-09-16; see [done.md](done.md).)*
 - **Collapse Giant's "text" vs "OCR text" views (integration value).** Giant shows four
   per-document views — original, Combined (PDF + overlay), machine-readable text, OCR text —
   each separately indexed; the two text views confuse users ("which do I read if Combined is
@@ -245,9 +220,10 @@ existing pipeline runs unchanged (PDF is the identity case). The original is kep
 **canonical source**; the PDF is a derived, provenanced artifact. This is the same workflow
 as Giant's built-in processor, so reuse its approach for parity.
 
-- **Images (PNG / JPEG / TIFF)** — PyMuPDF opens and `convert_to_pdf`s them (multi-page TIFF
-  split via Pillow); they flow straight through the scanned-page path. The most common
-  non-PDF input we receive.
+- **Images (PNG / JPEG / TIFF / WebP / HEIC)** — *built:* one PDF page per frame at full
+  resolution, page size from the DPI metadata with a 17-inch long-edge cap, EXIF orientation
+  applied (HEIC needs the optional `heic` extra); they flow straight through the scanned-page
+  path. The most common non-PDF input we receive.
 - **Office (.docx / .xlsx / .pptx)** — convert via LibreOffice headless
   (`soffice --headless --convert-to pdf`). The existing mixed-content composition then
   separates content *for free*: digital body text → text layer (not OCR'd, exact), embedded
@@ -257,8 +233,9 @@ as Giant's built-in processor, so reuse its approach for parity.
   airgap tier); Office files are untrusted (macros — headless doesn't run them, but sandbox
   it); docx provenance is looser (drill-back is to the rendered page).
 
-> Attach points for the adapter are already marked in the code: the API format gate
-> (`api._save_upload`) and the watcher glob (`watcher.scan_once`) — both accept PDF only today.
+> Attach points for the adapter are marked in the code: the API format gate
+> (`api._save_upload`) and the watcher scan (`watcher.scan_once`) — both accept PDF + the
+> image formats above (by magic bytes); Office would slot into the same two places.
 
 **Test corpus already on hand for this work** (`samples/file_tests_3rdparty_01/`, gitignored —
 ~4.3k labelled images, 5.3 GB): a consolidated public OCR benchmark, four sources in a uniform
@@ -303,10 +280,10 @@ manifest `eval_out/manifests/stream_a_deterministic_2026-07-07.md`). Word recall
    fractionally ahead). So [[feedback-paddleocr-is-the-deterministic-baseline]] holds for forms /
    structured layouts, *not* as a blanket claim — narrow it to the document class.
 
-The VLM rows (the old table's Qwen column, and the "VLM's CER win on receipts" story) are **not
-yet re-run at scale** and must get the same caseless treatment before being trusted — stream A's
-VLM pass is queued. Handwriting (the Mandelson 0.10→0.95 story) is still n=1 until IAM is
-unblocked (stream B). Fuller analysis in [[dataset-3rdparty-ocr-benchmark]].
+The VLM rows **were** re-run at scale with the same caseless treatment (stream A, 2026-07-07:
+VLM recall FUNSD 0.817 / SROIE 0.956), and handwriting generalised beyond the n=1 Mandelson
+story (stream B, IAM n=100: VLM recall 0.955) — both in [done.md](done.md) *Evidence campaign*.
+Fuller analysis in [[dataset-3rdparty-ocr-benchmark]].
 
 Scale-triggered — don't build until the load is real (principle 6, *look before infra*):
 

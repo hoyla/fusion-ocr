@@ -20,7 +20,7 @@ and this table are generated from. `GET /config` returns every row below (secret
 | `airgap` | `true` | **read-only** | Sealed, no-egress tier: the process refuses every non-loopback connection and DNS lookup. Surfaced but never settable over HTTP — unsealing the sensitive tier from the network would be a footgun. Change it in `config.toml` and restart. |
 | `in_dir` | `"in"` | **read-only** | Drop folder the watcher scans. Identity-critical (jobs are keyed off it), so not runtime-settable. |
 | `out_dir` | `"out"` | **read-only** | Where artifacts and the job DB live (`out/<sha256>/`). Identity-critical, so not runtime-settable. |
-| `granularity` | `"line"` | `line` \| `word` | Overlay box granularity. `line` writes one invisible string per segment box (MVP); `word` subdivides each box across its words (follow-on). |
+| `granularity` | `"line"` | `line` | Overlay box granularity: one invisible string per segment (line) box. The old `word` mode was retired 2026-09-16 — it split each line into equal-width steps, i.e. invented word positions; honest word boxes need per-word detector geometry (roadmap, parked). Any other value is written as `line` with a warning. |
 | `overlay_font` | `""` | path | TTF used for the invisible overlay text. A Unicode TTF is **required** for non-Latin scripts to be searchable (base-14 fonts can't encode Thai/CJK/Arabic). `""` = auto-detect (macOS Arial Unicode / common Noto paths). |
 | `prefer_apple_vision` | `false` | bool | On macOS, use Apple Vision as the deterministic geometry engine for supported scripts instead of PaddleOCR — sub-2s, on-device, no server (ideal for the airgap tier and clean printed text). |
 | `apple_vision_skip_vlm` | `0.92` | `0.0`–`1.0` | When a page's mean Apple Vision confidence is ≥ this, skip the VLM read — Vision's text *is* the reading (the cheap tier). Harder pages still fall through to the VLM. |
@@ -31,7 +31,7 @@ and this table are generated from. `GET /config` returns every row below (secret
 | `fuse_min_sim` | `0.34` | `0.0`–`1.0` | Fusion anti-misalignment gate. Fusion distributes the VLM reading onto the line-boxes; below this det↔VLM similarity the assigned text is treated as a misalignment, not a correction (and only when the detector is confident — see `fuse_det_conf_trust`). |
 | `fuse_det_conf_trust` | `0.80` | `0.0`–`1.0` | The other half of the gate: only *refuse* a dissimilar line when the detector was at least this confident. This is what protects the handwriting path — garbled `det_text` at low confidence never overrides the VLM read, which there is the truth. |
 | `move_processed` | `true` | bool | Watcher moves a handled file to `in/processed/<sha>.pdf` (success) or `in/failed/<sha>.pdf` (error), so the drop folder doesn't accumulate and re-hash on every scan. **Loop only** — `--once` never moves, so a manual re-run doesn't disturb the folder. |
-| `max_upload_mb` | `50` | `≥ 1.0` | `POST /jobs` rejects an upload larger than this with **413**, streamed and checked *before* the body is hashed or processed (a non-PDF body is **415**). |
+| `max_upload_mb` | `50` | `≥ 1.0` | `POST /jobs` rejects an upload larger than this with **413**, streamed and checked *before* the body is hashed or processed (an unsupported body is **415** — accepted: PDF, PNG/JPEG/TIFF/WebP/HEIC, by magic bytes). |
 | `api_host` | `"127.0.0.1"` | **read-only** | Bind address for `fusion-ocr-serve` (startup-only — a live server isn't rebound). Localhost by default; set `"0.0.0.0"` or a specific LAN IP to expose it on the network. Use an IP literal under airgap (a hostname needs DNS, which the seal refuses). |
 | `api_port` | `8000` | **read-only** | HTTP port for `fusion-ocr-serve` (startup-only). |
 | `forwarded_allow_ips` | `"127.0.0.1"` | **read-only** | Behind a reverse proxy, trust `X-Forwarded-*` (client IP, https scheme) only from these source IPs (startup-only). See [deployment.md](deployment.md). |
@@ -82,21 +82,30 @@ the queue boundary; the atomic claim makes multiple workers safe.
 
 | Method & path | Body / params | Returns |
 | --- | --- | --- |
-| `POST /jobs` | multipart `pdf` | **202** `{sha256, status: "queued"}` — enqueue; a worker drains it |
-| `GET /jobs` | `?status=` | `{jobs: [{sha256, status, error}, …]}` — queue / completed feed |
-| `GET /jobs/{sha256}` | — | `{sha256, status, error, artifacts}` (poll until `done`) |
+| `POST /jobs` | multipart `pdf` | **202** `{sha256, status, original_name}` — enqueue; a worker drains it (`status` is `done` if identical content was already processed) |
+| `GET /jobs` | `?status=` | `{jobs: [{sha256, status, error, original_name}, …]}` — queue / completed feed |
+| `GET /jobs/{sha256}` | — | `{sha256, status, error, original_name, artifacts}` (poll until `done`) |
+| `GET /jobs/{sha256}/artifacts/{name}` | — | the artifact's bytes (`document.md`, `overlay.pdf`, `segment_index.json`, `doc.json`, `source.pdf`), media type by suffix; **404** for anything not in `artifacts` |
 | `GET /config` | — | `{settings: [{path, value, settable, kind, min?, max?, choices?, help?}, …]}` |
-| `PATCH /config` | `{path: value, …}` | `{path: value, …}` (new values, secrets masked) |
+| `PATCH /config` | `{path: value, …}` | `{path: value, …}` (new values, secrets masked) — recorded for the worker too |
 | `POST /config/save` | — | `{saved: <path>}` |
 
 `POST /jobs` streams the upload to disk in chunks (never the whole body in memory), rejecting
-a non-PDF with **415** and one over `max_upload_mb` with **413** before it's hashed.
+an unsupported format with **415** and one over `max_upload_mb` with **413** before it's
+hashed. The body is staged in `in/.incoming/` (which the worker's scan ignores, so a
+half-received upload is never hashed or claimed) and parked in `in/` under a **content-keyed**
+name, `<sha16>__<original-name>` — two same-named uploads with different content can't
+overwrite each other, and identical bytes already known are not parked twice.
 
-`PATCH /config` changes are **in-process only** — a restart re-reads `config.toml`. To make
-the current config (including any runtime tuning) the on-disk default, call `POST
-/config/save` explicitly; this opt-in step means a transient experiment can't silently
-become permanent. It writes a **generated** TOML file (hand-written comments are not
-preserved — `config.example.toml` stays the documented reference).
+`PATCH /config` changes apply at runtime **to every process**: the validated values are
+recorded in the shared job store (`out/jobs.sqlite`, `settings` table), the worker applies
+the set at its next scan, and a restarted API re-applies it at startup — so `GET /config`
+shows what the worker is actually running with, and an output-affecting change re-keys the
+recipe fingerprint of the jobs that follow. Nothing is written to `config.toml` until `POST
+/config/save`, which promotes the current config (runtime tuning included) to disk **and
+clears the runtime set** — file config is the single source again for anything that
+(re)starts. Save writes a **generated** TOML file (hand-written comments are not preserved —
+`config.example.toml` stays the documented reference).
 
 `PATCH /config` validates the **whole** body before applying anything (all-or-nothing) and
 returns HTTP 400 with a `detail` message for an unknown setting, a read-only setting, or an
