@@ -219,6 +219,47 @@ executed, every tripwire diagnosis certified, every claim manifest-backed
   labelset is absent, and the gitignored/machine-local labelset is flagged in the roadmap as
   deserving a backup home.
 
+## 2026-09 — review-03 hardening (2026-09-16 laptop session)
+
+The review-03 engineering items that needed no desktop, shipped as one PR each (#46–#53):
+
+- **Job lifecycle — three document-loss bugs** (#46): `POST /jobs` stages the body in
+  `in/.incoming/` and parks it under a **content-keyed** name (`<sha16>__<original>`), so two
+  same-named uploads can no longer overwrite each other and strand a job; the original
+  filename is recorded on the job (`original_name`, migrated onto existing stores) and
+  surfaced by the API. The claim is a **lease**: a heartbeat thread refreshes it every 30 s
+  and every scan requeues a running job with no heartbeat for 600 s (a worker killed
+  mid-job no longer strands it as `running` forever). The scan loop survives a file vanishing
+  between listing and hashing, and loop mode survives any single failed scan.
+- **Eval work dirs** (#47): `eval/workdir.py` — every runner works in a run-scoped dir under
+  `eval_out/_work/` (gitignored) removed when the run finishes (`--keep-work` retains it);
+  never `/tmp`, which held the full recovered text of every scored page indefinitely.
+- **Every deterministic engine is an OCR box** (#48): `models.OCR_SOURCES` (paddle, vision,
+  rapid) replaces fusion's private `{"paddle", "vision"}`. Found by the engine-A/B labelled
+  run: RapidOCR segments were never superseded by a text layer (a mixed page rendered its
+  text twice) and never fused with the VLM reading at all. The reader's refusal length-check
+  counts every OCR source too (it was disabled on Apple-Vision-routed pages).
+- **Artifacts over HTTP** (#49): `GET /jobs/{sha}/artifacts/{name}` streams a listed
+  artifact (media type by suffix); the resume snapshots are no longer listed as artifacts.
+- **`PATCH /config` reaches the worker** (#50): validated overrides live in a `settings`
+  table in the shared job store; the worker applies the set at every scan (and `--once`),
+  the API re-applies it at startup, `POST /config/save` promotes it to `config.toml` and
+  clears it.
+- **Small-bug sweep** (#51): nameless (in-memory) documents render uncached (the empty-name
+  cache key let two of them share entries); `granularity="word"` retired (equal-width steps =
+  invented word positions); `<td> </td>` counts as an empty cell; every swallowed exception in
+  the stages now logs what was lost (unplaceable overlay line, table classification,
+  `find_tables`, triage image enumeration, recogniser-language fallback).
+- **`detect_script` coverage** (#52): Arabic presentation forms, CJK extensions /
+  compatibility ideographs / halfwidth-fullwidth forms / all hangul blocks / CJK punctuation,
+  Cyrillic + Devanagari extensions, Latin Extended Additional (Vietnamese) — a documented
+  range table, no new dependency.
+- **Ingest robustness** (#53): encrypted or corrupt PDFs fail fast in the first stage with an
+  operator-readable job error (`ingest.readability_problem`); WebP + HEIC sniffed and
+  converted (HEIC via the optional `heic` extra); image pages sized from DPI metadata with a
+  17-inch long-edge cap (a 20-MP photo no longer makes ~150–420 MB rasters) and EXIF
+  orientation applied; a JPEG needing no rotation is embedded byte-for-byte.
+
 ## Config & API
 - Settings registry (`settings.py`) → `GET` / `PATCH /config`; secrets masked;
   security/identity fields read-only; output-affecting tunables fingerprinted.

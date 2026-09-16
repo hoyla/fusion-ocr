@@ -59,12 +59,17 @@ Copy [`deploy/nginx.fusion-ocr.conf`](../deploy/nginx.fusion-ocr.conf), fill the
   enqueues and returns `202` immediately. The sample uses modest values; bump `proxy_send`
   only for very large PDFs over slow links.
 
-> **The queue.** Submit is asynchronous: the API writes the upload to `in/`, registers it
-> `queued`, and returns. The worker (`fusion-ocr`) claims queued jobs atomically and runs
-> them, so you can run more than one worker without double-processing. `JobStore` (SQLite)
-> *is* the queue; its method surface is the contract a distributed queue (ElasticMQ / SQS,
-> on-estate) would implement later — and artifacts are content-addressed via `storage.py`,
-> the swap point for an object store (Garage / S3). Neither is needed at current volume.
+> **The queue.** Submit is asynchronous: the API stages the upload in `in/.incoming/`,
+> parks it in `in/` under a content-keyed name, registers it `queued`, and returns. The
+> worker (`fusion-ocr`) claims queued jobs atomically and runs them, so you can run more than
+> one worker without double-processing. A claim is a **lease** (heartbeat every 30 s; a job
+> whose worker died is requeued after 600 s without one), so a killed worker never strands a
+> job as `running`. `JobStore` (SQLite) *is* the queue — and carries the runtime config
+> overrides `PATCH /config` records, which every worker applies at its next scan; its method
+> surface is the contract a distributed queue (ElasticMQ / SQS, on-estate) would implement
+> later (visibility timeout = the lease) — and artifacts are content-addressed via
+> `storage.py`, the swap point for an object store (Garage / S3). Neither is needed at
+> current volume.
 
 > **One machine only (for now).** Multi-worker is safe **on a single machine sharing a local
 > disk** — that is the whole supported surface. Do **not** point two machines at a shared

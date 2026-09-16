@@ -80,7 +80,12 @@ tool is a config row, not a code change.
 
 First cut (deterministic, auditable): classify by **Unicode block counts** over the
 text we already have — the page's text layer (even a partial Thai header/footer
-counts) or born-digital text. Dominant non-Latin block wins, else Latin.
+counts) or born-digital text. Dominant non-Latin block wins (≥10% of letters), else Latin.
+The range table (`routing._BLOCKS`) covers what a real text layer carries, not just each
+script's core block: Arabic **presentation forms** (the shaped glyphs most Arabic PDF text
+layers actually hold), CJK extensions / compatibility ideographs / halfwidth-fullwidth
+forms / every hangul block, Cyrillic and Devanagari extensions, and Latin Extended
+Additional (Vietnamese) on the Latin side.
 
 Pure image-only pages with **no** text layer can't be classified this way; for now
 they take the default route. Robust image-only script detection (a fast langid VLM

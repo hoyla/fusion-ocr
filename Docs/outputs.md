@@ -16,9 +16,12 @@ out/<sha256>/              # <sha256> = SHA-256 of the original input file
 
 The folder name is the **content hash of the input**, so the same file always lands in the
 same place and a re-run is idempotent. That makes the folder opaque to a human, though — to
-tell which job is which, the original filename is recorded *inside*: `doc.json` →
-`source_path` (and in `document.md`'s provenance header). *(A `sha → original filename`
-manifest is a [roadmap](dev_notes/roadmap.md) item.)*
+tell which job is which, the original filename is recorded on the **job** (`original_name` in
+`out/jobs.sqlite`, surfaced by `GET /jobs` and `GET /jobs/{sha256}`) and *inside* the
+artifacts: `doc.json` → `source_path` (and in `document.md`'s provenance header). API uploads
+are parked in `in/` as `<sha16>__<original-name>`, so the drop folder stays readable too.
+
+Every listed artifact is fetchable over HTTP: `GET /jobs/{sha256}/artifacts/{name}`.
 
 ## Deliverables — what you consume
 
@@ -39,8 +42,8 @@ These three are the product. Most consumers (Giant, a reporter) only ever touch 
 | File | What it is |
 | --- | --- |
 | **`doc.json`** | The **final `Document` state** — the complete structured result: every page, segment and region, the recipe, plus page-level `vlm_reading` and box coordinates. Identical to the last stage snapshot (`doc.09-render.json`). Reach for this when you want the full machine-readable state rather than the three deliverables. |
-| **`doc.NN-<stage>.json`** | The **per-stage resume cache** — the full `Document` *after* each pipeline stage (`00`–`09`). Keyed on the content hash **and** a recipe fingerprint (pipeline + models + routes + prompt text + output flags), so a re-run after changing a prompt or model **reprocesses** instead of silently returning a stale result; `--rerun-from <stage>` reuses the earlier stages (e.g. retune the VLM prompt without redoing OCR). They accumulate — nothing is cleaned. |
-| **`source.pdf`** | **Image inputs only** (PNG / JPEG / TIFF). The derived, provenanced PDF the pipeline actually ran on — images are normalised to PDF on ingest (PDF is the identity case, so PDF inputs have no `source.pdf`). The folder is keyed by the *original image's* hash; the original stays the canonical reference. |
+| **`doc.NN-<stage>.json`** | *Not listed as an artifact by the API (internal).* The **per-stage resume cache** — the full `Document` *after* each pipeline stage (`00`–`09`). Keyed on the content hash **and** a recipe fingerprint (pipeline + models + routes + prompt text + output flags), so a re-run after changing a prompt or model **reprocesses** instead of silently returning a stale result; `--rerun-from <stage>` reuses the earlier stages (e.g. retune the VLM prompt without redoing OCR). They accumulate — nothing is cleaned. |
+| **`source.pdf`** | **Image inputs only** (PNG / JPEG / TIFF / WebP / HEIC). One page per frame at full resolution — page size from the image's DPI metadata (default 96) with a 17-inch long-edge cap, EXIF orientation applied; a JPEG needing no rotation is embedded byte-for-byte. The derived, provenanced PDF the pipeline actually ran on — images are normalised to PDF on ingest (PDF is the identity case, so PDF inputs have no `source.pdf`). The folder is keyed by the *original image's* hash; the original stays the canonical reference. |
 
 ### Pipeline stage order (what builds on what)
 
@@ -60,5 +63,8 @@ and **`render`** emits the three deliverables above. The *why* is in
 ## The queue (a sibling, not a per-job artifact)
 
 `out/jobs.sqlite` is the shared job queue / status store (`JobStore`) the API and the worker
-both use — `POST /jobs` enqueues into it, `GET /jobs/{sha256}` polls it. It lives beside the
-job folders, not inside one. See [configuration.md](configuration.md).
+both use — `POST /jobs` enqueues into it, `GET /jobs/{sha256}` polls it. A claim is a
+**lease**: a working worker heartbeats it every 30 s, and a job whose worker died mid-run is
+requeued after 600 s without one (the reason is left in `error`). The store also holds the
+`settings` table — the runtime overrides `PATCH /config` records for every process to apply.
+It lives beside the job folders, not inside one. See [configuration.md](configuration.md).
