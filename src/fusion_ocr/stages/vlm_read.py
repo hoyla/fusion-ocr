@@ -19,7 +19,7 @@ import logging
 
 from .. import raster
 from ..config import AirgapError, Config
-from ..models import Document
+from ..models import OCR_SOURCES, Document
 from ..routing import resolve
 from ..vlm.openai_compat import OpenAICompatVLM
 from ..vlm.prompts import select_prompt
@@ -90,8 +90,11 @@ class VlmRead:
                 model = route.vlm_model or cfg.vlm.model
                 base_url = route.vlm_base_url or cfg.vlm.base_url
                 img = raster.page_jpeg(pdf, page.index, self.dpi, quality=cfg.vlm.jpeg_quality)
+                # Whatever deterministic engine boxed the page: its det_text is the yardstick
+                # the refusal check measures a suspiciously short reading against. Counting
+                # only PaddleOCR (as before) disabled that check on Vision/RapidOCR pages.
                 det_chars = sum(len(s.det_text or "") for s in page.segments
-                                if s.source == "paddle")
+                                if s.source in OCR_SOURCES)
 
                 try:
                     reading = self._read(img, model, base_url, cfg)

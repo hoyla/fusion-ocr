@@ -61,3 +61,18 @@ def test_byte_budget_keeps_cache_bounded(tmp_path, monkeypatch):
         raster.page_pixmap(pdf, 1, 150)               # evicts page 0 under the budget
     assert len(raster._cache) <= 1
     raster.clear()
+
+
+def test_in_memory_document_is_rendered_uncached():
+    # A nameless document has no path to key on; the old key (empty name) let two such
+    # documents share entries. It renders uncached — and never pollutes the cache.
+    raster.clear()
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 72), "in memory")
+    assert not doc.name                                  # None or "" — nameless either way
+    a = raster.page_pixmap(doc, 0, 72)
+    b = raster.page_pixmap(doc, 0, 72)
+    assert a is not b and a.width == b.width and len(raster._cache) == 0
+    other = fitz.open()
+    other.new_page(width=200, height=100)                 # a different nameless document ...
+    assert raster.page_pixmap(other, 0, 72).width != a.width   # ... gets its OWN page back

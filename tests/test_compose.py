@@ -128,3 +128,13 @@ def test_contaminated_header_superseded_by_ocr():
     assert next(s for s in doc.pages[0].segments if s.id == "bad").superseded is True
     ocr2 = next(s for s in doc.pages[0].segments if s.id == "ocr")
     assert ocr2.superseded is False and ocr2.best_text == "clean ocr text"
+
+
+def test_populate_fills_whitespace_only_cells_too():
+    from fusion_ocr.compose import populate_table_html
+    from fusion_ocr.models import Box, Segment
+    cell = Box(points=[(0, 0), (100, 0), (100, 20), (0, 20)])
+    seg = Segment(id="s", page=0, box=Box(points=[(2, 2), (60, 2), (60, 18), (2, 18)]),
+                  best_text="42", source="fused")
+    html = populate_table_html("<table><tr><td> </td><td>\n</td></tr></table>", [cell, cell], [seg])
+    assert html.count('data-confidence="clean">42</td>') == 2   # both blank-ish cells filled

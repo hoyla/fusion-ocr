@@ -102,7 +102,10 @@ def cell_confidence(cell: Box, segments: list[Segment]) -> str:
     return "clean"
 
 
-_EMPTY_CELL = re.compile(r"<td([^>]*)></td>")
+# An empty cell is `<td></td>` — or `<td> </td>`: a structure model may emit whitespace
+# between the tags, and matching only the literal empty pair left every cell blank (a
+# silently empty table — roadmap small-bug sweep).
+_EMPTY_CELL = re.compile(r"<td([^>]*)>\s*</td>")
 
 
 def populate_table_html(table_html: str, cells: list[Box],

@@ -20,8 +20,13 @@ can be "dense" yet leave the whole body unread.
 
 from __future__ import annotations
 
+import logging
+
+from .. import ingest
 from ..config import Config
 from ..models import Box, Document, Page, Segment
+
+_log = logging.getLogger(__name__)
 
 # Zero-width / BOM chars that contaminate otherwise-clean born-digital text.
 _ZERO_WIDTH = dict.fromkeys(map(ord, "​‌‍﻿"), None)
@@ -49,6 +54,13 @@ class Triage:
             if not doc.pages:
                 doc.pages = [Page(index=0)]
             return doc
+
+        # Fail FAST and in words on an input we can't read at all (an encrypted or corrupt
+        # PDF): as the first stage this turns "confusing error deep in a stage" into a job
+        # error the operator can act on (`GET /jobs/{sha}` → error).
+        problem = ingest.readability_problem(doc.source_path)
+        if problem:
+            raise ingest.IngestError(problem)
 
         with fitz.open(doc.source_path) as pdf:
             doc.pages = []
@@ -111,6 +123,9 @@ class Triage:
             for img in page.get_images(full=True):
                 for r in page.get_image_rects(img[0]):
                     biggest = max(biggest, abs(r.width * r.height))
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — feeds the OCR decision, so say so
+            _log.warning("could not enumerate the images on page %s (%s) — treating it as "
+                         "image-free for the OCR decision (a scan with a partial text "
+                         "layer would NOT be OCR'd)", getattr(page, "number", "?"), exc)
             return 0.0
         return biggest / page_area

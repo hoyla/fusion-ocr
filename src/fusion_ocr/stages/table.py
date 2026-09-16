@@ -19,11 +19,14 @@ nothing regresses.
 
 from __future__ import annotations
 
+import logging
+
 from .. import raster
 from ..compose import grid_to_table_html
 from ..config import Config
 from ..models import Box, Document, Page
 
+_log = logging.getLogger(__name__)
 _DPI = 150
 _MIN_OVERLAP = 0.30   # a find_tables table must cover this fraction of the layout region
 
@@ -84,8 +87,9 @@ class Table:
             if len(names) and len(scores):
                 top = names[max(range(len(scores)), key=lambda i: scores[i])]
                 return "wireless" if "wireless" in str(top) else "wired"
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 — degrade to the default variant, visibly
+            _log.warning("table classification failed (%s) — defaulting to the wired "
+                         "structure model", exc)
         return "wired"
 
     def run(self, doc: Document, cfg: Config) -> Document:
@@ -115,7 +119,9 @@ class Table:
     def _extract_find_tables(self, pg, page: Page) -> None:
         try:
             found = pg.find_tables().tables
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — the vision path still runs, visibly
+            _log.warning("find_tables failed on page %d (%s) — its table regions fall "
+                         "through to the vision path", page.index, exc)
             return
         if not found:
             return

@@ -6,7 +6,8 @@ out_dir     = "out"
 # Hard isolation for the most-sensitive tier: when true the process must make
 # zero outbound network connections. The VLM endpoint must therefore be local.
 airgap      = true
-# Overlay box granularity: "line" (MVP) or "word" (subdivision follow-on).
+# Overlay box granularity: "line" (one invisible string per detected line box — the only
+# mode; the old "word" split lines into equal-width steps, i.e. invented word positions).
 granularity = "line"
 # Font for the invisible overlay text. A Unicode TTF is required for non-Latin
 # scripts (Thai/CJK/Arabic) to be searchable — base-14 fonts break search there.

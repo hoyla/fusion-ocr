@@ -133,3 +133,24 @@ def test_born_digital_find_tables_miss_falls_back_to_vision(tmp_path):
     doc.pages = [page]
     Table(dpi=72, model=_FakeTableModel()).run(doc, config_mod.Config())
     assert doc.pages[0].regions[0].table_engine == "table_structure"   # vision fallback
+
+
+def test_classifier_failure_is_logged_and_defaults_to_wired(caplog):
+    class _Boom:
+        def predict(self, crop):
+            raise RuntimeError("model file missing")
+    t = Table()
+    t._cls = _Boom()
+    with caplog.at_level("WARNING"):
+        assert t._variant_for(None) == "wired"
+    assert "table classification failed" in caplog.text
+
+
+def test_find_tables_failure_is_logged_and_falls_through(caplog):
+    class _Pg:
+        def find_tables(self):
+            raise RuntimeError("bad content stream")
+    page = Page(index=3, needs_ocr=False)
+    with caplog.at_level("WARNING"):
+        Table()._extract_find_tables(_Pg(), page)
+    assert "find_tables failed on page 3" in caplog.text

@@ -9,20 +9,89 @@ This loop is the worker that drains the JobStore queue: it claims QUEUED jobs (a
 and processes them. Jobs reach the queue two ways — a file dropped in in/, or POST /jobs on
 the API (which writes the file here and registers it queued without processing). So in a
 deployment you run this alongside `fusion-ocr-serve`: the API enqueues, this worker drains.
+
+Liveness (review 03): a claim is a LEASE. While a job runs, a heartbeat thread refreshes it
+every _HEARTBEAT_SECONDS; each scan first hands back any running job whose heartbeat is older
+than _LEASE_SECONDS (its worker died mid-job — killed, OOM, power), so nothing is stranded as
+`running` forever. And the scan loop is guarded against a file vanishing between listing and
+hashing (another worker moved it, a user deleted it) and against any single bad scan, so one
+surprise never takes the worker down.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+import threading
 import time
 from pathlib import Path
 
 from . import config as config_mod
 from . import ingest, storage
+from . import settings as settings_mod
 from .jobs import JobStore
 from .pipeline import process, sha256_of
 from .vlm.openai_compat import preflight_reader
+
+# A running job with no heartbeat for this long is handed back to the queue. Generous on
+# purpose: the heartbeat is every 30 s, so a job is requeued only after ~20 missed beats —
+# a dead worker, never a slow page. (A HUNG worker keeps heartbeating; that failure belongs
+# to the call's own timeout, e.g. the reader client's.)
+_LEASE_SECONDS = 600.0
+_HEARTBEAT_SECONDS = 30.0
+
+
+class OverrideSync:
+    """Pull the runtime config overrides recorded by PATCH /config (shared job store) onto
+    this worker's Config whenever the set changes — so an operator's tuning reaches the
+    process that runs the pipeline, not just the API that accepted it (review 03). Applied
+    values re-key recipe_fingerprint like any config change."""
+
+    def __init__(self) -> None:
+        self.version = -1.0   # never pulled yet (an empty table is version 0.0)
+
+    def pull(self, cfg: config_mod.Config, jobs: JobStore) -> bool:
+        """Apply the current override set if it changed since the last pull; True if applied."""
+        overrides, version = jobs.overrides()
+        if version == self.version:
+            return False
+        self.version = version
+        if overrides:
+            try:
+                settings_mod.apply(cfg, overrides)
+            except ValueError as exc:   # a stale/unknown path from a newer API: skip, don't die
+                print(f"[warn] runtime overrides not applied: {exc}", file=sys.stderr)
+                return False
+            print(f"[config] applied runtime overrides: {sorted(overrides)}")
+        return bool(overrides)
+
+
+class _Heartbeat:
+    """Refresh the job's lease on a timer while process() runs on the calling thread. A
+    worker that dies stops heartbeating, and the next scan (any worker) requeues the job
+    once the lease lapses. A failed heartbeat is logged, never fatal — losing liveness
+    reporting must not abort a job that is actually progressing."""
+
+    def __init__(self, jobs: JobStore, digest: str, every: float = _HEARTBEAT_SECONDS) -> None:
+        self._jobs, self._digest, self._every = jobs, digest, every
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name=f"heartbeat-{digest[:8]}")
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._every):
+            try:
+                self._jobs.touch(self._digest)
+            except Exception as exc:  # noqa: BLE001 — see class docstring
+                print(f"[warn] heartbeat failed for {self._digest[:12]}: {exc}", file=sys.stderr)
+
+    def __enter__(self) -> "_Heartbeat":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._stop.set()
+        self._thread.join(timeout=self._every + 5)
 
 
 def _move_out(src: Path, in_dir: Path, subdir: str, digest: str) -> None:
@@ -40,34 +109,60 @@ def _move_out(src: Path, in_dir: Path, subdir: str, digest: str) -> None:
 
 def scan_once(cfg: config_mod.Config, jobs: JobStore,
               force: bool = False, rerun_from: str | None = None,
-              min_settle: float = 2.0, move_processed: bool = False) -> int:
+              min_settle: float = 2.0, move_processed: bool = False,
+              lease_seconds: float = _LEASE_SECONDS,
+              heartbeat_seconds: float = _HEARTBEAT_SECONDS,
+              overrides: OverrideSync | None = None) -> int:
     in_dir = Path(cfg.in_dir)
     in_dir.mkdir(parents=True, exist_ok=True)
     processed = 0
     reprocess = force or rerun_from is not None
     now = time.time()
+    # Runtime config first: whatever PATCH /config recorded since the last scan applies to
+    # every job this scan runs.
+    (overrides or OverrideSync()).pull(cfg, jobs)
+    # Lease reaper first: any job still marked running whose worker stopped heartbeating
+    # goes back to the queue, where this very scan can pick it up.
+    for sha in jobs.requeue_stale(lease_seconds):
+        print(f"[requeue] {sha[:12]}… had no worker heartbeat for {lease_seconds:g}s "
+              f"— back in the queue", file=sys.stderr)
     # Ingest boundary: PDF (identity) + raster images (PNG/JPEG/TIFF) normalised to PDF here,
     # before the queue (see ingest.py). Sniff every loose file by magic bytes; unsupported
-    # drops are ignored. iterdir (not glob) is non-recursive, so processed/ and failed/ are
-    # skipped and the moved files aren't re-processed.
+    # drops are ignored. iterdir (not glob) is non-recursive, so processed/ and failed/ (and
+    # the API's .incoming/ staging area) are skipped and their files aren't re-processed.
     for src in sorted(f for f in in_dir.iterdir() if f.is_file()):
-        fmt = ingest.peek(src)
-        if fmt is None:
-            continue   # not a supported input
-        # Settle gate: skip a file still being written (mtime within min_settle of now).
-        # Hashing a half-copied drop would key the job under a digest that changes once
-        # the copy finishes — process it on a later scan instead.
-        if now - src.stat().st_mtime < min_settle:
+        try:
+            fmt = ingest.peek(src)
+            if fmt is None:
+                continue   # not a supported input
+            # Settle gate: skip a file still being written (mtime within min_settle of now).
+            # Hashing a half-copied drop would key the job under a digest that changes once
+            # the copy finishes — process it on a later scan instead.
+            if now - src.stat().st_mtime < min_settle:
+                continue
+            # Key the job by the ORIGINAL input's hash (stable identity + provenance) even
+            # when a derived PDF is what gets processed — re-dropping the same image is then
+            # idempotent.
+            digest = sha256_of(src)
+        except OSError:
+            # The file vanished (or became unreadable) between the directory listing and
+            # here — another worker moved it, a user deleted it mid-scan. Nothing to do for
+            # it; the next scan sees the truth. This used to take the whole loop down.
             continue
-        # Key the job by the ORIGINAL input's hash (stable identity + provenance) even when a
-        # derived PDF is what gets processed — re-dropping the same image is then idempotent.
-        digest = sha256_of(src)
-        jobs.upsert_queued(digest, str(src))      # ensure registered (no-op if already)
+        jobs.upsert_queued(digest, str(src), original_name=src.name)   # no-op if already
         # Status-driven worker: atomically claim a QUEUED job. This drains both folder drops
         # and API-enqueued uploads (POST /jobs registers them queued + leaves the file here),
         # and the atomic claim makes running several workers safe. Skip if not claimable
         # (already running/done/error, unless an explicit reprocess is asked).
         if not jobs.claim(digest, reprocess=reprocess):
+            # A re-drop of content that is already done/error (same bytes under any name) is
+            # handled too: in loop mode move it out with the rest, or the folder re-hashes
+            # it on every scan forever. A job running elsewhere is left where it is.
+            if move_processed:
+                row = jobs.get(digest)
+                if row and row["status"] in ("done", "error"):
+                    _move_out(src, in_dir, "processed" if row["status"] == "done" else "failed",
+                              digest)
             continue
         try:
             if fmt == "pdf":
@@ -78,7 +173,8 @@ def scan_once(cfg: config_mod.Config, jobs: JobStore,
                 job_dir = storage.job_dir(cfg, digest)
                 job_dir.mkdir(parents=True, exist_ok=True)
                 pdf = ingest.image_to_pdf(src, job_dir / "source.pdf")
-            doc = process(pdf, cfg, force=force, rerun_from=rerun_from, digest=digest)
+            with _Heartbeat(jobs, digest, heartbeat_seconds):   # keep the lease alive
+                doc = process(pdf, cfg, force=force, rerun_from=rerun_from, digest=digest)
             jobs.set_status(digest, "done")
             print(f"[done] {src.name} -> out/{digest}/  "
                   f"({len(doc.artifacts)} artifacts)")
@@ -131,14 +227,18 @@ def main() -> None:
         print(f"[warn] READER PREFLIGHT FAILED — VLM pages will fall back to det_text until the "
               f"reader is up: {detail}", file=sys.stderr)
 
+    overrides = OverrideSync()   # one per worker: re-applies only when the set changes
     if args.once:
         # --once never moves: a manual re-run shouldn't disturb the drop folder.
-        scan_once(cfg, jobs, force=args.force, rerun_from=args.rerun_from)
+        scan_once(cfg, jobs, force=args.force, rerun_from=args.rerun_from, overrides=overrides)
         return
     # Loop mode watches for NEW files; --force/--rerun-from are for one-shot reprocessing.
     try:
         while True:
-            scan_once(cfg, jobs, move_processed=cfg.move_processed)
+            try:
+                scan_once(cfg, jobs, move_processed=cfg.move_processed, overrides=overrides)
+            except Exception as exc:  # noqa: BLE001 — one bad scan must not stop the worker
+                print(f"[error] scan failed: {exc!r} — retrying next interval", file=sys.stderr)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         print("\n[stop]")

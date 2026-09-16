@@ -354,3 +354,17 @@ def test_vision_skip_still_works_when_opted_in(tmp_path):
     fake = _FakeVLM("should never be asked")
     VlmRead(client=fake).run(doc, dataclasses.replace(config_mod.Config(), apple_vision_skip_vlm=0.92))
     assert fake.calls == 0 and page.read_model == "apple_vision"
+def test_refusal_length_check_counts_every_deterministic_engine(tmp_path):
+    # A reading far shorter than what the detector found is a refusal, whichever engine boxed
+    # the page. det_chars used to count PaddleOCR only, silently disabling the check on Apple
+    # Vision / RapidOCR pages (roadmap small-bug sweep).
+    from fusion_ocr.stages.vlm_read import _looks_like_refusal
+    pdf = _scan_pdf(tmp_path)
+    for source in ("vision", "rapid"):
+        page = Page(index=0, needs_ocr=True, width=612, height=792)
+        page.segments = [Segment(id="s", page=0, box=Box(points=[(0, 0), (10, 0), (10, 10), (0, 10)]),
+                                 det_text="x" * 400, det_conf=0.5, source=source)]
+        doc = Document(source_path=str(pdf), sha256="x", pages=[page])
+        VlmRead(client=_FakeVLM("tiny")).run(doc, config_mod.Config())
+        assert doc.pages[0].vlm_reading == "", source     # refused -> fusion uses det_text
+    assert _looks_like_refusal("tiny", 400)

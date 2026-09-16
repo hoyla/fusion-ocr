@@ -1,15 +1,15 @@
-"""RapidOCR engine (ONNX Runtime) — WIRED BUT NOT YET IMPLEMENTED (eval scaffolding).
+"""RapidOCR engine (ONNX Runtime) — the A/B engine (implemented 2026-08-20; not adopted).
 
 RapidOCR runs the same PP-OCR model FAMILY as PaddleOCR, but exported to ONNX and served by
 `onnxruntime` (leaner than PaddlePaddle's CPU path, and able to use the CoreML execution
-provider / ANE). The hypothesis we want to TEST — not assume — is that it's faster on Apple
-Silicon at equal recognition quality, letting us shed the heavy `paddlepaddle` dependency.
+provider / ANE). The hypothesis TESTED — not assumed — is that it's faster on Apple Silicon at
+equal recognition quality, letting us shed the heavy `paddlepaddle` dependency. Numbers and the
+verdict: eval_out/manifests/engine_ab_2026-08-20.md (runner eval_out/engine_ab.py).
 
 This module is a THIRD deterministic engine behind the existing routing seam (`engine =
-"paddle" | "apple_vision" | "rapidocr"`), so it's an A/B option, not a migration. `recognize()`
-is a STUB on purpose: the wiring (config flag, routing, ocr_det dispatch, eval `--rapidocr`,
-the `rapid` extra) is in place so tomorrow's work is just (1) `pip install -e ".[rapid]"`,
-(2) flesh out `recognize()` below, (3) run the benchmark. See
+"paddle" | "apple_vision" | "rapidocr"`), so it's an A/B option, not a migration: inert
+unless `prefer_rapidocr` is set AND the `rapid` extra is installed. Its segments carry
+`source="rapid"` and are treated like any OCR box downstream (models.OCR_SOURCES). See
 Docs/dev_notes/rapidocr_eval_plan.md for the verification checklist + decision criteria.
 
 CAVEATS to settle during the eval (why this is det/rec-first, not a wholesale swap):
@@ -52,15 +52,26 @@ def available() -> bool:
 
 _ENGINE = None  # per-process cache, like ocr_det._engine_for
 _REC_TIER: str | None = None  # None = the package default (v6 small)
+_DET_TIER: str | None = None  # None = the package default (v6 small)
 
 
 def set_rec_tier(tier: str | None) -> None:
     """Select the recognition-model tier ('tiny'|'small'|'medium'|None=default) for the
     NEXT engine build — the engine A/B knob (rapidocr >= 2 only; the RapidAI zoo ships
-    SHA256-pinned PP-OCRv6 tiers). Clears the cached engine so the change takes effect."""
+    SHA256-pinned PP-OCRv6 tiers). Clears the cached engine so the change takes effect.
+    NB: an EVAL-side switch, invisible to the recipe fingerprint — adoption of a non-default
+    tier must promote it to a fingerprinted config knob (rapidocr_eval_plan.md)."""
     global _ENGINE, _REC_TIER
     if tier != _REC_TIER:
         _ENGINE, _REC_TIER = None, tier
+
+
+def set_det_tier(tier: str | None) -> None:
+    """Same knob for the DETECTION model tier (the n=30 A/B's medrec arm kept the small
+    detector; the full set showed a detection-side tail on forms — engine_ab_verdict.py)."""
+    global _ENGINE, _DET_TIER
+    if tier != _DET_TIER:
+        _ENGINE, _DET_TIER = None, tier
 
 
 def _engine():
@@ -73,8 +84,11 @@ def _engine():
             from rapidocr import ModelType, OCRVersion, RapidOCR  # current name (>= 2)
             params = {}
             if _REC_TIER:
-                params = {"Rec.model_type": ModelType(_REC_TIER),
-                          "Rec.ocr_version": OCRVersion.PPOCRV6}
+                params.update({"Rec.model_type": ModelType(_REC_TIER),
+                               "Rec.ocr_version": OCRVersion.PPOCRV6})
+            if _DET_TIER:
+                params.update({"Det.model_type": ModelType(_DET_TIER),
+                               "Det.ocr_version": OCRVersion.PPOCRV6})
             _ENGINE = RapidOCR(params=params)
     return _ENGINE
 

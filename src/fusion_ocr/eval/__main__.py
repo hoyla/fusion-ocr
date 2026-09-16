@@ -105,6 +105,10 @@ def main() -> None:
                     help="deterministic engine only — drop the VLM stages and score the "
                          "recogniser's own text (PaddleOCR, or Apple Vision with "
                          "--apple-vision). No reader server needed.")
+    ap.add_argument("--keep-work", action="store_true",
+                    help="keep the run's working directory (rendered pages, per-stage "
+                         "output = the full recovered text) under eval_out/_work/ for "
+                         "inspection; by default it is removed when the run finishes")
     args = ap.parse_args()
 
     if not args.labels and not args.pdfs and not args.dataset:
@@ -120,9 +124,14 @@ def main() -> None:
     engine = _eng if args.no_vlm else f"{_eng} + VLM ({cfg.vlm.model})"
     print(f"engine: {engine}")
 
+    if args.keep_work:
+        print("work dir kept under eval_out/_work/ (holds the recovered text — clean up "
+              "when done)")
+
     if args.labels:
         from .labels import evaluate_labelset
-        results = evaluate_labelset(args.labels, cfg, no_vlm=args.no_vlm)
+        results = evaluate_labelset(args.labels, cfg, no_vlm=args.no_vlm,
+                                    keep_work=args.keep_work)
         if not results:
             print("no labels in the manifest")
             return
@@ -135,7 +144,8 @@ def main() -> None:
         from .datasets import evaluate_placement
         from .placement import summarize
         rows = evaluate_placement(args.dataset, cfg, split=args.split,
-                                  limit=args.limit, no_vlm=args.no_vlm)
+                                  limit=args.limit, no_vlm=args.no_vlm,
+                                  keep_work=args.keep_work)
         if not rows:
             print(f"no scorable items in {args.dataset}/{args.split}")
             return
@@ -153,7 +163,8 @@ def main() -> None:
     if args.dataset:
         from .datasets import evaluate_dataset
         results = evaluate_dataset(args.dataset, cfg, split=args.split,
-                                   limit=args.limit, no_vlm=args.no_vlm)
+                                   limit=args.limit, no_vlm=args.no_vlm,
+                                   keep_work=args.keep_work)
         if not results:
             print(f"no scorable items in {args.dataset}/{args.split}")
             return
@@ -165,7 +176,7 @@ def main() -> None:
     from .harness import evaluate
     pages = [int(x) for x in args.pages.split(",")] if args.pages else None
     results = evaluate([Path(p) for p in args.pdfs], cfg, pages=pages, dpi=args.dpi,
-                       no_vlm=args.no_vlm)
+                       no_vlm=args.no_vlm, keep_work=args.keep_work)
     if not results:
         print("no scorable pages (need a born-digital text layer with enough text)")
         return
