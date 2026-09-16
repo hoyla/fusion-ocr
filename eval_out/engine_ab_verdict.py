@@ -71,7 +71,12 @@ def labels() -> None:
     base = cm.load()
     fh = CSV_OUT.open("a", newline="")
     w = csv.DictWriter(fh, fieldnames=COLS)
+    from fusion_ocr.eval.labels import load_labelset
+    label_ids = [lab.id for lab in load_labelset("eval_labels/labelset.json")]
     for arm, overrides in ARMS.items():
+        if all((arm, "labels", lid) in done for lid in label_ids):
+            print(f"== {arm}: labelled rows already present, skipping", flush=True)
+            continue
         rapid.set_rec_tier("medium" if arm == "rapid_medrec" else None)
         cfg = dataclasses.replace(base, out_dir=RES / "out" / arm / "labels", **overrides)
         work = RES / "out" / arm / "labels_work"      # under eval_out, never /tmp
