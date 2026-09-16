@@ -1,12 +1,20 @@
 """SQLite-backed job table — and the QUEUE BOUNDARY of the system. Producers enqueue
-(`upsert_queued`), a worker claims atomically (`claim`: queued -> running) and completes
-(`set_status`), consumers read (`get` / `list`). Idempotent by content hash: dropping the
-same PDF twice is a no-op (the existing job/artifacts are reused).
+(`upsert_queued`), a worker claims atomically (`claim`: queued -> running), heartbeats while
+it works (`touch`) and completes (`set_status`), consumers read (`get` / `list`). Idempotent
+by content hash: dropping the same PDF twice is a no-op (the existing job/artifacts are
+reused).
+
+The claim is a LEASE, not a permanent hand-off: a worker killed between `claim` and
+`set_status` (OOM, power, `kill -9`) used to leave its job `running` forever — unclaimable,
+invisible to `--force`, never retried. Now a live worker refreshes `updated_at` on a timer,
+and `requeue_stale` hands back any running job whose heartbeat is older than the lease
+(review 03 (b)). The lease targets a DEAD worker, not a hung one: a worker stuck inside a
+call still heartbeats, and that failure belongs to the call's own timeout.
 
 Tiny on purpose — a dozen docs a day needs nothing more. But this method surface IS the
 contract a future distributed queue would implement: an SQS / ElasticMQ adapter (on-estate,
-airgap-compatible) is a drop-in here, not a rewrite. Keep all queue access going through
-these methods so that swap stays cheap."""
+airgap-compatible) is a drop-in here, not a rewrite (visibility timeout = the lease). Keep all
+queue access going through these methods so that swap stays cheap."""
 
 from __future__ import annotations
 
@@ -16,14 +24,21 @@ from pathlib import Path
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
-    sha256       TEXT PRIMARY KEY,
-    source_path  TEXT NOT NULL,
-    status       TEXT NOT NULL,         -- queued | running | done | error
-    error        TEXT,
-    created_at   REAL NOT NULL,
-    updated_at   REAL NOT NULL
+    sha256        TEXT PRIMARY KEY,
+    source_path   TEXT NOT NULL,
+    status        TEXT NOT NULL,         -- queued | running | done | error
+    error         TEXT,
+    created_at    REAL NOT NULL,
+    updated_at    REAL NOT NULL,         -- last state change OR heartbeat (see touch)
+    original_name TEXT                   -- the client's / dropped filename (provenance)
 );
 """
+
+# Columns added after the first release, applied to an existing store on open (SQLite has
+# no ADD COLUMN IF NOT EXISTS). name -> column DDL.
+_MIGRATIONS: dict[str, str] = {
+    "original_name": "TEXT",
+}
 
 
 class JobStore:
@@ -33,6 +48,10 @@ class JobStore:
         with self._conn() as c:
             c.execute("PRAGMA journal_mode=WAL")   # concurrent reads alongside a writer
             c.executescript(_SCHEMA)
+            have = {r["name"] for r in c.execute("PRAGMA table_info(jobs)")}
+            for col, ddl in _MIGRATIONS.items():
+                if col not in have:
+                    c.execute(f"ALTER TABLE jobs ADD COLUMN {col} {ddl}")
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -43,17 +62,20 @@ class JobStore:
         with self._conn() as c:
             return c.execute("SELECT * FROM jobs WHERE sha256=?", (sha256,)).fetchone()
 
-    def upsert_queued(self, sha256: str, source_path: str) -> bool:
+    def upsert_queued(self, sha256: str, source_path: str,
+                      original_name: str | None = None) -> bool:
         """Return True if newly queued, False if it already existed. Atomic: a single
         INSERT .. ON CONFLICT DO NOTHING leans on the sha256 PK, so two concurrent submits
         of the same content can't both 'win' (the old SELECT-then-INSERT could race into a
-        duplicate-processing or IntegrityError). rowcount is 1 on insert, 0 on conflict."""
+        duplicate-processing or IntegrityError). rowcount is 1 on insert, 0 on conflict.
+        `original_name` is the human name the content arrived under (the API's client
+        filename, or the dropped file's name) — the first registration's name is kept."""
         now = time.time()
         with self._conn() as c:
             cur = c.execute(
-                "INSERT INTO jobs(sha256, source_path, status, created_at, updated_at)"
-                " VALUES(?,?,?,?,?) ON CONFLICT(sha256) DO NOTHING",
-                (sha256, source_path, "queued", now, now),
+                "INSERT INTO jobs(sha256, source_path, status, created_at, updated_at,"
+                " original_name) VALUES(?,?,?,?,?,?) ON CONFLICT(sha256) DO NOTHING",
+                (sha256, source_path, "queued", now, now, original_name),
             )
             return cur.rowcount == 1
 
@@ -61,7 +83,8 @@ class JobStore:
         """Atomically take a job for processing: queued -> running, in one statement, so
         concurrent workers can't both claim it (rowcount is 1 for the winner, 0 otherwise).
         Returns True if THIS caller claimed it. With reprocess=True, also re-claims a done /
-        error job (for --force / --rerun-from), but never steals one already running."""
+        error job (for --force / --rerun-from), but never steals one already running — a
+        running job whose worker has died comes back via `requeue_stale`, not by force."""
         cond = "status != 'running'" if reprocess else "status = 'queued'"
         with self._conn() as c:
             cur = c.execute(
@@ -69,6 +92,42 @@ class JobStore:
                 (time.time(), sha256),
             )
             return cur.rowcount == 1
+
+    def touch(self, sha256: str) -> None:
+        """Heartbeat: refresh a RUNNING job's updated_at so `requeue_stale` can tell a live
+        worker from a dead one. A no-op for any other status (never resurrects a job)."""
+        with self._conn() as c:
+            c.execute(
+                "UPDATE jobs SET updated_at=? WHERE sha256=? AND status='running'",
+                (time.time(), sha256),
+            )
+
+    def requeue_stale(self, lease_seconds: float) -> list[str]:
+        """Return to `queued` every RUNNING job whose last heartbeat is older than
+        `lease_seconds` — the worker that claimed it died mid-job — and return their
+        sha256s. A live worker heartbeats well inside the lease, so a job genuinely still
+        being processed is never taken back. The reason is left in `error` until the next
+        completion overwrites it, so the requeue is visible in `GET /jobs`."""
+        now = time.time()
+        cutoff = now - lease_seconds
+        note = (f"requeued: no worker heartbeat for {lease_seconds:g}s "
+                f"(worker died mid-job?)")
+        requeued: list[str] = []
+        with self._conn() as c:
+            stale = [r["sha256"] for r in c.execute(
+                "SELECT sha256 FROM jobs WHERE status='running' AND updated_at < ?",
+                (cutoff,))]
+            for sha in stale:
+                # Re-check the predicate in the UPDATE: a heartbeat racing in between the
+                # SELECT and here keeps the job (rowcount 0), so it isn't reported either.
+                cur = c.execute(
+                    "UPDATE jobs SET status='queued', error=?, updated_at=?"
+                    " WHERE sha256=? AND status='running' AND updated_at < ?",
+                    (note, now, sha, cutoff),
+                )
+                if cur.rowcount == 1:
+                    requeued.append(sha)
+        return requeued
 
     def set_status(self, sha256: str, status: str, error: str | None = None) -> None:
         with self._conn() as c:

@@ -2,9 +2,9 @@
 identical whether the service runs on this desktop or later in a VPC, so moving it
 is invisible to callers.
 
-  POST  /jobs            (multipart pdf)  -> 202 {sha256, status}   (enqueue; worker drains)
+  POST  /jobs            (multipart pdf)  -> 202 {sha256, status, original_name}   (enqueue)
   GET   /jobs            [?status=done]   -> {jobs: [...]}          (queue / 'out' feed)
-  GET   /jobs/{sha256}                    -> {status, error, artifacts}
+  GET   /jobs/{sha256}                    -> {status, error, original_name, artifacts}
   GET   /config                           -> {settings: [...]}      (every setting, surfaced)
   PATCH /config          {path: value}    -> {path: value}          (configure the allowlist)
   POST  /config/save                      -> {saved: <path>}        (persist to disk, opt-in)
@@ -20,6 +20,7 @@ poll GET /jobs/{sha256}. Run: `fusion-ocr-serve` (the API) alongside `fusion-ocr
 
 import os
 import secrets
+import uuid
 from pathlib import Path
 
 from . import config as config_mod
@@ -39,6 +40,24 @@ def _safe_name(filename: str | None) -> str:
 
 def _is_sha256(s: str) -> bool:
     return len(s) == 64 and all(c in "0123456789abcdef" for c in s.lower())
+
+
+_EXT = {"pdf": ".pdf", "png": ".png", "jpeg": ".jpg", "tiff": ".tif"}
+_MAX_NAME = 160   # keep <digest-prefix>__<name> well inside filesystem name limits
+
+
+def _parked_name(digest: str, original: str, fmt: str | None) -> str:
+    """The name an upload is parked under in in_dir: keyed by CONTENT (a digest prefix),
+    with the client's (sanitised) filename kept for a human browsing the folder and for
+    the provenance header (`source_path`). Keying on the client filename alone let two
+    same-named uploads with different content overwrite each other in in/, stranding the
+    first job `queued` forever with no file behind it (review 03)."""
+    if original == "upload.pdf" and fmt in _EXT:      # the no-filename default: honest ext
+        original = "upload" + _EXT[fmt]
+    stem, suffix = Path(original).stem, Path(original).suffix
+    if len(original) > _MAX_NAME:
+        original = stem[:_MAX_NAME - len(suffix)] + suffix
+    return f"{digest[:16]}__{original}"
 
 
 _UPLOAD_CHUNK = 1 << 20   # 1 MiB
@@ -106,18 +125,44 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
         # Enqueue only: stream the upload into in/, register it queued, return immediately.
         # A worker (`fusion-ocr` watcher) drains the queue; the client polls GET /jobs/{sha}.
         # The request no longer blocks for the (slow) OCR run.
-        dest = in_dir / _safe_name(pdf.filename)
-        await _save_upload(pdf, dest, cfg.max_upload_mb, HTTPException)
-        digest = sha256_of(dest)
-        jobs.upsert_queued(digest, str(dest))
+        #
+        # The body is STAGED in in/.incoming/ — a subdirectory the worker's scan ignores — so
+        # a half-received upload is never hashed or claimed, then parked under a content-keyed
+        # name in one atomic rename (see _parked_name). Identical bytes already parked are
+        # reused (idempotent by content, like a folder re-drop).
+        incoming = in_dir / ".incoming"
+        incoming.mkdir(parents=True, exist_ok=True)
+        staged = incoming / f"{uuid.uuid4().hex}.part"
+        await _save_upload(pdf, staged, cfg.max_upload_mb, HTTPException)
+        original = _safe_name(pdf.filename)
+        try:
+            digest = sha256_of(staged)
+            dest = in_dir / _parked_name(digest, original, ingest.peek(staged))
+            known = jobs.get(digest)
+            if known is None or (known["status"] in ("queued", "running")
+                                 and not Path(known["source_path"]).exists()):
+                # New content — or a known-but-unfinished job whose file has gone missing
+                # (rescue it). Park atomically: the worker only ever sees a complete file.
+                staged.replace(dest)
+            else:
+                # Same bytes already known (under any name): the parked file / the finished
+                # artifacts stand. Idempotent by content, like a folder re-drop.
+                staged.unlink()
+        except BaseException:
+            staged.unlink(missing_ok=True)
+            raise
+        jobs.upsert_queued(digest, str(dest), original_name=original)   # no-op if known
         row = jobs.get(digest)
-        return {"sha256": digest, "status": row["status"] if row else "queued"}
+        return {"sha256": digest, "status": row["status"] if row else "queued",
+                "original_name": row["original_name"] if row else original}
 
     @app.get("/jobs")
     def list_jobs(status: str | None = None):
         # The 'out' feed: queue visibility / pull completed work (?status=done). Poll-based —
-        # the only push-free option that also works on the sealed (airgap) tier.
-        return {"jobs": [{"sha256": r["sha256"], "status": r["status"], "error": r["error"]}
+        # the only push-free option that also works on the sealed (airgap) tier. Carries the
+        # original filename so a consumer can tell which content-hash is which document.
+        return {"jobs": [{"sha256": r["sha256"], "status": r["status"], "error": r["error"],
+                          "original_name": r["original_name"]}
                          for r in jobs.list(status)]}
 
     @app.get("/jobs/{sha256}")
@@ -127,8 +172,9 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
         row = jobs.get(sha256)
         if not row:
             return {"sha256": sha256, "status": "unknown"}
-        return {"sha256": sha256, "status": row["status"],
-                "error": row["error"], "artifacts": storage.artifacts(cfg, sha256)}
+        return {"sha256": sha256, "status": row["status"], "error": row["error"],
+                "original_name": row["original_name"],
+                "artifacts": storage.artifacts(cfg, sha256)}
 
     @app.get("/config")
     def get_config():
