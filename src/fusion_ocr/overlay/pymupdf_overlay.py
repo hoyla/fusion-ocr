@@ -13,19 +13,27 @@ Unicode font (Arial Unicode, or a configured TTF) fixes it (4/4). Text is NFC-
 normalised for good measure. Falls back to helv (Latin only) if no Unicode font is
 found, so it still runs anywhere.
 
-`granularity="line"` writes one invisible string per segment box (MVP).
-`granularity="word"` is the follow-on: subdivide each box across its words.
+`granularity="line"` writes one invisible string per segment box — the only mode. The
+old `"word"` mode split each line's box into EQUAL-WIDTH steps, one per word: invented
+geometry (a highlight landed on the wrong word whenever word lengths differed), so it was
+retired rather than left as a wrong option. Honest word boxes need per-word detector
+geometry (PaddleOCR's `return_word_box`, Apple Vision's per-word API) — a roadmap item
+behind a real-use trigger, never proportional splitting. Any other value is written as
+line with a warning.
 
 Returns True if an overlay was written, False if nothing to do / PyMuPDF absent.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import unicodedata
 from pathlib import Path
 
 from ..models import Document
+
+_log = logging.getLogger(__name__)
 
 # Broad-coverage Unicode fonts to look for (first hit wins). Arial Unicode (macOS)
 # covers Thai/Cyrillic/CJK/Arabic/Latin; the Noto paths are common Linux/VPC spots.
@@ -61,6 +69,12 @@ def build_overlay(doc: Document, out_path: Path, granularity: str = "line",
     except ImportError:
         return False
 
+    if granularity != "line":
+        _log.warning("overlay: granularity=%r is not supported — writing line-level boxes "
+                     "(the old 'word' mode invented word positions; see pymupdf_overlay.py)",
+                     granularity)
+        granularity = "line"
+
     fontfile = _resolve_font(font_path)
     fontname = "uni" if fontfile else "helv"
     font = fitz.Font(fontfile=fontfile) if fontfile else fitz.Font("helv")
@@ -94,21 +108,16 @@ def _write_invisible(fitz, pg, seg, granularity: str, rotation: int,
     span = box_w if rotation in (0, 180) else box_h
     thickness_dim = box_h if rotation in (0, 180) else box_w
 
-    def place(t: str, ax0: float, ay1: float, width: float) -> None:
-        fs = _fit_fontsize(font, t, max(width, 1), thickness_dim)
-        # render_mode=3 -> invisible glyphs; present for search/selection, not drawn.
-        try:
-            pg.insert_text(fitz.Point(ax0, ay1), t, fontname=fontname,
-                           fontfile=fontfile, fontsize=fs, render_mode=3,
-                           rotate=rotation)
-        except Exception:
-            pass  # a glyph the font can't encode -> skip that fragment
-
-    if granularity == "word":
-        words = text.split()
-        if words:
-            step = span / len(words)
-            for i, w in enumerate(words):
-                place(w, x0 + i * step, y1, step)
-            return
-    place(text, x0, y1, span)
+    fs = _fit_fontsize(font, text, max(span, 1), thickness_dim)
+    # render_mode=3 -> invisible glyphs; present for search/selection, not drawn.
+    try:
+        pg.insert_text(fitz.Point(x0, y1), text, fontname=fontname,
+                       fontfile=fontfile, fontsize=fs, render_mode=3,
+                       rotate=rotation)
+    except Exception as exc:
+        # A glyph the font can't encode, or a degenerate box. Skipping the line is the
+        # right recovery, but it means that text is NOT searchable in the output — say so
+        # rather than swallow it (the searchability eval is where this shows as a miss).
+        _log.warning("overlay: could not place %d chars of segment %s on page %d with "
+                     "font %s (%s) — that line is not searchable", len(text), seg.id,
+                     pg.number, fontname, exc)

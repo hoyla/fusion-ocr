@@ -37,11 +37,25 @@ def _pix_bytes(pix) -> int:
     return pix.width * pix.height * pix.n
 
 
+def _render(pdf, page_index: int, dpi: int, clip=None):
+    import fitz  # rendered outside the lock — PDF rasterisation is the slow part
+    kwargs = {"dpi": dpi}
+    if clip is not None:
+        kwargs["clip"] = fitz.Rect(*clip)
+    return pdf[page_index].get_pixmap(**kwargs)
+
+
 def page_pixmap(pdf, page_index: int, dpi: int, clip=None):
     """Cached fitz Pixmap for (this document's path, page, dpi, clip). `pdf` is an open fitz
     document, used only to render on a miss — a cache hit ignores it. `clip` is a hashable
     bbox tuple (x0, y0, x1, y1) or None for the full page."""
     global _bytes
+    if not pdf.name:
+        # An in-memory document (fitz.open() / fitz.open("pdf", bytes)) has no path to key
+        # on. The old key used the empty name, so two nameless documents shared cache
+        # entries and one could be served the other's page; id() would do the same once an
+        # address is reused. Render uncached — correct beats cached for this rare case.
+        return _render(pdf, page_index, dpi, clip)
     key = (pdf.name, _mtime_ns(pdf.name), page_index, dpi, clip)
     with _lock:
         pix = _cache.get(key)
@@ -49,11 +63,7 @@ def page_pixmap(pdf, page_index: int, dpi: int, clip=None):
             _cache.move_to_end(key)
             return pix
 
-    import fitz  # render outside the lock — PDF rasterisation is the slow part
-    kwargs = {"dpi": dpi}
-    if clip is not None:
-        kwargs["clip"] = fitz.Rect(*clip)
-    pix = pdf[page_index].get_pixmap(**kwargs)
+    pix = _render(pdf, page_index, dpi, clip)
     size = _pix_bytes(pix)
 
     with _lock:

@@ -65,3 +65,27 @@ def test_overlay_thai_searchable(tmp_path):
     assert build_overlay(doc, out)
     # the fix: with a Unicode font, search_for finds the Thai term (helv = 0 hits)
     assert fitz.open(out)[0].search_for(term)
+
+
+def test_word_granularity_is_retired_with_a_warning(tmp_path, caplog):
+    pytest.importorskip("fitz", reason="needs PyMuPDF")
+    import fitz
+    doc = _doc_with_segment(tmp_path, "alpha beta gamma")
+    out = tmp_path / "ov.pdf"
+    with caplog.at_level("WARNING"):
+        assert build_overlay(doc, out, granularity="word")
+    assert "not supported" in caplog.text                       # said, not silently ignored
+    assert len(fitz.open(out)[0].search_for("alpha beta gamma")) == 1   # one line-level string
+
+
+def test_unplaceable_line_is_logged_not_swallowed(tmp_path, caplog, monkeypatch):
+    pytest.importorskip("fitz", reason="needs PyMuPDF")
+    import fitz
+
+    def _boom(self, *a, **k):
+        raise RuntimeError("glyph not in font")
+    monkeypatch.setattr(fitz.Page, "insert_text", _boom)
+    doc = _doc_with_segment(tmp_path, "unplaceable")
+    with caplog.at_level("WARNING"):
+        assert build_overlay(doc, tmp_path / "ov.pdf")             # the overlay still builds
+    assert "not searchable" in caplog.text and "unplaceable" not in caplog.text  # no text leaked

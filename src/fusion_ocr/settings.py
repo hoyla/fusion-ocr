@@ -41,8 +41,9 @@ SETTINGS: tuple[Setting, ...] = (
             help="sealed (no-egress) tier; read-only — never toggle the seal over HTTP"),
     Setting("in_dir", "str", settable=False, help="input drop dir (identity-critical)"),
     Setting("out_dir", "str", settable=False, help="artifact dir (identity-critical)"),
-    Setting("granularity", "str", settable=True, choices=("line", "word"),
-            help="overlay box granularity"),
+    Setting("granularity", "str", settable=True, choices=("line",),
+            help="overlay box granularity — line only ('word' was retired: it invented "
+                 "word positions; see overlay/pymupdf_overlay.py)"),
     Setting("overlay_font", "str", settable=True,
             help="path to a Unicode TTF for the overlay; '' = auto-detect"),
     Setting("prefer_apple_vision", "bool", settable=True),
