@@ -209,3 +209,50 @@ def test_fallback_best_text_without_vlm_reading():
     Fusion().run(doc, config_mod.Config())
     assert doc.pages[0].segments[0].best_text == "clean reading"
     assert doc.pages[0].segments[0].source == "fused"
+
+
+# ---- every deterministic engine is "an OCR box" to fusion (models.OCR_SOURCES) ----------
+
+def test_rapid_boxes_are_superseded_by_a_clean_text_layer():
+    # The mixed-page case from the engine A/B labelled set: an exact text-layer line with a
+    # RapidOCR box on top of it. Fusion used to key on {"paddle", "vision"}, so the rapid
+    # box survived beside the text layer and the page rendered its text twice.
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    tl = _seg("tl", 50, 100, 300, 120, "exact text", source="textlayer")
+    tl.best_text = "exact text"
+    rp = _seg("rp", 52, 101, 298, 119, "exatc txet", source="rapid")   # overlaps tl
+    page.segments = [tl, rp]
+    doc = Document(source_path="x", sha256="x", pages=[page])
+    Fusion().run(doc, config_mod.Config())
+    live = [s for s in doc.pages[0].segments if not s.superseded]
+    assert [s.id for s in live] == ["tl"]                  # the exact layer wins, once
+    assert rp.superseded and rp.det_text == "exatc txet"   # kept for provenance, not output
+
+
+def test_rapid_boxes_are_fused_with_the_vlm_reading():
+    # With the reading present, rapid boxes must be clustered and married to the VLM text
+    # exactly like paddle boxes — before, they were skipped and kept their det_text, so a
+    # RapidOCR-routed page silently lost the whole fusion product.
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    page.segments = [
+        _seg("a", 50, 100, 150, 120, "Dea", source="rapid"),
+        _seg("b", 160, 100, 300, 120, "Daviid", source="rapid"),
+        _seg("c", 50, 140, 200, 160, "Todai is", source="rapid"),
+        _seg("d", 210, 140, 320, 160, "poling", source="rapid"),
+    ]
+    page.vlm_reading = "Dear David\nToday is polling day"
+    doc = Document(source_path="x", sha256="x", pages=[page])
+    Fusion().run(doc, config_mod.Config())
+    fused = doc.pages[0].segments
+    assert [s.best_text for s in fused] == ["Dear David", "Today is polling day"]
+    assert all(s.source == "fused" for s in fused)
+
+
+def test_unmatched_rapid_cluster_keeps_its_engine_source():
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    page.segments = [_seg("r1", 50, 100, 200, 116, "alpha", source="rapid")]
+    page.vlm_reading = ""                                     # no reading at all
+    doc = Document(source_path="x", sha256="x", pages=[page])
+    Fusion().run(doc, config_mod.Config())
+    [s] = doc.pages[0].segments
+    assert s.source == "rapid" and s.best_text == "alpha"     # honest provenance, det_text used
