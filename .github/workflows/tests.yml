@@ -1,0 +1,42 @@
+# The extras a plain runner can carry: api + vlm + dev, plus PyMuPDF and numpy from the
+# ocr extra. PaddleOCR (paddlepaddle, model downloads), Apple Vision (macOS only) and
+# RapidOCR are NOT installed here — their tests skip via importorskip / available(), so
+# this job covers everything but the real-engine inference (~2 of ~290 tests on this
+# runner). Runs with the exact pins in constraints.txt so a silent upgrade can't turn a
+# green run red.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            constraints.txt
+
+      - name: Install the runner-safe extras (exact pins)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[api,vlm,dev]" pymupdf numpy -c constraints.txt
+
+      - name: Test
+        run: python -m pytest -q -rs -p no:cacheprovider tests

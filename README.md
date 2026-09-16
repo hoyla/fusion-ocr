@@ -1,5 +1,7 @@
 # fusion-ocr
 
+[![tests](https://github.com/hoyla/fusion-ocr/actions/workflows/tests.yml/badge.svg)](https://github.com/hoyla/fusion-ocr/actions/workflows/tests.yml)
+
 A hybrid **deterministic + Vision-LLM** OCR pipeline for confidential documents.
 
 It pairs a deterministic engine (PaddleOCR / PP-DocLayoutV2, or Apple Vision) with a
@@ -53,7 +55,8 @@ cp config.example.toml config.toml
 
 python -m fusion_ocr.watcher --once   # process anything in in/, then exit
 # drop a PDF into in/ ; artifacts land in out/<sha256>/
-pytest                                # plumbing tests
+pytest                                # ~290 tests in ~20 s; engine tests skip where an
+                                      # engine is absent. CI runs the same on every push/PR.
 ```
 
 Each job's results land in a content-addressed folder `out/<sha256>/` — the three
