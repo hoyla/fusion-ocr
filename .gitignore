@@ -88,3 +88,6 @@ dist/
 !/eval_out/engine_ab/
 /eval_out/engine_ab/*
 !/eval_out/engine_ab/results.csv
+!/eval_out/vision_skip_cost/
+/eval_out/vision_skip_cost/*
+!/eval_out/vision_skip_cost/results.csv
