@@ -63,3 +63,15 @@ def test_unknown_key_is_ignored():
     d["pages"][0]["regions"][0]["legacy_field"] = "ignore me"
     back = Document.from_json(json.dumps(d))
     assert back.pages[0].regions[0].kind == "table"
+
+
+def test_ocr_sources_are_declared_segment_sources_and_not_the_derived_ones():
+    # Adding an engine means adding its label in BOTH places — the Literal (the schema every
+    # serialised Document carries) and OCR_SOURCES (what fusion/reader/overlay treat as an
+    # OCR box). The 2026-09-16 RapidOCR bug was exactly a label present in neither.
+    from typing import get_args
+
+    from fusion_ocr.models import OCR_SOURCES, SegmentSource
+    declared = set(get_args(SegmentSource))
+    assert OCR_SOURCES <= declared
+    assert {"textlayer", "fused", "vlm"} <= declared - OCR_SOURCES   # derived, not engines

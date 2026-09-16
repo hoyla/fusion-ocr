@@ -54,6 +54,19 @@ def test_overlay_skips_textlayer_to_avoid_duplication(tmp_path):
     assert "HEADER FROM TEXT LAYER" not in text    # text-layer text is NOT duplicated
 
 
+@pytest.mark.parametrize("source", sorted(__import__("fusion_ocr.models", fromlist=["OCR_SOURCES"]).OCR_SOURCES) + ["fused"])
+def test_any_engine_text_is_overlaid(tmp_path, source):
+    # The overlay carries OCR-derived text whichever engine (or fusion) produced it; only the
+    # source PDF's own text layer is excluded (it is already searchable, and would double).
+    pytest.importorskip("fitz", reason="needs PyMuPDF")
+    import fitz
+    doc = _doc_with_segment(tmp_path, "engine agnostic line")
+    doc.pages[0].segments[0].source = source
+    out = tmp_path / "ov.pdf"
+    assert build_overlay(doc, out)
+    assert fitz.open(out)[0].search_for("engine agnostic line")
+
+
 def test_overlay_thai_searchable(tmp_path):
     pytest.importorskip("fitz", reason="needs PyMuPDF")
     import fitz
