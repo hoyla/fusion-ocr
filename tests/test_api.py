@@ -157,3 +157,52 @@ def test_config_save_persists_runtime_changes(tmp_path):
     r = client.post("/config/save")
     assert r.status_code == 200 and r.json()["saved"] == str(cfg_path)
     assert config_mod.load(cfg_path).fuse_min_sim == 0.5  # now on disk
+
+
+# ---- review 03 (a): uploads are keyed by content, not by the client's filename ------
+
+def test_same_name_different_content_does_not_overwrite(tmp_path):
+    from pathlib import Path
+
+    from fusion_ocr.jobs import JobStore
+    client, cfg = _client(tmp_path)
+    a = _post_pdf(client, b"%PDF-1.4\nAAA\n%%EOF").json()
+    b = _post_pdf(client, b"%PDF-1.4\nBBB\n%%EOF").json()       # both arrive as "doc.pdf"
+    assert a["sha256"] != b["sha256"]
+    parked = sorted(p.name for p in (tmp_path / "in").iterdir() if p.is_file())
+    assert len(parked) == 2 and all(n.endswith("__doc.pdf") for n in parked)
+    jobs = JobStore(cfg.out_dir / "jobs.sqlite")
+    for j in (a, b):                                              # each job's file still exists
+        row = jobs.get(j["sha256"])
+        assert row["status"] == "queued" and Path(row["source_path"]).exists()
+        assert j["original_name"] == "doc.pdf"
+    assert client.get(f"/jobs/{a['sha256']}").json()["original_name"] == "doc.pdf"
+    assert all(j["original_name"] == "doc.pdf" for j in client.get("/jobs").json()["jobs"])
+
+
+def test_reupload_of_identical_content_is_idempotent(tmp_path):
+    client, _ = _client(tmp_path)
+    body = b"%PDF-1.4\nsame\n%%EOF"
+    first = _post_pdf(client, body).json()
+    second = client.post("/jobs", files={"pdf": ("renamed.pdf", body, "application/pdf")}).json()
+    assert first["sha256"] == second["sha256"]
+    assert second["original_name"] == "doc.pdf"                  # first registration's name
+    files = [p for p in (tmp_path / "in").iterdir() if p.is_file()]
+    assert len(files) == 1                                       # one parked copy, not two
+    assert not list((tmp_path / "in" / ".incoming").iterdir())   # staging area left clean
+
+
+def test_rejected_upload_leaves_no_staging_debris(tmp_path):
+    client, _ = _client(tmp_path, max_upload_mb=0.001)
+    assert _post_pdf(client, b"%PDF-1.4\n" + b"0" * 4000).status_code == 413
+    assert not [p for p in (tmp_path / "in").iterdir() if p.is_file()]
+    assert not list((tmp_path / "in" / ".incoming").iterdir())
+
+
+def test_parked_name_is_content_keyed_and_bounded():
+    from fusion_ocr.api import _parked_name
+    d = "0123456789abcdef" + "f" * 48
+    assert _parked_name(d, "report.pdf", "pdf") == "0123456789abcdef__report.pdf"
+    assert _parked_name(d, "upload.pdf", "png") == "0123456789abcdef__upload.png"   # honest ext
+    long = _parked_name(d, "x" * 400 + ".pdf", "pdf")
+    assert long.endswith(".pdf") and len(long) < 200
