@@ -28,6 +28,7 @@ from pathlib import Path
 
 from . import config as config_mod
 from . import ingest, storage
+from . import settings as settings_mod
 from .jobs import JobStore
 from .pipeline import process, sha256_of
 from .vlm.openai_compat import preflight_reader
@@ -38,6 +39,31 @@ from .vlm.openai_compat import preflight_reader
 # to the call's own timeout, e.g. the reader client's.)
 _LEASE_SECONDS = 600.0
 _HEARTBEAT_SECONDS = 30.0
+
+
+class OverrideSync:
+    """Pull the runtime config overrides recorded by PATCH /config (shared job store) onto
+    this worker's Config whenever the set changes — so an operator's tuning reaches the
+    process that runs the pipeline, not just the API that accepted it (review 03). Applied
+    values re-key recipe_fingerprint like any config change."""
+
+    def __init__(self) -> None:
+        self.version = -1.0   # never pulled yet (an empty table is version 0.0)
+
+    def pull(self, cfg: config_mod.Config, jobs: JobStore) -> bool:
+        """Apply the current override set if it changed since the last pull; True if applied."""
+        overrides, version = jobs.overrides()
+        if version == self.version:
+            return False
+        self.version = version
+        if overrides:
+            try:
+                settings_mod.apply(cfg, overrides)
+            except ValueError as exc:   # a stale/unknown path from a newer API: skip, don't die
+                print(f"[warn] runtime overrides not applied: {exc}", file=sys.stderr)
+                return False
+            print(f"[config] applied runtime overrides: {sorted(overrides)}")
+        return bool(overrides)
 
 
 class _Heartbeat:
@@ -85,12 +111,16 @@ def scan_once(cfg: config_mod.Config, jobs: JobStore,
               force: bool = False, rerun_from: str | None = None,
               min_settle: float = 2.0, move_processed: bool = False,
               lease_seconds: float = _LEASE_SECONDS,
-              heartbeat_seconds: float = _HEARTBEAT_SECONDS) -> int:
+              heartbeat_seconds: float = _HEARTBEAT_SECONDS,
+              overrides: OverrideSync | None = None) -> int:
     in_dir = Path(cfg.in_dir)
     in_dir.mkdir(parents=True, exist_ok=True)
     processed = 0
     reprocess = force or rerun_from is not None
     now = time.time()
+    # Runtime config first: whatever PATCH /config recorded since the last scan applies to
+    # every job this scan runs.
+    (overrides or OverrideSync()).pull(cfg, jobs)
     # Lease reaper first: any job still marked running whose worker stopped heartbeating
     # goes back to the queue, where this very scan can pick it up.
     for sha in jobs.requeue_stale(lease_seconds):
@@ -197,15 +227,16 @@ def main() -> None:
         print(f"[warn] READER PREFLIGHT FAILED — VLM pages will fall back to det_text until the "
               f"reader is up: {detail}", file=sys.stderr)
 
+    overrides = OverrideSync()   # one per worker: re-applies only when the set changes
     if args.once:
         # --once never moves: a manual re-run shouldn't disturb the drop folder.
-        scan_once(cfg, jobs, force=args.force, rerun_from=args.rerun_from)
+        scan_once(cfg, jobs, force=args.force, rerun_from=args.rerun_from, overrides=overrides)
         return
     # Loop mode watches for NEW files; --force/--rerun-from are for one-shot reprocessing.
     try:
         while True:
             try:
-                scan_once(cfg, jobs, move_processed=cfg.move_processed)
+                scan_once(cfg, jobs, move_processed=cfg.move_processed, overrides=overrides)
             except Exception as exc:  # noqa: BLE001 — one bad scan must not stop the worker
                 print(f"[error] scan failed: {exc!r} — retrying next interval", file=sys.stderr)
             time.sleep(args.interval)

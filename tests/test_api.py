@@ -208,6 +208,44 @@ def test_parked_name_is_content_keyed_and_bounded():
     assert long.endswith(".pdf") and len(long) < 200
 
 
+# ---- review 03: PATCH /config reaches the worker via the shared job store ----------
+
+def test_patch_config_is_recorded_for_the_worker_and_survives_api_restart(tmp_path):
+    from fusion_ocr import config as config_mod
+    from fusion_ocr.api import create_app
+    from fusion_ocr.jobs import JobStore
+    from fastapi.testclient import TestClient
+    client, cfg = _client(tmp_path)
+    r = client.patch("/config", json={"fuse_min_sim": 0.5, "vlm.max_tokens": 1000})
+    assert r.status_code == 200 and cfg.fuse_min_sim == 0.5
+    store = JobStore(cfg.out_dir / "jobs.sqlite")                  # what a worker reads
+    assert store.overrides()[0] == {"fuse_min_sim": 0.5, "vlm.max_tokens": 1000}
+    # a restarted API (fresh file config) comes up with the runtime overrides applied
+    cfg2 = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out", airgap=False)
+    client2 = TestClient(create_app(cfg2, token=_TOKEN), headers={"Authorization": f"Bearer {_TOKEN}"})
+    shown = {s["path"]: s["value"] for s in client2.get("/config").json()["settings"]}
+    assert shown["fuse_min_sim"] == 0.5 and shown["vlm.max_tokens"] == 1000
+    assert client.patch("/config", json={"airgap": False}).status_code == 400   # still refused
+    assert store.overrides()[0] == {"fuse_min_sim": 0.5, "vlm.max_tokens": 1000}   # and not recorded
+
+
+def test_config_save_promotes_overrides_to_disk_and_clears_them(tmp_path):
+    pytest.importorskip("tomli_w", reason="needs the api extra")
+    from fastapi.testclient import TestClient
+
+    from fusion_ocr import config as config_mod
+    from fusion_ocr.api import create_app
+    from fusion_ocr.jobs import JobStore
+    cfg_path = tmp_path / "config.toml"
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out", airgap=False)
+    client = TestClient(create_app(cfg, token="t", config_path=cfg_path),
+                        headers={"Authorization": "Bearer t"})
+    client.patch("/config", json={"fuse_min_sim": 0.5})
+    store = JobStore(cfg.out_dir / "jobs.sqlite")
+    assert store.overrides()[0] == {"fuse_min_sim": 0.5}
+    assert client.post("/config/save").status_code == 200
+    assert config_mod.load(cfg_path).fuse_min_sim == 0.5           # on disk now ...
+    assert store.overrides() == ({}, 0.0)                          # ... so the runtime set is cleared
 # ---- review 03: artifacts are fetchable over HTTP; resume snapshots aren't artifacts ----
 
 def _job_with_output(tmp_path, cfg, sha):

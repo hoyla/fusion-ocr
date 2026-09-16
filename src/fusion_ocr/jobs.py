@@ -11,6 +11,14 @@ and `requeue_stale` hands back any running job whose heartbeat is older than the
 (review 03 (b)). The lease targets a DEAD worker, not a hung one: a worker stuck inside a
 call still heartbeats, and that failure belongs to the call's own timeout.
 
+The store also carries the RUNTIME CONFIG OVERRIDES (`settings` table): `PATCH /config`
+used to mutate only the API process's Config, so in the two-process deployment the worker —
+the process that actually runs the pipeline — never saw the change (review 03). Now the API
+records each validated override here, and both processes apply the current set on top of
+their file config (the worker at every scan, the API at startup), so a runtime tuning reaches
+the jobs and re-keys their recipe fingerprint. `POST /config/save` promotes the overrides to
+config.toml and clears them (they are then the file).
+
 Tiny on purpose — a dozen docs a day needs nothing more. But this method surface IS the
 contract a future distributed queue would implement: an SQS / ElasticMQ adapter (on-estate,
 airgap-compatible) is a drop-in here, not a rewrite (visibility timeout = the lease). Keep all
@@ -18,6 +26,7 @@ queue access going through these methods so that swap stays cheap."""
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from pathlib import Path
@@ -31,6 +40,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     created_at    REAL NOT NULL,
     updated_at    REAL NOT NULL,         -- last state change OR heartbeat (see touch)
     original_name TEXT                   -- the client's / dropped filename (provenance)
+);
+CREATE TABLE IF NOT EXISTS settings (
+    path        TEXT PRIMARY KEY,        -- dotted Config path, e.g. fuse_min_sim / vlm.model
+    value       TEXT NOT NULL,           -- JSON-encoded, already validated (settings.validate)
+    updated_at  REAL NOT NULL
 );
 """
 
@@ -135,6 +149,33 @@ class JobStore:
                 "UPDATE jobs SET status=?, error=?, updated_at=? WHERE sha256=?",
                 (status, error, time.time(), sha256),
             )
+
+    # -- runtime config overrides (shared by the API and every worker) -----------------
+
+    def set_overrides(self, updates: dict) -> None:
+        """Record validated {path: value} runtime overrides (upsert; later wins)."""
+        now = time.time()
+        with self._conn() as c:
+            for path, value in updates.items():
+                c.execute(
+                    "INSERT INTO settings(path, value, updated_at) VALUES(?,?,?)"
+                    " ON CONFLICT(path) DO UPDATE SET value=excluded.value,"
+                    " updated_at=excluded.updated_at",
+                    (path, json.dumps(value), now),
+                )
+
+    def overrides(self) -> tuple[dict, float]:
+        """The current override set and its version — the latest updated_at (0.0 when
+        empty) — so a worker can apply the set only when it has changed."""
+        with self._conn() as c:
+            rows = c.execute("SELECT path, value, updated_at FROM settings").fetchall()
+        return ({r["path"]: json.loads(r["value"]) for r in rows},
+                max((r["updated_at"] for r in rows), default=0.0))
+
+    def clear_overrides(self) -> None:
+        """Drop every override — after POST /config/save wrote them into config.toml."""
+        with self._conn() as c:
+            c.execute("DELETE FROM settings")
 
     def list(self, status: str | None = None) -> list[sqlite3.Row]:
         """All jobs, newest first — optionally filtered by status. Backs the 'out' feed
