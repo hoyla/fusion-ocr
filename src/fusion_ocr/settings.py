@@ -47,7 +47,8 @@ SETTINGS: tuple[Setting, ...] = (
             help="path to a Unicode TTF for the overlay; '' = auto-detect"),
     Setting("prefer_apple_vision", "bool", settable=True),
     Setting("apple_vision_skip_vlm", "float", settable=True, lo=0.0, hi=1.0,
-            help="skip the VLM read when mean Apple Vision confidence >= this"),
+            help="skip the VLM read when mean Apple Vision confidence >= this; 0 disables "
+                 "(default — priced at ~7 recall points on print, vision_skip_cost manifest)"),
     Setting("paddle_skip_vlm", "float", settable=True, lo=0.0, hi=1.0,
             help="skip the VLM read when mean PaddleOCR confidence >= this; 0 disables "
                  "(default — enable on the paddle_skip_cost eval's evidence)"),

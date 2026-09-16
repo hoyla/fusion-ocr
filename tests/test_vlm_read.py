@@ -322,3 +322,35 @@ def test_preflight_reader_reports_not_ready(monkeypatch):
     ok, detail = openai_compat.preflight_reader(config_mod.Config())
     assert not ok
     assert "not ready" in detail.lower()
+
+
+def test_vision_skip_disabled_by_default(tmp_path):
+    # Ships DISABLED (0.0) since the skip was priced (vision_skip_cost_2026-09-16.md): even a
+    # fully confident Vision page still gets the VLM read — and 0 must mean "never skip", not
+    # "always skip" (the guard the Paddle tier already had).
+    from fusion_ocr.stages.vlm_read import _vision_confident
+    doc = Document(source_path=str(_scan_pdf(tmp_path)), sha256="x")
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    seg = _ink_seg("clean print", conf=1.0)
+    seg.source = "vision"
+    page.segments = [seg]
+    doc.pages = [page]
+    assert config_mod.Config().apple_vision_skip_vlm == 0.0
+    assert _vision_confident(page, 0.0) is False
+
+    fake = _FakeVLM("the reading")
+    VlmRead(client=fake).run(doc, config_mod.Config())
+    assert fake.calls == 1 and page.vlm_reading == "the reading"
+
+
+def test_vision_skip_still_works_when_opted_in(tmp_path):
+    import dataclasses
+    doc = Document(source_path=str(_scan_pdf(tmp_path)), sha256="x")
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    seg = _ink_seg("clean print", conf=0.99)
+    seg.source = "vision"
+    page.segments = [seg]
+    doc.pages = [page]
+    fake = _FakeVLM("should never be asked")
+    VlmRead(client=fake).run(doc, dataclasses.replace(config_mod.Config(), apple_vision_skip_vlm=0.92))
+    assert fake.calls == 0 and page.read_model == "apple_vision"

@@ -56,12 +56,15 @@ class Config:
     airgap: bool = True
     granularity: str = "line"
     overlay_font: str = ""  # path to a Unicode TTF for the overlay; "" -> auto-detect
-    # Apple Vision (macOS, on-device) as the fast deterministic engine for supported
-    # scripts. When its mean confidence on a page is >= apple_vision_skip_vlm, the VLM
-    # read is skipped (Vision's text IS the reading — the cheap tier); harder pages
-    # still escalate to the VLM.
+    # Apple Vision (macOS, on-device) as the fast deterministic GEOMETRY engine for
+    # supported scripts. apple_vision_skip_vlm: when a page's mean Vision confidence is
+    # >= this, the VLM read is skipped and Vision's det_text IS the reading. Ships
+    # DISABLED (0.0) since 2026-09-16: priced by eval_out/vision_skip_cost.py — the old
+    # 0.92 default fired on 95% of pages and cost ~7 recall points + 5-6 placement points
+    # on clean scanned print (Vision's confidence does not find the pages it misreads:
+    # pages rated >= 0.98 still lose 6). Enable only knowingly, on that evidence.
     prefer_apple_vision: bool = False
-    apple_vision_skip_vlm: float = 0.92
+    apple_vision_skip_vlm: float = 0.0
     # The same cheap-tier contract for PaddleOCR (cross-platform — the Vision tier is
     # macOS-only, so the Linux/VPC deployment has no VLM-skip without this): when the
     # page's mean PaddleOCR confidence is >= paddle_skip_vlm, det_text IS the reading.
@@ -134,7 +137,7 @@ def load(path: str | Path = "config.toml") -> Config:
         granularity=run.get("granularity", "line"),
         overlay_font=run.get("overlay_font", ""),
         prefer_apple_vision=run.get("prefer_apple_vision", False),
-        apple_vision_skip_vlm=run.get("apple_vision_skip_vlm", 0.92),
+        apple_vision_skip_vlm=run.get("apple_vision_skip_vlm", 0.0),
         paddle_skip_vlm=run.get("paddle_skip_vlm", 0.0),
         prefer_rapidocr=run.get("prefer_rapidocr", False),
         det_model=run.get("det_model", ""),

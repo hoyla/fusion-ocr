@@ -60,8 +60,10 @@ skip is the part that isn't.
 
 ## Recommendation (Luke decides; the change lands as its own PR carrying this table)
 
-Set `apple_vision_skip_vlm = 0` (disabled), matching `paddle_skip_vlm`, and reword the "cheap
-tier: Vision's text IS the reading" framing in `routing.md` / `configuration.md` /
+Set `apple_vision_skip_vlm = 0` (disabled), matching `paddle_skip_vlm` — NB the code needs the
+same `threshold <= 0 → never skip` guard the Paddle tier has; without it 0 means *always*
+skip (caught while writing the decision PR) — and reword the "cheap tier: Vision's text IS
+the reading" framing in `routing.md` / `configuration.md` /
 `config.example.toml`: Vision stays available as the deterministic **geometry** engine
 (`prefer_apple_vision`), never as the reading. The re-add trigger is the same as for the Paddle
 skip — a per-page readability signal that actually discriminates (mean detector confidence is

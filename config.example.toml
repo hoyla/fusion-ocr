@@ -12,13 +12,16 @@ granularity = "line"
 # scripts (Thai/CJK/Arabic) to be searchable — base-14 fonts break search there.
 # "" = auto-detect (macOS Arial Unicode / common Noto paths); else give a TTF path.
 overlay_font = ""
-# Apple Vision (macOS, on-device) as the fast deterministic engine for supported
-# scripts (en/Thai/Cyrillic/Arabic/CJK). Sub-2s, no model, no server, fully sealed —
-# ideal for the airgap tier and clean printed text. When a page's mean Vision
-# confidence >= apple_vision_skip_vlm, the VLM read is skipped (cheap tier); harder
-# pages (handwriting/degraded) still fall through / escalate to the VLM.
+# Apple Vision (macOS, on-device) as the fast deterministic GEOMETRY engine for supported
+# scripts (en/Thai/Cyrillic/Arabic/CJK). Sub-2s, no model, no server, fully sealed — a
+# defensible choice for the airgap tier on receipts-class print (forms: ~3 recall points
+# behind PaddleOCR). apple_vision_skip_vlm: skip the VLM read when a page's mean Vision
+# confidence >= this, letting Vision's text stand in for the reading. 0 = disabled (the
+# default since 2026-09-16): the old 0.92 fired on 95% of pages and cost ~7 recall points
+# on clean print — Vision's confidence doesn't find the pages it misreads. See
+# eval_out/manifests/vision_skip_cost_2026-09-16.md before enabling.
 prefer_apple_vision = false
-apple_vision_skip_vlm = 0.92
+apple_vision_skip_vlm = 0.0
 # The same cheap tier for PaddleOCR (cross-platform — the only VLM-skip available off
 # macOS). 0.0 DISABLES it (the default): unlike the Vision tier this skip ships
 # unmeasured — run eval_out/paddle_skip_cost.py and enable on its evidence.
