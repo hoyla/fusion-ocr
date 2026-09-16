@@ -205,8 +205,15 @@ executed, every tripwire diagnosis certified, every claim manifest-backed
   July "PaddleOCR" number was v6 unknowingly; the v5→v6 generation delta is 13–37 recall pts
   (via the new `det_model`/`rec_model` knob). **RapidOCR implemented** (`engines/rapid.py`,
   ONNX): small-rec default ×16–22 faster but fails the quality bar; **medium-rec meets all
-  three adoption criteria at n=30** (recall −0.009/+0.005, ×4.5–7.1 faster, symmetric tail) —
-  full-set same-runner verdict pending (desktop run), adoption PR after.
+  three adoption criteria at n=30** (recall −0.009/+0.005, ×4.5–7.1 faster, symmetric tail).
+  **Full-set verdict (2026-09-16): NOT adopted.** Same runner, desktop paddle rows merged by
+  key: FUNSD −0.013 recall (bootstrap CI excludes zero) with a ONE-sided tail (25 vs 5 items
+  beyond ±0.05 — the n=30 "symmetric" reading didn't survive); SROIE +0.003 (parity);
+  reading order preserved on the labelled set. A pre-registered medium-det arm recovered
+  +0.003 but still failed the bar (−0.011, 22 vs 7) and gave back most of the speed. Side
+  finding: RapidOCR segments were never fused with the VLM reading or superseded by a text
+  layer (fusion's private `{"paddle","vision"}` set) — fixed in #48 before any of this could
+  have mattered in production.
 - **Qwen3.8-27B rejected** (`manifests/stream_f_q38_2026-08-20.md`): the cached-but-unbenchmarked
   dense 27B loses to the Qwen3.6-35B-A3B default on every metric and is ~36% slower at FUNSD
   n=50 — the 3B-active MoE wins both axes.

@@ -57,6 +57,14 @@ ARMS = [
     # (det stays small — word counts showed detection wasn't the gap). If this closes
     # recall to within the plan's bar, the x15+ speedup becomes an adoption case.
     ("rapid_medrec", {"prefer_rapidocr": True}),
+    # Full-set follow-up (2026-09-16, engine_ab_verdict.py): rapid_medrec's FUNSD full-set
+    # loss (-0.013, a one-sided tail of 25 vs 5 items beyond ±0.05) split into a DETECTION
+    # part (~1/3 of the big losers: the small ONNX detector finds far fewer words) and a
+    # recognition part. This arm = medium det + medium rec. PRE-REGISTERED read: it is an
+    # adoption case iff FUNSD full-set Δrecall vs paddle_v6m >= -0.01 AND its ±0.05 tail
+    # counts are within 2x of each other AND SROIE stays >= -0.01; otherwise the ONNX port is
+    # not quality-equal on forms at any tier it offers and the engine question closes.
+    ("rapid_medboth", {"prefer_rapidocr": True}),
 ]
 
 
@@ -90,7 +98,8 @@ def run_sweep(full_arm: str | None = None):
         if full_arm is not None and arm != full_arm:
             continue
         from fusion_ocr.engines import rapid
-        rapid.set_rec_tier("medium" if arm == "rapid_medrec" else None)
+        rapid.set_rec_tier("medium" if arm in ("rapid_medrec", "rapid_medboth") else None)
+        rapid.set_det_tier("medium" if arm == "rapid_medboth" else None)
         cfg = dataclasses.replace(base, out_dir=RES / "out" / arm, **overrides)
         todo = [it for it in items if (arm, it[0], it[1].stem) not in done]
         print(f"== {arm}: {len(todo)}/{len(items)} to go", flush=True)
@@ -124,8 +133,13 @@ def run_sweep(full_arm: str | None = None):
 
 def report():
     rows = list(csv.DictReader(CSV_OUT.open()))
-    print("=== engine A/B (micro-avg; speed = mean t_ocr_det on identical pages) ===")
-    print(f"{'arm':>11} {'ds':>6} {'n':>3} {'recall':>8} {'prec':>8} {'cer':>8} {'t_det':>7}")
+    # Speed is SAME-MACHINE ONLY (method pin, PR #45): the CSV now also carries full-set rows
+    # run on the desktop (paddle_v6m) and full-set laptop rows, so the mean t_ocr_det is
+    # taken over the seeded n=30 items only — the one set every arm ran on the laptop.
+    seeded = {(ds, img.stem) for ds, img, _ in sampled_items()}
+    print("=== engine A/B (micro-avg over all rows; speed = mean t_ocr_det on the seeded "
+          "n=30 pages, same machine) ===")
+    print(f"{'arm':>13} {'ds':>6} {'n':>4} {'recall':>8} {'prec':>8} {'cer':>8} {'t_det':>7}")
     agg = {}
     for arm, _ in ARMS:
         for ds in ("funsd", "sroie"):
@@ -137,17 +151,18 @@ def report():
             hw = sum(int(r["hyp_words"]) for r in sub) or 1
             ov = sum(int(r["word_overlap"]) for r in sub)
             cn = sum(int(r["ref_chars"]) for r in sub) or 1
-            ts = [float(r["t_ocr_det"]) for r in sub if r["t_ocr_det"]]
+            ts = [float(r["t_ocr_det"]) for r in sub
+                  if r["t_ocr_det"] and (ds, r["id"]) in seeded]
             a = {"n": len(sub), "recall": ov / wn, "prec": ov / hw,
                  "cer": sum(float(r["cer"]) * int(r["ref_chars"]) for r in sub) / cn,
                  "t": sum(ts) / len(ts) if ts else float("nan")}
             agg[(arm, ds)] = a
-            print(f"{arm:>11} {ds:>6} {a['n']:>3} {a['recall']:>8.4f} {a['prec']:>8.4f} "
+            print(f"{arm:>13} {ds:>6} {a['n']:>4} {a['recall']:>8.4f} {a['prec']:>8.4f} "
                   f"{a['cer']:>8.4f} {a['t']:>6.2f}s")
     if ("paddle_v6m", "funsd") in agg and ("rapid", "funsd") in agg:
         print("\nDecision inputs (plan criteria: adopt iff faster AND recall within ~0.01"
               " + geometry equivalent [pre-verified]):")
-        for rarm in ("rapid", "rapid_medrec"):
+        for rarm in ("rapid", "rapid_medrec", "rapid_medboth"):
             for ds in ("funsd", "sroie"):
                 a, b = agg.get(("paddle_v6m", ds)), agg.get((rarm, ds))
                 if a and b:
