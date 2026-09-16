@@ -97,3 +97,20 @@ def test_pre_existing_store_is_migrated_on_open(tmp_path):
     assert jobs.get("3333")["original_name"] is None  # old rows: unknown, not invented
     assert jobs.upsert_queued("4" * 64, "/in/new.pdf", original_name="new.pdf")
     assert jobs.get("4" * 64)["original_name"] == "new.pdf"
+
+
+# ---- runtime config overrides: the shared state PATCH /config writes and workers read ----
+
+def test_overrides_round_trip_version_and_clear(tmp_path):
+    jobs = JobStore(tmp_path / "jobs.sqlite")
+    assert jobs.overrides() == ({}, 0.0)                    # empty table = version 0
+    jobs.set_overrides({"fuse_min_sim": 0.5, "prefer_apple_vision": True})
+    got, v1 = jobs.overrides()
+    assert got == {"fuse_min_sim": 0.5, "prefer_apple_vision": True} and v1 > 0
+    import time
+    time.sleep(0.01)
+    jobs.set_overrides({"fuse_min_sim": 0.6})               # later wins, version advances
+    got, v2 = jobs.overrides()
+    assert got["fuse_min_sim"] == 0.6 and got["prefer_apple_vision"] is True and v2 > v1
+    jobs.clear_overrides()
+    assert jobs.overrides() == ({}, 0.0)

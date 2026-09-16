@@ -116,6 +116,12 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
     jobs = JobStore(Path(cfg.out_dir) / "jobs.sqlite")
     in_dir = Path(cfg.in_dir)
     in_dir.mkdir(parents=True, exist_ok=True)
+    # Runtime overrides recorded by earlier PATCH /config calls outlive this process: apply
+    # them on top of the file config so GET /config shows what the worker is actually
+    # running with (the worker applies the same set at every scan).
+    stored, _ = jobs.overrides()
+    if stored:
+        settings_mod.apply(cfg, stored)
 
     # app-level dependency -> every route requires the bearer token
     app = FastAPI(title="fusion-ocr", dependencies=[Depends(_require_auth)])
@@ -184,20 +190,29 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
 
     @app.patch("/config")
     def patch_config(updates: dict):
-        # Configure the allowlisted settings in-process (affects subsequent jobs; not
-        # written back to config.toml). Output-affecting changes re-key recipe_fingerprint,
-        # so the next job reprocesses rather than reusing a stale cache.
+        # Configure the allowlisted settings at runtime (not written back to config.toml).
+        # The validated values are recorded in the shared job store so the WORKER — a
+        # separate process in the two-process deployment — applies them at its next scan;
+        # until then, PATCH only reached this process and the jobs never saw the change
+        # (review 03). Output-affecting changes re-key recipe_fingerprint, so the next job
+        # reprocesses rather than reusing a stale cache.
         try:
-            return settings_mod.apply(cfg, updates)
+            coerced = settings_mod.validate(updates)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+        jobs.set_overrides(coerced)
+        return settings_mod.apply(cfg, coerced)
 
     @app.post("/config/save")
     def save_config():
         # Promote the current in-process config (including any PATCH /config tuning) to
         # disk. Explicit and opt-in: PATCH alone never persists, so a transient experiment
         # can't silently become the on-disk default. Writes a generated file (no comments).
-        return {"saved": config_mod.save(cfg, config_path)}
+        # The saved file now carries the overrides, so the runtime set is cleared: file
+        # config is the single source again for every process that (re)starts.
+        saved = config_mod.save(cfg, config_path)
+        jobs.clear_overrides()
+        return {"saved": saved}
 
     return app
 

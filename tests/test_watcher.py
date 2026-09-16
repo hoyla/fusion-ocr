@@ -183,3 +183,28 @@ def test_redrop_of_done_content_is_moved_out_not_rehashed_forever(tmp_path, monk
     assert len(ran) == 1                                     # processed exactly once
     assert not again.exists()                                # handled: moved with the rest
     assert len(list((tmp_path / "in" / "processed").glob("*.pdf"))) == 1
+
+
+# ---- review 03: PATCH /config must reach the worker (runtime overrides via the job store)
+
+def test_worker_applies_runtime_overrides_from_the_store(tmp_path):
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out")
+    jobs = JobStore(tmp_path / "jobs.sqlite")
+    jobs.set_overrides({"fuse_min_sim": 0.5, "vlm.model": "some/other-reader"})   # what the API recorded
+    sync = watcher_mod.OverrideSync()
+    assert watcher_mod.scan_once(cfg, jobs, min_settle=0.0, overrides=sync) == 0
+    assert cfg.fuse_min_sim == 0.5 and cfg.vlm.model == "some/other-reader"      # the worker saw it
+    v = sync.version
+    assert sync.pull(cfg, jobs) is False and sync.version == v                     # unchanged set: no-op
+    import time
+    time.sleep(0.01)
+    jobs.set_overrides({"fuse_min_sim": 0.7})
+    assert sync.pull(cfg, jobs) is True and cfg.fuse_min_sim == 0.7                # a change is picked up
+
+
+def test_worker_survives_an_unknown_override(tmp_path, capsys):
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out")
+    jobs = JobStore(tmp_path / "jobs.sqlite")
+    jobs.set_overrides({"not_a_setting": 1})            # e.g. written by a newer API build
+    assert watcher_mod.OverrideSync().pull(cfg, jobs) is False
+    assert "not applied" in capsys.readouterr().err     # logged, not fatal
