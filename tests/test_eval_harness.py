@@ -87,7 +87,9 @@ def test_evaluate_concatenates_across_pdfs_and_pages_default_to_all(tmp_path, fa
         fake_process.src = a if Path(img_pdf).stem.startswith("a_") else b
         return stub(img_pdf, cfg, pipeline=pipeline, **kw)
     monkeypatch.setattr(pipeline_mod, "process", per_source)
-    results = harness.evaluate([a, b], config_mod.Config(airgap=False), tmp_root=tmp_path / "w")
+    from fusion_ocr.eval import workdir as wd
+    monkeypatch.setattr(wd, "WORK_ROOT", tmp_path / "w")   # evaluate() has no tmp_root: run-scoped
+    results = harness.evaluate([a, b], config_mod.Config(airgap=False))
     assert [(Path(r["pdf"]).name, r["page"]) for r in results] == [("a.pdf", 0), ("a.pdf", 1), ("b.pdf", 0)]
 
 
