@@ -15,8 +15,16 @@ from typing import Literal, Union, get_args, get_origin, get_type_hints
 
 Point = tuple[float, float]
 
-SegmentSource = Literal["textlayer", "paddle", "vision", "vlm", "fused"]
+SegmentSource = Literal["textlayer", "paddle", "vision", "rapid", "vlm", "fused"]
 RegionKind = Literal["paragraph", "table", "figure", "header", "footer", "other"]
+
+# The deterministic OCR engines — the sources whose segments are "an OCR box" (geometry +
+# det_text): PaddleOCR, Apple Vision, RapidOCR. Every stage that treats OCR boxes generically
+# (text-layer supersession, line fusion with the VLM reading, the reader's sanity checks) keys
+# on THIS set, never on one engine's name. Fusion used to carry its own {"paddle", "vision"}:
+# RapidOCR pages were silently never fused with the reading, and never superseded by an exact
+# text layer, so a mixed page rendered its text twice (engine A/B labelled set, 2026-09-16).
+OCR_SOURCES: frozenset[str] = frozenset({"paddle", "vision", "rapid"})
 
 
 @dataclass
