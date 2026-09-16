@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
 from fusion_ocr import config as config_mod
-from fusion_ocr.models import Box, Document, Page, Region, Segment
+from fusion_ocr.models import OCR_SOURCES, Box, Document, Page, Region, Segment
 from fusion_ocr.stages.fusion import (
     Fusion, _cluster_lines, _cluster_within_regions, _nw_align, _word_distribute,
 )
@@ -211,34 +213,53 @@ def test_fallback_best_text_without_vlm_reading():
     assert doc.pages[0].segments[0].source == "fused"
 
 
-# ---- every deterministic engine is "an OCR box" to fusion (models.OCR_SOURCES) ----------
+# ---- the engine contract: EVERY deterministic engine is "an OCR box" to fusion ----------
+# Parametrised over models.OCR_SOURCES so the next engine is safe by construction. The
+# 2026-09-16 RapidOCR case: fusion kept its own {"paddle", "vision"} set, so "rapid" boxes
+# were never superseded by a text layer (a mixed page rendered its text twice) and — worse —
+# never fused with the VLM reading at all; the A/B ran deterministic-only, so nothing showed.
 
-def test_rapid_boxes_are_superseded_by_a_clean_text_layer():
-    # The mixed-page case from the engine A/B labelled set: an exact text-layer line with a
-    # RapidOCR box on top of it. Fusion used to key on {"paddle", "vision"}, so the rapid
-    # box survived beside the text layer and the page rendered its text twice.
+ENGINES = sorted(OCR_SOURCES)
+
+
+@pytest.mark.parametrize("source", ENGINES)
+def test_any_engine_box_is_superseded_by_a_clean_text_layer(source):
     page = Page(index=0, needs_ocr=True, width=612, height=792)
     tl = _seg("tl", 50, 100, 300, 120, "exact text", source="textlayer")
     tl.best_text = "exact text"
-    rp = _seg("rp", 52, 101, 298, 119, "exatc txet", source="rapid")   # overlaps tl
-    page.segments = [tl, rp]
+    ocr = _seg("ocr", 52, 101, 298, 119, "exatc txet", source=source)   # overlaps tl
+    page.segments = [tl, ocr]
     doc = Document(source_path="x", sha256="x", pages=[page])
     Fusion().run(doc, config_mod.Config())
     live = [s for s in doc.pages[0].segments if not s.superseded]
-    assert [s.id for s in live] == ["tl"]                  # the exact layer wins, once
-    assert rp.superseded and rp.det_text == "exatc txet"   # kept for provenance, not output
+    assert [s.id for s in live] == ["tl"]                    # the exact layer wins, once
+    assert ocr.superseded and ocr.det_text == "exatc txet"   # kept for provenance, not output
 
 
-def test_rapid_boxes_are_fused_with_the_vlm_reading():
-    # With the reading present, rapid boxes must be clustered and married to the VLM text
-    # exactly like paddle boxes — before, they were skipped and kept their det_text, so a
-    # RapidOCR-routed page silently lost the whole fusion product.
+@pytest.mark.parametrize("source", ENGINES)
+def test_any_engine_repairs_a_contaminated_text_layer(source):
+    # The Thai-PUA case in the other direction: a contaminated text-layer span (no best_text)
+    # under an OCR box is superseded by that box, whichever engine produced it.
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    bad = _seg("bad", 50, 100, 300, 120, "\ue000\ue001 garbage", source="textlayer")   # best_text ""
+    bad.det_conf = 0.3
+    ocr = _seg("ocr", 52, 101, 298, 119, "real words", source=source)
+    page.segments = [bad, ocr]
+    doc = Document(source_path="x", sha256="x", pages=[page])
+    Fusion().run(doc, config_mod.Config())
+    assert bad.superseded
+    [live] = [s for s in doc.pages[0].segments if not s.superseded]
+    assert live.best_text == "real words"
+
+
+@pytest.mark.parametrize("source", ENGINES)
+def test_any_engine_boxes_are_fused_with_the_vlm_reading(source):
     page = Page(index=0, needs_ocr=True, width=612, height=792)
     page.segments = [
-        _seg("a", 50, 100, 150, 120, "Dea", source="rapid"),
-        _seg("b", 160, 100, 300, 120, "Daviid", source="rapid"),
-        _seg("c", 50, 140, 200, 160, "Todai is", source="rapid"),
-        _seg("d", 210, 140, 320, 160, "poling", source="rapid"),
+        _seg("a", 50, 100, 150, 120, "Dea", source=source),
+        _seg("b", 160, 100, 300, 120, "Daviid", source=source),
+        _seg("c", 50, 140, 200, 160, "Todai is", source=source),
+        _seg("d", 210, 140, 320, 160, "poling", source=source),
     ]
     page.vlm_reading = "Dear David\nToday is polling day"
     doc = Document(source_path="x", sha256="x", pages=[page])
@@ -248,11 +269,27 @@ def test_rapid_boxes_are_fused_with_the_vlm_reading():
     assert all(s.source == "fused" for s in fused)
 
 
-def test_unmatched_rapid_cluster_keeps_its_engine_source():
+@pytest.mark.parametrize("source", ENGINES)
+def test_any_engine_cluster_without_a_reading_keeps_its_source(source):
     page = Page(index=0, needs_ocr=True, width=612, height=792)
-    page.segments = [_seg("r1", 50, 100, 200, 116, "alpha", source="rapid")]
+    page.segments = [_seg("r1", 50, 100, 200, 116, "alpha", source=source)]
     page.vlm_reading = ""                                     # no reading at all
     doc = Document(source_path="x", sha256="x", pages=[page])
     Fusion().run(doc, config_mod.Config())
     [s] = doc.pages[0].segments
-    assert s.source == "rapid" and s.best_text == "alpha"     # honest provenance, det_text used
+    assert s.source == source and s.best_text == "alpha"     # honest provenance, det_text used
+
+
+@pytest.mark.parametrize("source", ENGINES)
+def test_any_engine_confident_line_survives_a_dissimilar_reading(source):
+    # The anti-misalignment gate is engine-agnostic too: a confident box handed a VLM line
+    # that barely resembles it keeps its det_text, whichever engine was confident.
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    seg = _seg("p", 50, 100, 300, 120, "INVOICE TOTAL 1,240.00", source=source)
+    seg.det_conf = 0.99
+    page.segments = [seg]
+    page.vlm_reading = "completely unrelated sentence about the weather"
+    doc = Document(source_path="x", sha256="x", pages=[page])
+    Fusion().run(doc, config_mod.Config())
+    [s] = doc.pages[0].segments
+    assert s.best_text == "INVOICE TOTAL 1,240.00" and s.source == source

@@ -354,17 +354,32 @@ def test_vision_skip_still_works_when_opted_in(tmp_path):
     fake = _FakeVLM("should never be asked")
     VlmRead(client=fake).run(doc, dataclasses.replace(config_mod.Config(), apple_vision_skip_vlm=0.92))
     assert fake.calls == 0 and page.read_model == "apple_vision"
-def test_refusal_length_check_counts_every_deterministic_engine(tmp_path):
+@pytest.mark.parametrize("source", sorted(__import__("fusion_ocr.models", fromlist=["OCR_SOURCES"]).OCR_SOURCES))
+def test_refusal_length_check_counts_every_deterministic_engine(tmp_path, source):
     # A reading far shorter than what the detector found is a refusal, whichever engine boxed
     # the page. det_chars used to count PaddleOCR only, silently disabling the check on Apple
-    # Vision / RapidOCR pages (roadmap small-bug sweep).
+    # Vision / RapidOCR pages (roadmap small-bug sweep). Parametrised over models.OCR_SOURCES.
     from fusion_ocr.stages.vlm_read import _looks_like_refusal
     pdf = _scan_pdf(tmp_path)
-    for source in ("vision", "rapid"):
-        page = Page(index=0, needs_ocr=True, width=612, height=792)
-        page.segments = [Segment(id="s", page=0, box=Box(points=[(0, 0), (10, 0), (10, 10), (0, 10)]),
-                                 det_text="x" * 400, det_conf=0.5, source=source)]
-        doc = Document(source_path=str(pdf), sha256="x", pages=[page])
-        VlmRead(client=_FakeVLM("tiny")).run(doc, config_mod.Config())
-        assert doc.pages[0].vlm_reading == "", source     # refused -> fusion uses det_text
+    page = Page(index=0, needs_ocr=True, width=612, height=792)
+    page.segments = [Segment(id="s", page=0, box=Box(points=[(0, 0), (10, 0), (10, 10), (0, 10)]),
+                             det_text="x" * 400, det_conf=0.5, source=source)]
+    doc = Document(source_path=str(pdf), sha256="x", pages=[page])
+    VlmRead(client=_FakeVLM("tiny")).run(doc, config_mod.Config())
+    assert doc.pages[0].vlm_reading == ""                 # refused -> fusion uses det_text
     assert _looks_like_refusal("tiny", 400)
+
+
+@pytest.mark.parametrize("source", sorted(__import__("fusion_ocr.models", fromlist=["OCR_SOURCES"]).OCR_SOURCES))
+def test_any_engine_ink_reaches_the_reader_and_a_blank_page_does_not(tmp_path, source):
+    # The blank-page short-circuit keys on DETECTION (any engine's boxes), never on one name.
+    pdf = _scan_pdf(tmp_path)
+    inked = Page(index=0, needs_ocr=True, width=612, height=792)
+    inked.segments = [Segment(id="s", page=0, box=Box(points=[(0, 0), (10, 0), (10, 10), (0, 10)]),
+                              det_text="some ink", det_conf=0.5, source=source)]
+    blank = Page(index=0, needs_ocr=True, width=612, height=792)
+    for page, expected_calls in ((inked, 1), (blank, 0)):
+        fake = _FakeVLM("a real reading of the page with enough words to pass the checks")
+        VlmRead(client=fake).run(Document(source_path=str(pdf), sha256="x", pages=[page]),
+                                 config_mod.Config())
+        assert fake.calls == expected_calls
