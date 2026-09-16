@@ -5,6 +5,7 @@ is invisible to callers.
   POST  /jobs            (multipart pdf)  -> 202 {sha256, status, original_name}   (enqueue)
   GET   /jobs            [?status=done]   -> {jobs: [...]}          (queue / 'out' feed)
   GET   /jobs/{sha256}                    -> {status, error, original_name, artifacts}
+  GET   /jobs/{sha256}/artifacts/{name}   -> the artifact's bytes (document.md, overlay.pdf, …)
   GET   /config                           -> {settings: [...]}      (every setting, surfaced)
   PATCH /config          {path: value}    -> {path: value}          (configure the allowlist)
   POST  /config/save                      -> {saved: <path>}        (persist to disk, opt-in)
@@ -61,6 +62,13 @@ def _parked_name(digest: str, original: str, fmt: str | None) -> str:
 
 
 _UPLOAD_CHUNK = 1 << 20   # 1 MiB
+
+_MEDIA_TYPES = {".pdf": "application/pdf", ".md": "text/markdown; charset=utf-8",
+                ".json": "application/json"}
+
+
+def _media_type(name: str) -> str:
+    return _MEDIA_TYPES.get(Path(name).suffix.lower(), "application/octet-stream")
 
 
 async def _save_upload(pdf, dest: Path, max_mb: float, http_exc) -> None:
@@ -181,6 +189,20 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
         return {"sha256": sha256, "status": row["status"], "error": row["error"],
                 "original_name": row["original_name"],
                 "artifacts": storage.artifacts(cfg, sha256)}
+
+    @app.get("/jobs/{sha256}/artifacts/{name}")
+    def job_artifact(sha256: str, name: str):
+        # Fetch ONE artifact's bytes — the missing half of the remote contract: without it a
+        # consumer on another host (Giant) could list artifact NAMES but never read them
+        # short of a shared filesystem (review 03). `name` only ever resolves through
+        # storage.artifact_path, i.e. to a listed artifact of this job — a traversal payload
+        # or a resume-snapshot name is simply not found.
+        from fastapi.responses import FileResponse
+        path = storage.artifact_path(cfg, sha256, name) if _is_sha256(sha256) else None
+        if path is None:
+            raise HTTPException(status_code=404, detail="no such job or artifact")
+        return FileResponse(path, media_type=_media_type(name), filename=name,
+                            content_disposition_type="inline")
 
     @app.get("/config")
     def get_config():

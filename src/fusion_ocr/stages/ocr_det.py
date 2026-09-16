@@ -174,11 +174,10 @@ class OcrDet:
             return []
 
     def _run_rapid(self, img, script) -> list[tuple[list, str, float]]:
-        """RapidOCR (ONNX) engine — same (quad_px, text, conf) shape. WIRED BUT NOT
-        IMPLEMENTED: engines.rapid.recognize() is a stub that raises NotImplementedError
-        until fleshed out (see Docs/dev_notes/rapidocr_eval_plan.md). Routing only sends a
-        page here when `prefer_rapidocr` is set AND rapid is importable, so the default
-        pipeline never reaches this branch."""
+        """RapidOCR (ONNX) engine — same (quad_px, text, conf) shape (engines/rapid.py; the
+        A/B engine, see Docs/dev_notes/rapidocr_eval_plan.md). Routing only sends a page here
+        when `prefer_rapidocr` is set AND rapid is importable, so the default pipeline never
+        reaches this branch."""
         from PIL import Image
 
         from ..engines import rapid

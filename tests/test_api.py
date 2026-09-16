@@ -246,3 +246,50 @@ def test_config_save_promotes_overrides_to_disk_and_clears_them(tmp_path):
     assert client.post("/config/save").status_code == 200
     assert config_mod.load(cfg_path).fuse_min_sim == 0.5           # on disk now ...
     assert store.overrides() == ({}, 0.0)                          # ... so the runtime set is cleared
+# ---- review 03: artifacts are fetchable over HTTP; resume snapshots aren't artifacts ----
+
+def _job_with_output(tmp_path, cfg, sha):
+    from fusion_ocr import storage
+    from fusion_ocr.jobs import JobStore
+    d = storage.job_dir(cfg, sha)
+    d.mkdir(parents=True)
+    (d / "document.md").write_text("# reading\n\nhello", encoding="utf-8")
+    (d / "overlay.pdf").write_bytes(b"%PDF-1.4\n%fake overlay\n%%EOF")
+    (d / "doc.json").write_text("{}")
+    (d / "doc.03-language.json").write_text("{}")          # resume snapshot, not a deliverable
+    (d / "doc.09-render.json").write_text("{}")
+    jobs = JobStore(cfg.out_dir / "jobs.sqlite")
+    jobs.upsert_queued(sha, "/in/x.pdf", original_name="x.pdf")
+    jobs.set_status(sha, "done")
+
+
+def test_artifact_listing_hides_resume_snapshots(tmp_path):
+    client, cfg = _client(tmp_path)
+    sha = "5" * 64
+    _job_with_output(tmp_path, cfg, sha)
+    listed = client.get(f"/jobs/{sha}").json()["artifacts"]
+    assert listed == ["doc.json", "document.md", "overlay.pdf"]
+
+
+def test_artifact_bytes_are_served_with_a_media_type(tmp_path):
+    client, cfg = _client(tmp_path)
+    sha = "6" * 64
+    _job_with_output(tmp_path, cfg, sha)
+    r = client.get(f"/jobs/{sha}/artifacts/document.md")
+    assert r.status_code == 200 and r.text == "# reading\n\nhello"
+    assert r.headers["content-type"].startswith("text/markdown")
+    r = client.get(f"/jobs/{sha}/artifacts/overlay.pdf")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF-")
+    assert r.headers["content-type"] == "application/pdf"
+
+
+def test_artifact_fetch_refuses_snapshots_traversal_and_unknown(tmp_path):
+    client, cfg = _client(tmp_path)
+    sha = "7" * 64
+    _job_with_output(tmp_path, cfg, sha)
+    (tmp_path / "out" / "secret.txt").write_text("not yours")
+    assert client.get(f"/jobs/{sha}/artifacts/doc.03-language.json").status_code == 404
+    assert client.get(f"/jobs/{sha}/artifacts/..%2Fsecret.txt").status_code == 404
+    assert client.get(f"/jobs/{sha}/artifacts/nope.md").status_code == 404
+    assert client.get(f"/jobs/{'8' * 64}/artifacts/document.md").status_code == 404   # no job
+    assert client.get("/jobs/../artifacts/document.md").status_code == 404
