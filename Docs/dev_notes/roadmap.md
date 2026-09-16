@@ -131,10 +131,12 @@ real, not before.
   9B generalist (caveat: its reading is un-cross-checked VLM output, so it slots in as a
   *reader*, never as geometry); and Apple Vision's WWDC25 **`RecognizeDocumentsRequest`**
   adds paragraph/table/list structure to the fast tier we currently use as flat det/rec —
-  possibly a free structure signal on the ANE. *(Engine A/Bs — EXECUTED 2026-08-20, see
+  possibly a free structure signal on the ANE. *(Engine A/Bs — CLOSED 2026-09-16, see
   [done.md](done.md) + `manifests/engine_ab_2026-08-20.md`: PP-OCRv6 turned out to be the
-  default already; RapidOCR medium-rec meets the adoption criteria at n=30, full-set verdict
-  pending the desktop run, then an adoption PR. PP-DocLayoutV3 remains untested.)*
+  default already; RapidOCR medium-rec met the criteria at n=30 but NOT on the full set —
+  FUNSD −0.013 with a one-sided tail; a medium-det arm neither closed the gap nor kept the
+  speed. Not adopted; PaddleOCR stays. Re-open only on a new ONNX detector tier or a
+  receipts-dominated deployment that accepts the forms cost. PP-DocLayoutV3 remains untested.)*
 - **Landscape re-check (2026-08-19)** — a fresh survey six weeks after review 03 re-confirmed the
   architecture: the top document-parsing systems (PaddleOCR-VL 1.6, GLM-OCR, MinerU2.5-Pro) have
   all converged on deterministic-localization-then-VLM-read; word-level VLM grounding is still
