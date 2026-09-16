@@ -37,9 +37,7 @@ def fake_process(monkeypatch):
     def _process(img_pdf, cfg, pipeline=None, **kw):
         with fitz.open(img_pdf) as d:
             assert d.page_count == 1 and d[0].get_text().strip() == ""   # no text layer to cheat from
-        src, pi = calls[-1] if False else (None, None)
-        stem = Path(img_pdf).stem                       # "<src stem>_p<index>"
-        src_stem, idx = stem.rsplit("_p", 1)
+        _, idx = Path(img_pdf).stem.rsplit("_p", 1)     # "<src stem>_p<index>"
         calls.append({"img": Path(img_pdf), "out": Path(cfg.out_dir),
                       "pipeline": [s.name for s in pipeline] if pipeline else None, "page": int(idx)})
         page = Page(index=0)
@@ -79,25 +77,17 @@ def test_pages_with_too_little_text_are_skipped(tmp_path, fake_process):
     assert [r["page"] for r in results] == [1]
 
 
-def test_evaluate_concatenates_across_pdfs_and_pages_default_to_all(tmp_path, fake_process):
+def test_evaluate_concatenates_across_pdfs_and_pages_default_to_all(tmp_path, fake_process, monkeypatch):
     a = _born_digital(tmp_path / "a.pdf", [_LINE * 2, _LINE * 2])
     b = _born_digital(tmp_path / "b.pdf", [_LINE * 2])
-
-    class _Src:                       # the stub needs the source path per call
-        pass
     import fusion_ocr.pipeline as pipeline_mod
-    real = pipeline_mod.process
+    stub = pipeline_mod.process                      # the fixture's stub, keyed on one source
 
-    def by_name(img_pdf, cfg, pipeline=None, **kw):
+    def per_source(img_pdf, cfg, pipeline=None, **kw):   # point it at whichever PDF this page is from
         fake_process.src = a if Path(img_pdf).stem.startswith("a_") else b
-        return real(img_pdf, cfg, pipeline=pipeline, **kw)
-    pipeline_mod.process = by_name
-    try:
-        results = harness.evaluate(
-            [a, b], config_mod.Config(airgap=False), no_vlm=True, keep_work=True) \
-            if False else harness.evaluate([a, b], config_mod.Config(airgap=False))
-    finally:
-        pipeline_mod.process = real
+        return stub(img_pdf, cfg, pipeline=pipeline, **kw)
+    monkeypatch.setattr(pipeline_mod, "process", per_source)
+    results = harness.evaluate([a, b], config_mod.Config(airgap=False), tmp_root=tmp_path / "w")
     assert [(Path(r["pdf"]).name, r["page"]) for r in results] == [("a.pdf", 0), ("a.pdf", 1), ("b.pdf", 0)]
 
 
