@@ -75,11 +75,14 @@ class OcrDet:
                 )
             except TypeError:  # 2.x — no unwarping (and no model-name overrides)
                 engine = PaddleOCR(use_angle_cls=True, lang=lang)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — deliberate fallback, now visible
             # Unsupported recogniser language -> fall back to English (detection,
             # i.e. the boxes, is script-agnostic; the VLM supplies the reading).
             if lang == self.lang:
                 raise
+            _log.warning("PaddleOCR could not build a %r recogniser (%s) — falling back "
+                         "to %r; boxes are script-agnostic, the VLM supplies the reading",
+                         lang, exc, self.lang)
             self._engines[key] = self._engine_for(self.lang, det_model, rec_model)
             return self._engines[key]
 
