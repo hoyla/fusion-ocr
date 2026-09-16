@@ -20,9 +20,9 @@ can be "dense" yet leave the whole body unread.
 
 from __future__ import annotations
 
-from .. import ingest
 import logging
 
+from .. import ingest
 from ..config import Config
 from ..models import Box, Document, Page, Segment
 
