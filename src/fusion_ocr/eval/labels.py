@@ -44,12 +44,12 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import tempfile
 from pathlib import Path
 
 from ..config import Config
 from .harness import recovered_text
 from .metrics import normalize, score
+from .workdir import workdir
 
 
 @dataclasses.dataclass
@@ -134,11 +134,15 @@ def _render_pages_image_only(src, page_indices: list[int], dst, dpi: int = _REND
         out.close()
 
 
-def evaluate_labelset(manifest_path, cfg: Config, tmp_root=None, no_vlm: bool = False) -> list[dict]:
+def evaluate_labelset(manifest_path, cfg: Config, tmp_root=None, no_vlm: bool = False,
+                      keep_work: bool = False) -> list[dict]:
     """Score every labelled page in a manifest. Each result carries `status`: "scored"
     (with the metric fields from score()) or "unlabelled" (transcript still empty).
     ``no_vlm=True`` runs the deterministic engine only (no reader) — the recovered text is
-    pure PaddleOCR / Apple Vision recognition.
+    pure PaddleOCR / Apple Vision recognition. The extracted/rendered pages and the pipeline
+    output (the full recovered text of what may be a CONFIDENTIAL document) go to
+    ``tmp_root`` if given, else to a run-scoped dir under eval_out/_work/ that is removed
+    when the run finishes (``keep_work`` retains it) — never to /tmp (see workdir.py).
 
     Each scored result also carries a nested ``searchable`` score and ``searchable_via``:
     the text a reader's find/search would actually hit in the OUTPUT PDF, measured against
@@ -153,36 +157,37 @@ def evaluate_labelset(manifest_path, cfg: Config, tmp_root=None, no_vlm: bool = 
     from ..pipeline import deterministic_pipeline, process
 
     labels = load_labelset(manifest_path)
-    tmp_root = Path(tmp_root or tempfile.mkdtemp(prefix="fusion_label_eval_"))
-    eval_cfg = dataclasses.replace(cfg, out_dir=tmp_root / "out")
     pipeline = deterministic_pipeline() if no_vlm else None
 
     results: list[dict] = []
-    for lab in labels:
-        ref = lab.reference()
-        base = {"id": lab.id, "pdf": str(lab.pdf), "pages": lab.pages}
-        if not normalize(ref):
-            results.append({**base, "status": "unlabelled"})
-            continue
-        page_pdf = tmp_root / f"{lab.id}.pdf"
-        if lab.render:
-            _render_pages_image_only(lab.pdf, lab.pages, page_pdf)   # born-digital -> scan
-        else:
-            _extract_pages(lab.pdf, lab.pages, page_pdf)
-        doc = process(page_pdf, eval_cfg, pipeline=pipeline)
-        hyp = "\n".join(recovered_text(p) for p in doc.pages)   # concat across the span
-        res = {**base, "status": "scored", **score(ref, hyp)}
+    with workdir("labels", tmp_root, keep_work) as work:
+        eval_cfg = dataclasses.replace(cfg, out_dir=work / "out")
+        for lab in labels:
+            ref = lab.reference()
+            base = {"id": lab.id, "pdf": str(lab.pdf), "pages": lab.pages}
+            if not normalize(ref):
+                results.append({**base, "status": "unlabelled"})
+                continue
+            page_pdf = work / f"{lab.id}.pdf"
+            if lab.render:
+                _render_pages_image_only(lab.pdf, lab.pages, page_pdf)   # born-digital -> scan
+            else:
+                _extract_pages(lab.pdf, lab.pages, page_pdf)
+            doc = process(page_pdf, eval_cfg, pipeline=pipeline)
+            hyp = "\n".join(recovered_text(p) for p in doc.pages)   # concat across the span
+            res = {**base, "status": "scored", **score(ref, hyp)}
 
-        # Searchability: score the text find() would hit in the OUTPUT PDF, not just the
-        # reading view. That's overlay.pdf when one was built (it's the source PDF + the OCR
-        # overlay), otherwise the source PDF itself — whose text layer stays searchable for
-        # born-digital pages and for mixed pages whose exact text layer already covers the
-        # content (the OCR is superseded, so no overlay is added and search hits aren't
-        # doubled). The gap to the reading score is text recovered but not findable.
-        overlay_pdf = doc.artifacts.get("overlay_pdf")
-        searchable = _pdf_text(overlay_pdf) if overlay_pdf else _pdf_text(page_pdf)
-        res["searchable_via"] = ("overlay" if overlay_pdf else "text_layer") \
-            if normalize(searchable) else "none"
-        res["searchable"] = score(ref, searchable)
-        results.append(res)
+            # Searchability: score the text find() would hit in the OUTPUT PDF, not just the
+            # reading view. That's overlay.pdf when one was built (it's the source PDF + the
+            # OCR overlay), otherwise the source PDF itself — whose text layer stays
+            # searchable for born-digital pages and for mixed pages whose exact text layer
+            # already covers the content (the OCR is superseded, so no overlay is added and
+            # search hits aren't doubled). The gap to the reading score is text recovered
+            # but not findable.
+            overlay_pdf = doc.artifacts.get("overlay_pdf")
+            searchable = _pdf_text(overlay_pdf) if overlay_pdf else _pdf_text(page_pdf)
+            res["searchable_via"] = ("overlay" if overlay_pdf else "text_layer") \
+                if normalize(searchable) else "none"
+            res["searchable"] = score(ref, searchable)
+            results.append(res)
     return results
