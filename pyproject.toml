@@ -42,3 +42,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "engines: real deterministic-engine inference on a synthetic scan (PaddleOCR / Apple Vision / RapidOCR; each skips where unavailable). `pytest -m engines` runs only this tier; `pytest -m 'not engines'` skips it for a fast loop.",
+]
