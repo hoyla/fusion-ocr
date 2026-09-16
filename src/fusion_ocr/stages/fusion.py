@@ -32,11 +32,10 @@ from difflib import SequenceMatcher
 
 from ..compose import classify_regions, in_machine_readable_region, reading_key
 from ..config import Config
-from ..models import Box, Document, Page, Segment
+from ..models import OCR_SOURCES, Box, Document, Page, Segment
 
 _IOU_OVERLAP = 0.5
 _GAP = -0.2  # alignment gap penalty
-_OCR_SOURCES = {"paddle", "vision"}  # deterministic OCR engines (geometry + det_text)
 _MAX_DP_CELLS = 1_500_000  # word-level DP guard; above this fall back to the cheaper line-level
 _ANCHOR_SIM = 0.5          # a det<->VLM word match at least this similar counts as an anchor
 _MIN_ANCHOR_FRAC = 0.3     # too few anchored clusters -> alignment untrustworthy, fall back
@@ -237,7 +236,7 @@ class Fusion:
             for seg in page.segments:
                 if not seg.superseded and not seg.best_text:
                     seg.best_text = seg.vlm_text or seg.det_text or ""
-                    if seg.source in _OCR_SOURCES and seg.vlm_text:
+                    if seg.source in OCR_SOURCES and seg.vlm_text:
                         seg.source = "fused"
             # combine both sets in reading order (machine-readable + OCR)
             page.segments.sort(key=lambda s: reading_key(
@@ -252,7 +251,7 @@ class Fusion:
         clean_tl = [s for s in page.segments if s.source == "textlayer" and s.best_text]
         contaminated_tl = [s for s in page.segments
                            if s.source == "textlayer" and not s.best_text]
-        ocr = [s for s in page.segments if s.source in _OCR_SOURCES]
+        ocr = [s for s in page.segments if s.source in OCR_SOURCES]
 
         if page.regions:
             classify_regions(page.regions, clean_tl)
@@ -276,7 +275,7 @@ class Fusion:
 
     def _fuse_lines(self, page: Page, cfg: Config) -> None:
         ocr = [s for s in page.segments
-               if s.source in _OCR_SOURCES and not s.superseded]
+               if s.source in OCR_SOURCES and not s.superseded]
         ocr_ids = {id(s) for s in ocr}
         others = [s for s in page.segments if id(s) not in ocr_ids]
         if not ocr:
@@ -313,7 +312,7 @@ class Fusion:
                     and max((s.det_conf or 0.0) for s in cl) >= cfg.fuse_det_conf_trust:
                 line = ""
             # a cluster with no aligned VLM line keeps its real engine's source
-            # (vision/paddle) — NOT a hard-coded "paddle" (that mis-credited the engine)
+            # (paddle/vision/rapid) — NOT a hard-coded "paddle" (that mis-credited the engine)
             base_source = cl[0].source if cl else "paddle"
             fused.append(Segment(
                 id=f"p{page.index}-f{ci}",

@@ -1,15 +1,15 @@
-"""RapidOCR engine (ONNX Runtime) — WIRED BUT NOT YET IMPLEMENTED (eval scaffolding).
+"""RapidOCR engine (ONNX Runtime) — the A/B engine (implemented 2026-08-20; not adopted).
 
 RapidOCR runs the same PP-OCR model FAMILY as PaddleOCR, but exported to ONNX and served by
 `onnxruntime` (leaner than PaddlePaddle's CPU path, and able to use the CoreML execution
-provider / ANE). The hypothesis we want to TEST — not assume — is that it's faster on Apple
-Silicon at equal recognition quality, letting us shed the heavy `paddlepaddle` dependency.
+provider / ANE). The hypothesis TESTED — not assumed — is that it's faster on Apple Silicon at
+equal recognition quality, letting us shed the heavy `paddlepaddle` dependency. Numbers and the
+verdict: eval_out/manifests/engine_ab_2026-08-20.md (runner eval_out/engine_ab.py).
 
 This module is a THIRD deterministic engine behind the existing routing seam (`engine =
-"paddle" | "apple_vision" | "rapidocr"`), so it's an A/B option, not a migration. `recognize()`
-is a STUB on purpose: the wiring (config flag, routing, ocr_det dispatch, eval `--rapidocr`,
-the `rapid` extra) is in place so tomorrow's work is just (1) `pip install -e ".[rapid]"`,
-(2) flesh out `recognize()` below, (3) run the benchmark. See
+"paddle" | "apple_vision" | "rapidocr"`), so it's an A/B option, not a migration: inert
+unless `prefer_rapidocr` is set AND the `rapid` extra is installed. Its segments carry
+`source="rapid"` and are treated like any OCR box downstream (models.OCR_SOURCES). See
 Docs/dev_notes/rapidocr_eval_plan.md for the verification checklist + decision criteria.
 
 CAVEATS to settle during the eval (why this is det/rec-first, not a wholesale swap):
