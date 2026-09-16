@@ -37,12 +37,12 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import tempfile
 from pathlib import Path
 
 from ..config import Config
 from .harness import recovered_text
 from .metrics import normalize, score
+from .workdir import workdir
 
 _ROOT = Path("samples/file_tests_3rdparty_01/archive")
 
@@ -198,35 +198,40 @@ def iter_pairs(source: str, split: str = "test", root=_ROOT, limit=None):
 
 
 def evaluate_dataset(source: str, cfg: Config, split: str = "test", limit: int = 20,
-                     no_vlm: bool = False, root=_ROOT) -> list[dict]:
+                     no_vlm: bool = False, root=_ROOT, tmp_root=None,
+                     keep_work: bool = False) -> list[dict]:
     """Score the pipeline on a sample of a benchmark source: ingest each image to a PDF,
     process it, and score the recovered text against the annotation. `no_vlm=True` measures
-    the deterministic engine alone."""
+    the deterministic engine alone. Derived PDFs + pipeline output go to `tmp_root` if
+    given, else a run-scoped dir under eval_out/_work/ removed afterwards (`keep_work`
+    retains it) — never /tmp (see workdir.py)."""
     from .. import ingest
     from ..pipeline import deterministic_pipeline, process
 
     pairs = iter_pairs(source, split=split, root=root, limit=limit)
-    tmp_root = Path(tempfile.mkdtemp(prefix=f"fusion_ds_{source}_"))
-    eval_cfg = dataclasses.replace(cfg, out_dir=tmp_root / "out")
     pipeline = deterministic_pipeline() if no_vlm else None
 
     results = []
-    for i, (img, ref) in enumerate(pairs):
-        if not normalize(ref):
-            continue   # no usable ground truth for this item
-        pdf, _ = ingest.to_pdf(img, tmp_root / "derived")
-        doc = process(pdf, eval_cfg, pipeline=pipeline, digest=f"{source}_{i:04d}")
-        hyp = "\n".join(recovered_text(p) for p in doc.pages)
-        results.append({"id": img.stem, "source": source,
-                        **score(ref, hyp, caseless=source in _CASELESS_REF)})
+    with workdir(f"ds-{source}", tmp_root, keep_work) as work:
+        eval_cfg = dataclasses.replace(cfg, out_dir=work / "out")
+        for i, (img, ref) in enumerate(pairs):
+            if not normalize(ref):
+                continue   # no usable ground truth for this item
+            pdf, _ = ingest.to_pdf(img, work / "derived")
+            doc = process(pdf, eval_cfg, pipeline=pipeline, digest=f"{source}_{i:04d}")
+            hyp = "\n".join(recovered_text(p) for p in doc.pages)
+            results.append({"id": img.stem, "source": source,
+                            **score(ref, hyp, caseless=source in _CASELESS_REF)})
     return results
 
 
 def evaluate_placement(source: str, cfg: Config, split: str = "test", limit: int = 20,
-                       no_vlm: bool = False, root=_ROOT) -> list[dict]:
+                       no_vlm: bool = False, root=_ROOT, tmp_root=None,
+                       keep_work: bool = False) -> list[dict]:
     """Box-placement accuracy (evidence-plan stream C, P1): reprocess a sample and score whether
     each recovered word lands on its own GT line's box — not just anywhere on the page. Needs the
-    sources' per-line boxes; scores the gated `page.segments` (the overlay/segment_index)."""
+    sources' per-line boxes; scores the gated `page.segments` (the overlay/segment_index).
+    Work dir as for evaluate_dataset."""
     import json as _json
     from PIL import Image
 
@@ -236,24 +241,24 @@ def evaluate_placement(source: str, cfg: Config, split: str = "test", limit: int
 
     anns = _annotation_index(Path(root) / _SOURCES[source][0])
     pairs = iter_pairs(source, split=split, root=root, limit=limit)
-    tmp_root = Path(tempfile.mkdtemp(prefix=f"fusion_place_{source}_"))
-    eval_cfg = dataclasses.replace(cfg, out_dir=tmp_root / "out")
     pipeline = deterministic_pipeline() if no_vlm else None
 
     results = []
-    for i, (img, _ref) in enumerate(pairs):
-        ann = anns.get(img.stem)
-        if ann is None:
-            continue
-        lines = gt_lines(_json.loads(Path(ann).read_text(encoding="utf-8")), source)
-        if not lines:
-            continue
-        w, h = Image.open(img).size
-        pdf, _ = ingest.to_pdf(img, tmp_root / "derived")
-        doc = process(pdf, eval_cfg, pipeline=pipeline, digest=f"{source}_{i:04d}")
-        cl = source in _CASELESS_REF
-        strict = placement_counts(doc.pages[0], lines, w, h, caseless=cl)
-        band = placement_counts(doc.pages[0], lines, w, h, caseless=cl, band=True)
-        results.append({"id": img.stem, "source": source, **strict,
-                        "band_placed": band["placed"]})
+    with workdir(f"place-{source}", tmp_root, keep_work) as work:
+        eval_cfg = dataclasses.replace(cfg, out_dir=work / "out")
+        for i, (img, _ref) in enumerate(pairs):
+            ann = anns.get(img.stem)
+            if ann is None:
+                continue
+            lines = gt_lines(_json.loads(Path(ann).read_text(encoding="utf-8")), source)
+            if not lines:
+                continue
+            w, h = Image.open(img).size
+            pdf, _ = ingest.to_pdf(img, work / "derived")
+            doc = process(pdf, eval_cfg, pipeline=pipeline, digest=f"{source}_{i:04d}")
+            cl = source in _CASELESS_REF
+            strict = placement_counts(doc.pages[0], lines, w, h, caseless=cl)
+            band = placement_counts(doc.pages[0], lines, w, h, caseless=cl, band=True)
+            results.append({"id": img.stem, "source": source, **strict,
+                            "band_placed": band["placed"]})
     return results

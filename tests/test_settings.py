@@ -24,7 +24,7 @@ def test_surface_covers_every_setting_with_constraints():
     assert by_path["fuse_min_sim"]["value"] == 0.34
     assert by_path["fuse_min_sim"]["settable"] is True
     assert by_path["fuse_min_sim"]["min"] == 0.0 and by_path["fuse_min_sim"]["max"] == 1.0
-    assert by_path["granularity"]["choices"] == ["line", "word"]
+    assert by_path["granularity"]["choices"] == ["line"]          # "word" retired (invented positions)
 
 
 def test_surface_masks_secrets_and_marks_readonly():
@@ -127,3 +127,10 @@ def test_config_endpoints_roundtrip(tmp_path):
 
     bad = client.patch("/config", json={"airgap": False})
     assert bad.status_code == 400 and "read-only" in bad.json()["detail"]
+
+
+def test_validate_coerces_without_mutating():
+    cfg = config_mod.Config()
+    out = settings_mod.validate({"fuse_min_sim": "0.5", "vlm.max_tokens": 100})
+    assert out == {"fuse_min_sim": 0.5, "vlm.max_tokens": 100}     # coerced, JSON-able
+    assert cfg.fuse_min_sim == 0.34 and cfg.vlm.max_tokens == 4096  # nothing applied

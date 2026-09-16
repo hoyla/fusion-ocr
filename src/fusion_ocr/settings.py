@@ -41,8 +41,9 @@ SETTINGS: tuple[Setting, ...] = (
             help="sealed (no-egress) tier; read-only — never toggle the seal over HTTP"),
     Setting("in_dir", "str", settable=False, help="input drop dir (identity-critical)"),
     Setting("out_dir", "str", settable=False, help="artifact dir (identity-critical)"),
-    Setting("granularity", "str", settable=True, choices=("line", "word"),
-            help="overlay box granularity"),
+    Setting("granularity", "str", settable=True, choices=("line",),
+            help="overlay box granularity — line only ('word' was retired: it invented "
+                 "word positions; see overlay/pymupdf_overlay.py)"),
     Setting("overlay_font", "str", settable=True,
             help="path to a Unicode TTF for the overlay; '' = auto-detect"),
     Setting("prefer_apple_vision", "bool", settable=True),
@@ -170,10 +171,10 @@ def surface(cfg) -> list[dict]:
     return out
 
 
-def apply(cfg, updates: dict) -> dict:
-    """Validate and apply {path: value} updates in place, returning the new (masked)
-    values for the touched paths. Raises ValueError on any unknown / read-only / invalid
-    field — and applies nothing in that case (validate fully before mutating)."""
+def validate(updates: dict) -> dict:
+    """Validate {path: value} updates and return them coerced (bool/float/int/str — all
+    JSON-able, so the result can be persisted as runtime overrides). Raises ValueError on
+    any unknown / read-only / invalid field, touching nothing."""
     if not isinstance(updates, dict) or not updates:
         raise ValueError("body must be a non-empty object of {setting: value}")
     coerced: dict = {}
@@ -184,6 +185,14 @@ def apply(cfg, updates: dict) -> dict:
         if not s.settable:
             raise ValueError(f"{path!r} is read-only (surfaced but not configurable)")
         coerced[path] = _coerce(s, value)
+    return coerced
+
+
+def apply(cfg, updates: dict) -> dict:
+    """Validate and apply {path: value} updates in place, returning the new (masked)
+    values for the touched paths. Raises ValueError on any unknown / read-only / invalid
+    field — and applies nothing in that case (validate fully before mutating)."""
+    coerced = validate(updates)
     for path, value in coerced.items():       # mutate only after everything validated
         _set(cfg, path, value)
     return {p: _present(_BY_PATH[p], _get(cfg, p)) for p in coerced}

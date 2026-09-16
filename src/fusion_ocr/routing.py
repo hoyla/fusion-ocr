@@ -41,16 +41,54 @@ DEFAULT_ROUTES: dict[str, Route] = {
     "devanagari": Route("devanagari", "devanagari"),
 }
 
-# (name, lo, hi) Unicode ranges. Order matters only for disjoint ranges.
+# (script, lo, hi) Unicode ranges — every block a real PDF text layer or an OCR output can
+# carry for the script, not only its core block (review 03: the core-only table missed the
+# Arabic PRESENTATION FORMS most Arabic PDF text layers actually hold, the CJK extensions
+# and compatibility ideographs, and the halfwidth/fullwidth forms). Ranges are disjoint, so
+# order doesn't matter. Kept as a table rather than adopting the `regex` module's script
+# properties: the sealed tier pins its dependencies, and the table is small and testable.
 _BLOCKS = [
+    # Thai
     ("thai", 0x0E00, 0x0E7F),
-    ("cyrillic", 0x0400, 0x04FF),
+    # Cyrillic: base + supplement + extended-A/B/C + phonetic extensions
+    ("cyrillic", 0x0400, 0x052F),
+    ("cyrillic", 0x1C80, 0x1C8F),
+    ("cyrillic", 0x2DE0, 0x2DFF),
+    ("cyrillic", 0xA640, 0xA69F),
+    # Arabic: base + supplement + extended-B/A + presentation forms A/B
     ("arabic", 0x0600, 0x06FF),
+    ("arabic", 0x0750, 0x077F),
+    ("arabic", 0x0870, 0x08FF),
+    ("arabic", 0xFB50, 0xFDFF),
+    ("arabic", 0xFE70, 0xFEFF),
+    # Devanagari: base + extended + extended-A
     ("devanagari", 0x0900, 0x097F),
-    ("cjk", 0x4E00, 0x9FFF),
-    ("cjk", 0x3040, 0x30FF),   # hiragana / katakana
-    ("cjk", 0xAC00, 0xD7AF),   # hangul
+    ("devanagari", 0xA8E0, 0xA8FF),
+    ("devanagari", 0x11B00, 0x11B5F),
+    # CJK: ideographs (unified + extension A + compatibility + the SMP extensions B–I),
+    # radicals, kana (+ phonetic extensions), bopomofo, hangul (syllables + all jamo blocks),
+    # CJK punctuation, and the halfwidth/fullwidth forms (fullwidth Latin/digits and
+    # halfwidth kana/hangul are CJK-typeset text, so they count towards CJK routing).
+    ("cjk", 0x1100, 0x11FF),     # hangul jamo
+    ("cjk", 0x2E80, 0x2FDF),     # CJK radicals supplement, Kangxi radicals
+    ("cjk", 0x3001, 0x303F),     # CJK symbols and punctuation (U+3000 ideographic space excluded)
+    ("cjk", 0x3040, 0x30FF),     # hiragana / katakana
+    ("cjk", 0x3100, 0x312F),     # bopomofo
+    ("cjk", 0x3130, 0x318F),     # hangul compatibility jamo
+    ("cjk", 0x31F0, 0x31FF),     # katakana phonetic extensions
+    ("cjk", 0x3400, 0x4DBF),     # CJK extension A
+    ("cjk", 0x4E00, 0x9FFF),     # CJK unified ideographs
+    ("cjk", 0xA960, 0xA97F),     # hangul jamo extended-A
+    ("cjk", 0xAC00, 0xD7AF),     # hangul syllables
+    ("cjk", 0xD7B0, 0xD7FF),     # hangul jamo extended-B
+    ("cjk", 0xF900, 0xFAFF),     # CJK compatibility ideographs
+    ("cjk", 0xFF01, 0xFFEF),     # halfwidth and fullwidth forms
+    ("cjk", 0x20000, 0x323AF),   # CJK extensions B–I
 ]
+
+# Latin letters beyond ASCII: Latin-1 supplement + Extended-A/B + IPA (00C0–024F) and
+# Latin Extended Additional (1E00–1EFF — Vietnamese, transliteration diacritics).
+_LATIN_EXTRA = [(0x00C0, 0x024F), (0x1E00, 0x1EFF)]
 
 _NONLATIN_MIN_SHARE = 0.10  # a non-Latin script must be >=10% of letters to win
 
@@ -70,7 +108,7 @@ def detect_script(text: str) -> str:
                 counts[name] = counts.get(name, 0) + 1
                 break
         else:
-            if ("a" <= ch.lower() <= "z") or (0x00C0 <= o <= 0x024F):
+            if ("a" <= ch.lower() <= "z") or any(lo <= o <= hi for lo, hi in _LATIN_EXTRA):
                 latin += 1
     total = latin + sum(counts.values())
     if total == 0:

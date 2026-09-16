@@ -53,6 +53,11 @@ file waiting for its transcript. **Your job is to fill in those `.txt` files.**
    You'll get a per-page scorecard plus a micro-averaged aggregate. Run it again whenever you
    add a transcript or change a prompt/model — that's the regression guard.
 
+   The run works in a run-scoped directory under `eval_out/_work/` (gitignored) — the
+   extracted pages and the pipeline's output, i.e. the full recovered text of what may be a
+   confidential document — and **removes it when the run finishes**; never `/tmp`. Pass
+   `--keep-work` to keep it for inspection (and clean it up yourself afterwards).
+
    **Comparing engines.** Three modes compose over the same labels, so you can A/B which part
    is doing the work — no need to stop the reader server to isolate the deterministic engine:
 

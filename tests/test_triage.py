@@ -75,3 +75,13 @@ def test_rotation_is_captured(tmp_path):
     d.save(str(path)); d.close()
 
     assert _run(path).rotation == 270
+
+
+def test_image_enumeration_failure_is_logged_not_silent(caplog):
+    class _Pg:
+        number = 4
+        def get_images(self, full=True):
+            raise RuntimeError("broken xref")
+    with caplog.at_level("WARNING"):
+        assert Triage._max_image_frac(_Pg(), 1000.0) == 0.0
+    assert "page 4" in caplog.text and "OCR decision" in caplog.text

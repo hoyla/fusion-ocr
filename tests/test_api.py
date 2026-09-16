@@ -157,3 +157,139 @@ def test_config_save_persists_runtime_changes(tmp_path):
     r = client.post("/config/save")
     assert r.status_code == 200 and r.json()["saved"] == str(cfg_path)
     assert config_mod.load(cfg_path).fuse_min_sim == 0.5  # now on disk
+
+
+# ---- review 03 (a): uploads are keyed by content, not by the client's filename ------
+
+def test_same_name_different_content_does_not_overwrite(tmp_path):
+    from pathlib import Path
+
+    from fusion_ocr.jobs import JobStore
+    client, cfg = _client(tmp_path)
+    a = _post_pdf(client, b"%PDF-1.4\nAAA\n%%EOF").json()
+    b = _post_pdf(client, b"%PDF-1.4\nBBB\n%%EOF").json()       # both arrive as "doc.pdf"
+    assert a["sha256"] != b["sha256"]
+    parked = sorted(p.name for p in (tmp_path / "in").iterdir() if p.is_file())
+    assert len(parked) == 2 and all(n.endswith("__doc.pdf") for n in parked)
+    jobs = JobStore(cfg.out_dir / "jobs.sqlite")
+    for j in (a, b):                                              # each job's file still exists
+        row = jobs.get(j["sha256"])
+        assert row["status"] == "queued" and Path(row["source_path"]).exists()
+        assert j["original_name"] == "doc.pdf"
+    assert client.get(f"/jobs/{a['sha256']}").json()["original_name"] == "doc.pdf"
+    assert all(j["original_name"] == "doc.pdf" for j in client.get("/jobs").json()["jobs"])
+
+
+def test_reupload_of_identical_content_is_idempotent(tmp_path):
+    client, _ = _client(tmp_path)
+    body = b"%PDF-1.4\nsame\n%%EOF"
+    first = _post_pdf(client, body).json()
+    second = client.post("/jobs", files={"pdf": ("renamed.pdf", body, "application/pdf")}).json()
+    assert first["sha256"] == second["sha256"]
+    assert second["original_name"] == "doc.pdf"                  # first registration's name
+    files = [p for p in (tmp_path / "in").iterdir() if p.is_file()]
+    assert len(files) == 1                                       # one parked copy, not two
+    assert not list((tmp_path / "in" / ".incoming").iterdir())   # staging area left clean
+
+
+def test_rejected_upload_leaves_no_staging_debris(tmp_path):
+    client, _ = _client(tmp_path, max_upload_mb=0.001)
+    assert _post_pdf(client, b"%PDF-1.4\n" + b"0" * 4000).status_code == 413
+    assert not [p for p in (tmp_path / "in").iterdir() if p.is_file()]
+    assert not list((tmp_path / "in" / ".incoming").iterdir())
+
+
+def test_parked_name_is_content_keyed_and_bounded():
+    from fusion_ocr.api import _parked_name
+    d = "0123456789abcdef" + "f" * 48
+    assert _parked_name(d, "report.pdf", "pdf") == "0123456789abcdef__report.pdf"
+    assert _parked_name(d, "upload.pdf", "png") == "0123456789abcdef__upload.png"   # honest ext
+    long = _parked_name(d, "x" * 400 + ".pdf", "pdf")
+    assert long.endswith(".pdf") and len(long) < 200
+
+
+# ---- review 03: PATCH /config reaches the worker via the shared job store ----------
+
+def test_patch_config_is_recorded_for_the_worker_and_survives_api_restart(tmp_path):
+    from fusion_ocr import config as config_mod
+    from fusion_ocr.api import create_app
+    from fusion_ocr.jobs import JobStore
+    from fastapi.testclient import TestClient
+    client, cfg = _client(tmp_path)
+    r = client.patch("/config", json={"fuse_min_sim": 0.5, "vlm.max_tokens": 1000})
+    assert r.status_code == 200 and cfg.fuse_min_sim == 0.5
+    store = JobStore(cfg.out_dir / "jobs.sqlite")                  # what a worker reads
+    assert store.overrides()[0] == {"fuse_min_sim": 0.5, "vlm.max_tokens": 1000}
+    # a restarted API (fresh file config) comes up with the runtime overrides applied
+    cfg2 = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out", airgap=False)
+    client2 = TestClient(create_app(cfg2, token=_TOKEN), headers={"Authorization": f"Bearer {_TOKEN}"})
+    shown = {s["path"]: s["value"] for s in client2.get("/config").json()["settings"]}
+    assert shown["fuse_min_sim"] == 0.5 and shown["vlm.max_tokens"] == 1000
+    assert client.patch("/config", json={"airgap": False}).status_code == 400   # still refused
+    assert store.overrides()[0] == {"fuse_min_sim": 0.5, "vlm.max_tokens": 1000}   # and not recorded
+
+
+def test_config_save_promotes_overrides_to_disk_and_clears_them(tmp_path):
+    pytest.importorskip("tomli_w", reason="needs the api extra")
+    from fastapi.testclient import TestClient
+
+    from fusion_ocr import config as config_mod
+    from fusion_ocr.api import create_app
+    from fusion_ocr.jobs import JobStore
+    cfg_path = tmp_path / "config.toml"
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out", airgap=False)
+    client = TestClient(create_app(cfg, token="t", config_path=cfg_path),
+                        headers={"Authorization": "Bearer t"})
+    client.patch("/config", json={"fuse_min_sim": 0.5})
+    store = JobStore(cfg.out_dir / "jobs.sqlite")
+    assert store.overrides()[0] == {"fuse_min_sim": 0.5}
+    assert client.post("/config/save").status_code == 200
+    assert config_mod.load(cfg_path).fuse_min_sim == 0.5           # on disk now ...
+    assert store.overrides() == ({}, 0.0)                          # ... so the runtime set is cleared
+# ---- review 03: artifacts are fetchable over HTTP; resume snapshots aren't artifacts ----
+
+def _job_with_output(tmp_path, cfg, sha):
+    from fusion_ocr import storage
+    from fusion_ocr.jobs import JobStore
+    d = storage.job_dir(cfg, sha)
+    d.mkdir(parents=True)
+    (d / "document.md").write_text("# reading\n\nhello", encoding="utf-8")
+    (d / "overlay.pdf").write_bytes(b"%PDF-1.4\n%fake overlay\n%%EOF")
+    (d / "doc.json").write_text("{}")
+    (d / "doc.03-language.json").write_text("{}")          # resume snapshot, not a deliverable
+    (d / "doc.09-render.json").write_text("{}")
+    jobs = JobStore(cfg.out_dir / "jobs.sqlite")
+    jobs.upsert_queued(sha, "/in/x.pdf", original_name="x.pdf")
+    jobs.set_status(sha, "done")
+
+
+def test_artifact_listing_hides_resume_snapshots(tmp_path):
+    client, cfg = _client(tmp_path)
+    sha = "5" * 64
+    _job_with_output(tmp_path, cfg, sha)
+    listed = client.get(f"/jobs/{sha}").json()["artifacts"]
+    assert listed == ["doc.json", "document.md", "overlay.pdf"]
+
+
+def test_artifact_bytes_are_served_with_a_media_type(tmp_path):
+    client, cfg = _client(tmp_path)
+    sha = "6" * 64
+    _job_with_output(tmp_path, cfg, sha)
+    r = client.get(f"/jobs/{sha}/artifacts/document.md")
+    assert r.status_code == 200 and r.text == "# reading\n\nhello"
+    assert r.headers["content-type"].startswith("text/markdown")
+    r = client.get(f"/jobs/{sha}/artifacts/overlay.pdf")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF-")
+    assert r.headers["content-type"] == "application/pdf"
+
+
+def test_artifact_fetch_refuses_snapshots_traversal_and_unknown(tmp_path):
+    client, cfg = _client(tmp_path)
+    sha = "7" * 64
+    _job_with_output(tmp_path, cfg, sha)
+    (tmp_path / "out" / "secret.txt").write_text("not yours")
+    assert client.get(f"/jobs/{sha}/artifacts/doc.03-language.json").status_code == 404
+    assert client.get(f"/jobs/{sha}/artifacts/..%2Fsecret.txt").status_code == 404
+    assert client.get(f"/jobs/{sha}/artifacts/nope.md").status_code == 404
+    assert client.get(f"/jobs/{'8' * 64}/artifacts/document.md").status_code == 404   # no job
+    assert client.get("/jobs/../artifacts/document.md").status_code == 404

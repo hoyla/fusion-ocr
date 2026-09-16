@@ -2,9 +2,10 @@
 identical whether the service runs on this desktop or later in a VPC, so moving it
 is invisible to callers.
 
-  POST  /jobs            (multipart pdf)  -> 202 {sha256, status}   (enqueue; worker drains)
+  POST  /jobs            (multipart pdf)  -> 202 {sha256, status, original_name}   (enqueue)
   GET   /jobs            [?status=done]   -> {jobs: [...]}          (queue / 'out' feed)
-  GET   /jobs/{sha256}                    -> {status, error, artifacts}
+  GET   /jobs/{sha256}                    -> {status, error, original_name, artifacts}
+  GET   /jobs/{sha256}/artifacts/{name}   -> the artifact's bytes (document.md, overlay.pdf, …)
   GET   /config                           -> {settings: [...]}      (every setting, surfaced)
   PATCH /config          {path: value}    -> {path: value}          (configure the allowlist)
   POST  /config/save                      -> {saved: <path>}        (persist to disk, opt-in)
@@ -20,6 +21,7 @@ poll GET /jobs/{sha256}. Run: `fusion-ocr-serve` (the API) alongside `fusion-ocr
 
 import os
 import secrets
+import uuid
 from pathlib import Path
 
 from . import config as config_mod
@@ -41,7 +43,32 @@ def _is_sha256(s: str) -> bool:
     return len(s) == 64 and all(c in "0123456789abcdef" for c in s.lower())
 
 
+_EXT = {"pdf": ".pdf", "png": ".png", "jpeg": ".jpg", "tiff": ".tif"}
+_MAX_NAME = 160   # keep <digest-prefix>__<name> well inside filesystem name limits
+
+
+def _parked_name(digest: str, original: str, fmt: str | None) -> str:
+    """The name an upload is parked under in in_dir: keyed by CONTENT (a digest prefix),
+    with the client's (sanitised) filename kept for a human browsing the folder and for
+    the provenance header (`source_path`). Keying on the client filename alone let two
+    same-named uploads with different content overwrite each other in in/, stranding the
+    first job `queued` forever with no file behind it (review 03)."""
+    if original == "upload.pdf" and fmt in _EXT:      # the no-filename default: honest ext
+        original = "upload" + _EXT[fmt]
+    stem, suffix = Path(original).stem, Path(original).suffix
+    if len(original) > _MAX_NAME:
+        original = stem[:_MAX_NAME - len(suffix)] + suffix
+    return f"{digest[:16]}__{original}"
+
+
 _UPLOAD_CHUNK = 1 << 20   # 1 MiB
+
+_MEDIA_TYPES = {".pdf": "application/pdf", ".md": "text/markdown; charset=utf-8",
+                ".json": "application/json"}
+
+
+def _media_type(name: str) -> str:
+    return _MEDIA_TYPES.get(Path(name).suffix.lower(), "application/octet-stream")
 
 
 async def _save_upload(pdf, dest: Path, max_mb: float, http_exc) -> None:
@@ -98,6 +125,12 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
     jobs = JobStore(Path(cfg.out_dir) / "jobs.sqlite")
     in_dir = Path(cfg.in_dir)
     in_dir.mkdir(parents=True, exist_ok=True)
+    # Runtime overrides recorded by earlier PATCH /config calls outlive this process: apply
+    # them on top of the file config so GET /config shows what the worker is actually
+    # running with (the worker applies the same set at every scan).
+    stored, _ = jobs.overrides()
+    if stored:
+        settings_mod.apply(cfg, stored)
 
     # app-level dependency -> every route requires the bearer token
     app = FastAPI(title="fusion-ocr", dependencies=[Depends(_require_auth)])
@@ -107,18 +140,44 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
         # Enqueue only: stream the upload into in/, register it queued, return immediately.
         # A worker (`fusion-ocr` watcher) drains the queue; the client polls GET /jobs/{sha}.
         # The request no longer blocks for the (slow) OCR run.
-        dest = in_dir / _safe_name(pdf.filename)
-        await _save_upload(pdf, dest, cfg.max_upload_mb, HTTPException)
-        digest = sha256_of(dest)
-        jobs.upsert_queued(digest, str(dest))
+        #
+        # The body is STAGED in in/.incoming/ — a subdirectory the worker's scan ignores — so
+        # a half-received upload is never hashed or claimed, then parked under a content-keyed
+        # name in one atomic rename (see _parked_name). Identical bytes already parked are
+        # reused (idempotent by content, like a folder re-drop).
+        incoming = in_dir / ".incoming"
+        incoming.mkdir(parents=True, exist_ok=True)
+        staged = incoming / f"{uuid.uuid4().hex}.part"
+        await _save_upload(pdf, staged, cfg.max_upload_mb, HTTPException)
+        original = _safe_name(pdf.filename)
+        try:
+            digest = sha256_of(staged)
+            dest = in_dir / _parked_name(digest, original, ingest.peek(staged))
+            known = jobs.get(digest)
+            if known is None or (known["status"] in ("queued", "running")
+                                 and not Path(known["source_path"]).exists()):
+                # New content — or a known-but-unfinished job whose file has gone missing
+                # (rescue it). Park atomically: the worker only ever sees a complete file.
+                staged.replace(dest)
+            else:
+                # Same bytes already known (under any name): the parked file / the finished
+                # artifacts stand. Idempotent by content, like a folder re-drop.
+                staged.unlink()
+        except BaseException:
+            staged.unlink(missing_ok=True)
+            raise
+        jobs.upsert_queued(digest, str(dest), original_name=original)   # no-op if known
         row = jobs.get(digest)
-        return {"sha256": digest, "status": row["status"] if row else "queued"}
+        return {"sha256": digest, "status": row["status"] if row else "queued",
+                "original_name": row["original_name"] if row else original}
 
     @app.get("/jobs")
     def list_jobs(status: str | None = None):
         # The 'out' feed: queue visibility / pull completed work (?status=done). Poll-based —
-        # the only push-free option that also works on the sealed (airgap) tier.
-        return {"jobs": [{"sha256": r["sha256"], "status": r["status"], "error": r["error"]}
+        # the only push-free option that also works on the sealed (airgap) tier. Carries the
+        # original filename so a consumer can tell which content-hash is which document.
+        return {"jobs": [{"sha256": r["sha256"], "status": r["status"], "error": r["error"],
+                          "original_name": r["original_name"]}
                          for r in jobs.list(status)]}
 
     @app.get("/jobs/{sha256}")
@@ -128,8 +187,23 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
         row = jobs.get(sha256)
         if not row:
             return {"sha256": sha256, "status": "unknown"}
-        return {"sha256": sha256, "status": row["status"],
-                "error": row["error"], "artifacts": storage.artifacts(cfg, sha256)}
+        return {"sha256": sha256, "status": row["status"], "error": row["error"],
+                "original_name": row["original_name"],
+                "artifacts": storage.artifacts(cfg, sha256)}
+
+    @app.get("/jobs/{sha256}/artifacts/{name}")
+    def job_artifact(sha256: str, name: str):
+        # Fetch ONE artifact's bytes — the missing half of the remote contract: without it a
+        # consumer on another host (Giant) could list artifact NAMES but never read them
+        # short of a shared filesystem (review 03). `name` only ever resolves through
+        # storage.artifact_path, i.e. to a listed artifact of this job — a traversal payload
+        # or a resume-snapshot name is simply not found.
+        from fastapi.responses import FileResponse
+        path = storage.artifact_path(cfg, sha256, name) if _is_sha256(sha256) else None
+        if path is None:
+            raise HTTPException(status_code=404, detail="no such job or artifact")
+        return FileResponse(path, media_type=_media_type(name), filename=name,
+                            content_disposition_type="inline")
 
     @app.get("/config")
     def get_config():
@@ -139,20 +213,29 @@ def create_app(cfg=None, token=None, config_path="config.toml"):  # lazy: api ex
 
     @app.patch("/config")
     def patch_config(updates: dict):
-        # Configure the allowlisted settings in-process (affects subsequent jobs; not
-        # written back to config.toml). Output-affecting changes re-key recipe_fingerprint,
-        # so the next job reprocesses rather than reusing a stale cache.
+        # Configure the allowlisted settings at runtime (not written back to config.toml).
+        # The validated values are recorded in the shared job store so the WORKER — a
+        # separate process in the two-process deployment — applies them at its next scan;
+        # until then, PATCH only reached this process and the jobs never saw the change
+        # (review 03). Output-affecting changes re-key recipe_fingerprint, so the next job
+        # reprocesses rather than reusing a stale cache.
         try:
-            return settings_mod.apply(cfg, updates)
+            coerced = settings_mod.validate(updates)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+        jobs.set_overrides(coerced)
+        return settings_mod.apply(cfg, coerced)
 
     @app.post("/config/save")
     def save_config():
         # Promote the current in-process config (including any PATCH /config tuning) to
         # disk. Explicit and opt-in: PATCH alone never persists, so a transient experiment
         # can't silently become the on-disk default. Writes a generated file (no comments).
-        return {"saved": config_mod.save(cfg, config_path)}
+        # The saved file now carries the overrides, so the runtime set is cleared: file
+        # config is the single source again for every process that (re)starts.
+        saved = config_mod.save(cfg, config_path)
+        jobs.clear_overrides()
+        return {"saved": saved}
 
     return app
 

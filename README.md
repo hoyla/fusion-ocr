@@ -103,11 +103,12 @@ extra; run it with **`fusion-ocr-serve`**) is the stable contract callers use:
 
 | Method & path | Purpose |
 | --- | --- |
-| `POST /jobs` (multipart `pdf`) | enqueue a PDF → `202 {sha256, status: "queued"}` |
+| `POST /jobs` (multipart `pdf`) | enqueue a PDF or image → `202 {sha256, status, original_name}` |
 | `GET /jobs` `[?status=]` | queue / completed-job feed |
 | `GET /jobs/{sha256}` | job status + artifact list (poll until `done`; see [Docs/outputs.md](Docs/outputs.md)) |
+| `GET /jobs/{sha256}/artifacts/{name}` | fetch an artifact's bytes (`document.md`, `overlay.pdf`, …) |
 | `GET /config` | surface every setting (secrets masked) + its constraints |
-| `PATCH /config` `{path: value}` | configure the allowlisted settings in-process |
+| `PATCH /config` `{path: value}` | configure the allowlisted settings at runtime (reaches the worker too) |
 | `POST /config/save` | persist the current config to disk (explicit, opt-in) |
 
 Submit is asynchronous: `POST /jobs` enqueues and returns immediately. Run the API
