@@ -74,8 +74,9 @@ class VlmRead:
                 if not page.segments:
                     page.read_model = ""
                     continue
-                # Cheap tier: if Apple Vision already read the page confidently, its
-                # det_text IS the reading — skip the VLM entirely (fusion uses det_text).
+                # Opt-in skip: if Apple Vision read the page above the operator's
+                # threshold, its det_text IS the reading — no VLM call (fusion uses
+                # det_text). Disabled by default: priced at ~7 recall points on print.
                 if _vision_confident(page, cfg.apple_vision_skip_vlm):
                     page.read_model = "apple_vision"
                     continue
@@ -149,8 +150,12 @@ _REFUSAL_MARKERS = (
 
 
 def _vision_confident(page, threshold: float) -> bool:
-    """True if Apple Vision read this page at high mean confidence — its text is good
-    enough to skip the VLM (the cheap printed-text tier)."""
+    """True if Apple Vision read this page at mean confidence >= threshold — the operator
+    has opted to let its text stand in for the VLM reading. 0 disables (the default since
+    the skip was priced: vision_skip_cost_2026-09-16.md). NB: without the guard, 0 would
+    mean "always skip" — the opposite of disabled."""
+    if threshold <= 0:
+        return False
     vis = [s.det_conf for s in page.segments
            if s.source == "vision" and s.det_conf is not None]
     return bool(vis) and (sum(vis) / len(vis) >= threshold)

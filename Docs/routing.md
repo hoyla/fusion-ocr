@@ -140,10 +140,14 @@ Benchmarked: clean print 0.75s @ 0.97; Montenegrin (diacritics) 0.68s @ 0.92; Th
 Wiring (`engines/apple_vision.py`, `vision` extra = `ocrmac`):
 - `run.prefer_apple_vision = true` → the router uses Vision as the deterministic
   engine for Vision-supported scripts on macOS (Devanagari / non-Mac → PaddleOCR);
-- **cheap tier**: when a page's mean Vision confidence ≥ `run.apple_vision_skip_vlm`,
-  the VLM read is **skipped** (Vision's text IS the reading); harder pages fall through
-  to the VLM (and confidence-gated escalation). Verified: the Thai scan runs **7.8s with
-  no VLM call** (vs ~84s via Typhoon), fully on-device.
+- **VLM skip (opt-in, disabled by default since 2026-09-16)**: when a page's mean Vision
+  confidence ≥ `run.apple_vision_skip_vlm`, the VLM read is skipped and Vision's text stands
+  in for the reading; `0` disables. It was priced (`manifests/vision_skip_cost_2026-09-16.md`):
+  at the old default 0.92 it fired on 95% of pages and cost **~7 recall points** and 5–6
+  placement points on clean scanned print, because mean confidence does not find the pages
+  Vision misreads (pages rated ≥ 0.98 still lose 6) — the same finding that kept the Paddle
+  skip disabled. So Vision is a **geometry** engine here, not a reading; the "7.8 s with no
+  VLM call" Thai-scan figure was the skip's speed, bought at that cost.
 - Per-route override: `[routing.<script>] engine = "apple_vision"`.
 
 ## Runtime — MLX vs Ollama on Apple Silicon (2026-06-26)

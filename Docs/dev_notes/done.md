@@ -261,6 +261,12 @@ The review-03 engineering items that needed no desktop, shipped as one PR each (
   compatibility ideographs / halfwidth-fullwidth forms / all hangul blocks / CJK punctuation,
   Cyrillic + Devanagari extensions, Latin Extended Additional (Vietnamese) — a documented
   range table, no new dependency.
+- **The Apple Vision VLM-skip priced and disabled** (#55 + this): the follow-up the
+  Paddle-skip pricing registered. Same counterfactual, pre-registered bars: the enabled 0.92
+  default fired on 95% of pages and cost −0.074 recall / −0.05..−0.06 band placement on both
+  corpora — worse than the Paddle skip that stayed disabled; Vision's confidence doesn't find
+  the tail (pages rated ≥ 0.98 still lose 6 points). Default now 0 (disabled), with the guard
+  that makes 0 mean disabled rather than always-skip; Vision stays a geometry engine.
 - **Ingest robustness** (#53): encrypted or corrupt PDFs fail fast in the first stage with an
   operator-readable job error (`ingest.readability_problem`); WebP + HEIC sniffed and
   converted (HEIC via the optional `heic` extra); image pages sized from DPI metadata with a
