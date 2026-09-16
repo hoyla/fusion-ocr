@@ -208,3 +208,66 @@ def test_worker_survives_an_unknown_override(tmp_path, capsys):
     jobs.set_overrides({"not_a_setting": 1})            # e.g. written by a newer API build
     assert watcher_mod.OverrideSync().pull(cfg, jobs) is False
     assert "not applied" in capsys.readouterr().err     # logged, not fatal
+
+
+# ---- the worker entry point (`fusion-ocr` / watcher.main): argument routing, preflight,
+# ---- the airgap seal, --once vs loop, and the loop guard — scan_once stubbed
+
+import sys
+
+
+def _entry(monkeypatch, tmp_path, argv, *, airgap=False, preflight=(True, "reader ok")):
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out", airgap=airgap)
+    monkeypatch.setattr(watcher_mod.config_mod, "load", lambda path="config.toml": cfg)
+    monkeypatch.setattr(watcher_mod.config_mod, "enforce_airgap", lambda: sealed.append(True))
+    monkeypatch.setattr(watcher_mod, "preflight_reader", lambda c: preflight)
+    monkeypatch.setattr(sys, "argv", ["fusion-ocr", *argv])
+    sealed: list = []
+    return cfg, sealed
+
+
+def test_main_once_scans_once_with_force_and_warns_on_a_dead_reader(monkeypatch, tmp_path, capsys):
+    cfg, sealed = _entry(monkeypatch, tmp_path, ["--once", "--force"], preflight=(False, "refused"))
+    calls: list = []
+    monkeypatch.setattr(watcher_mod, "scan_once", lambda c, j, **kw: calls.append((c, kw)) or 0)
+    watcher_mod.main()
+    out, err = capsys.readouterr()
+    assert "READER PREFLIGHT FAILED" in err and "refused" in err     # non-fatal, but loud
+    assert sealed == []                                              # airgap=False: no seal
+    [(c, kw)] = calls
+    assert c is cfg and kw["force"] is True and kw["rerun_from"] is None
+    assert "move_processed" not in kw                                # --once never moves
+    assert isinstance(kw["overrides"], watcher_mod.OverrideSync)
+
+
+def test_main_seals_the_process_when_airgap_is_on(monkeypatch, tmp_path, capsys):
+    cfg, sealed = _entry(monkeypatch, tmp_path, ["--once"], airgap=True)
+    monkeypatch.setattr(watcher_mod, "scan_once", lambda c, j, **kw: 0)
+    watcher_mod.main()
+    assert sealed == [True] and "[airgap]" in capsys.readouterr().out
+
+
+def test_main_loop_survives_a_failed_scan_and_stops_on_interrupt(monkeypatch, tmp_path, capsys):
+    cfg, _ = _entry(monkeypatch, tmp_path, ["--interval", "0.5"])
+    scans: list = []
+
+    def scan(c, j, **kw):
+        scans.append(kw)
+        if len(scans) == 1:
+            raise RuntimeError("database is locked")           # one bad scan ...
+        return 0
+    sleeps: list = []
+
+    def sleep(s):
+        sleeps.append(s)
+        if len(sleeps) == 2:
+            raise KeyboardInterrupt                             # ... then the operator stops it
+    monkeypatch.setattr(watcher_mod, "scan_once", scan)
+    monkeypatch.setattr(watcher_mod.time, "sleep", sleep)
+    watcher_mod.main()
+    out, err = capsys.readouterr()
+    assert "scan failed" in err and "database is locked" in err   # guarded, not fatal
+    assert len(scans) == 2 and sleeps == [0.5, 0.5]               # the loop went on after the failure
+    assert scans[0]["move_processed"] is cfg.move_processed       # loop mode honours the config
+    assert scans[0]["overrides"] is scans[1]["overrides"]         # one sync object per worker
+    assert "[reader] reader ok" in out and "[stop]" in out

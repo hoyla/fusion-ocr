@@ -37,11 +37,10 @@ def test_keep_retains_the_directory(tmp_path, monkeypatch):
     assert (work / "x").exists()                   # --keep-work: left for inspection
 
 
-def test_caller_supplied_directory_is_never_removed(tmp_path):
-    mine = tmp_path / "mine"
-    mine.mkdir()
-    with wd.workdir("harness", given=mine) as work:
-        assert work == mine
+def test_caller_supplied_directory_is_created_if_missing_and_never_removed(tmp_path):
+    mine = tmp_path / "deep" / "mine"              # doesn't exist yet: a runner may hand over a
+    with wd.workdir("harness", given=mine) as work:  # fresh path and expect to write into it
+        assert work == mine and mine.is_dir()
         (work / "x").write_text("x")
     assert (mine / "x").exists()                   # the caller's to manage (tests pass tmp_path)
 

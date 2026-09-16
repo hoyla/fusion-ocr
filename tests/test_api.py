@@ -293,3 +293,23 @@ def test_artifact_fetch_refuses_snapshots_traversal_and_unknown(tmp_path):
     assert client.get(f"/jobs/{sha}/artifacts/nope.md").status_code == 404
     assert client.get(f"/jobs/{'8' * 64}/artifacts/document.md").status_code == 404   # no job
     assert client.get("/jobs/../artifacts/document.md").status_code == 404
+
+
+# ---- the API entry point (`fusion-ocr-serve` / api.main): config -> uvicorn bind --------
+
+def test_main_serves_the_configured_bind_behind_the_proxy_settings(monkeypatch, tmp_path, capsys):
+    uvicorn = pytest.importorskip("uvicorn", reason="needs the api extra")
+    dotenv = pytest.importorskip("dotenv", reason="needs the api extra")
+    from fusion_ocr import api as api_mod
+    from fusion_ocr import config as config_mod
+    cfg = config_mod.Config(in_dir=tmp_path / "in", out_dir=tmp_path / "out", airgap=False,
+                            api_host="0.0.0.0", api_port=9001, forwarded_allow_ips="10.0.0.5")
+    monkeypatch.setattr(api_mod.config_mod, "load", lambda path="config.toml": cfg)
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: None)   # never read a real .env here
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(app=app, **kw))
+    api_mod.main()
+    assert seen["app"] == "fusion_ocr.api:app"                     # the lazy app attribute
+    assert seen["host"] == "0.0.0.0" and seen["port"] == 9001
+    assert seen["proxy_headers"] is True and seen["forwarded_allow_ips"] == "10.0.0.5"
+    assert "LAN-reachable" in capsys.readouterr().out             # the bind warning

@@ -46,12 +46,15 @@ def new_workdir(prefix: str, root: str | Path | None = None) -> Path:
 def workdir(prefix: str, given: str | Path | None = None, keep: bool = False):
     """Yield the directory an eval run should work in.
 
-    `given` (a caller-owned path, e.g. a test's tmp_path) is yielded as-is and never
-    removed. Otherwise a fresh run directory is created under WORK_ROOT and removed on
-    exit — including on error — unless `keep` is set, in which case its path is logged.
+    `given` (a caller-owned path, e.g. a test's tmp_path) is created if it doesn't exist
+    yet, yielded, and never removed. Otherwise a fresh run directory is created under
+    WORK_ROOT and removed on exit — including on error — unless `keep` is set, in which
+    case its path is logged.
     """
     if given is not None:
-        yield Path(given)
+        path = Path(given)
+        path.mkdir(parents=True, exist_ok=True)
+        yield path
         return
     path = new_workdir(prefix)
     try:
