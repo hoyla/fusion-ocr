@@ -1,0 +1,33 @@
+{
+  "name": "fusion-ocr (Linux)",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "options": {
+      "platform": "linux/amd64"
+    }
+  },
+  "runArgs": ["--platform=linux/amd64"],
+  "remoteUser": "vscode",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": {
+      "label": "Fusion OCR API",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"]
+      }
+    }
+  }
+}
