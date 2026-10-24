@@ -59,6 +59,27 @@ pytest                                # ~290 tests in ~20 s; engine tests skip w
                                       # engine is absent. CI runs the same on every push/PR.
 ```
 
+### VS Code dev container
+
+For a reproducible Linux development environment, open the repository in VS Code
+and choose **Dev Containers: Reopen in Container**. The container uses Python 3.11
+on Linux x86_64 and installs the API, PaddleOCR, VLM-client, and test dependencies
+against `constraints.txt`. On Apple Silicon, Docker may emulate x86_64, so PaddleOCR
+will be CPU-only and can be slower than a native run.
+
+The first container setup creates `config.toml` from
+`.devcontainer/config.toml` if one does not already exist. That starter config
+points the VLM client at the host's MLX server (`host.docker.internal:8080`) and
+disables the airgap guard so the container can reach it. For Ollama, change the
+URL to `http://host.docker.internal:11434/v1`. If you already have a `config.toml`,
+it is left untouched; update its VLM URL and `airgap` setting for container use
+if needed.
+
+Apple Vision and MLX stay on macOS; they are not installed in the Linux container.
+Keep `.env` on the host/workspace (it is gitignored and is not copied into the
+image); the API loads its token from that file. For API access from VS Code,
+port 8000 is forwarded automatically.
+
 Each job's results land in a content-addressed folder `out/<sha256>/` — the three
 deliverables (`document.md` reading view, `overlay.pdf` searchable layer,
 `segment_index.json` provenance) plus the resumable per-stage state. What every file is:

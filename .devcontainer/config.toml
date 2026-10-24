@@ -1,0 +1,6 @@
+[run]
+airgap = false
+api_host = "0.0.0.0"
+
+[vlm]
+base_url = "http://host.docker.internal:8080/v1"
